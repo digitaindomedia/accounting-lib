@@ -1,0 +1,21 @@
+{
+  "name": "als/accounting",
+  "description": "Modular Accounting Package (Persediaan, CoA, Journal, Invoice, dll)",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "Als\\Accounting\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=8.1",
+    "illuminate/support": "^10.0|^11.0"
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Als\\Accounting\\AccountingServiceProvider"
+      ]
+    }
+  }
+}

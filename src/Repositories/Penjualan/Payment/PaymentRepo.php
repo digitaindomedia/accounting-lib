@@ -2,27 +2,26 @@
 
 namespace Icso\Accounting\Repositories\Penjualan\Payment;
 
-use App\Enums\JurnalStatusEnum;
-use App\Enums\PaymentStatusEnum;
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePaymentInvoice;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPayment;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPaymentInvoice;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPaymentMeta;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDeliveryMeta;
-use App\Models\Tenant\Penjualan\Retur\SalesRetur;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Repositories\Tenant\Penjualan\Invoice\InvoiceRepo;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\KeyNomor;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
+
+use Icso\Accounting\Enums\JurnalStatusEnum;
+use Icso\Accounting\Enums\SettingEnum;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentMeta;
+use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PaymentRepo extends ElequentRepository
 {
@@ -194,7 +193,7 @@ class PaymentRepo extends ElequentRepository
             }
         }
         catch (\Exception $e) {
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

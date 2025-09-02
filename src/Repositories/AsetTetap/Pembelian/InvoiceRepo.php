@@ -2,24 +2,25 @@
 
 namespace Icso\Accounting\Repositories\AsetTetap\Pembelian;
 
-use App\Enums\InvoiceStatusEnum;
-use App\Enums\JurnalStatusEnum;
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\AsetTetap\Pembelian\PurchaseInvoice;
-use App\Models\Tenant\AsetTetap\Pembelian\PurchaseInvoiceDp;
-use App\Models\Tenant\AsetTetap\Pembelian\PurchaseInvoiceMeta;
-use App\Models\Tenant\AsetTetap\Pembelian\PurchaseOrder;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\KeyNomor;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
+use Icso\Accounting\Enums\InvoiceStatusEnum;
+use Icso\Accounting\Enums\JurnalStatusEnum;
+use Icso\Accounting\Enums\SettingEnum;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseInvoice;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseInvoiceDp;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseInvoiceMeta;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceRepo extends ElequentRepository
 {
@@ -183,7 +184,7 @@ class InvoiceRepo extends ElequentRepository
         }
         catch (\Exception $e) {
             // Rollback Transaction
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

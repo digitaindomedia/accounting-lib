@@ -2,21 +2,14 @@
 
 namespace Icso\Accounting\Repositories\Penjualan\Order;
 
-use App\Enums\StatusEnum;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicingMeta;
-use App\Models\Tenant\Penjualan\Order\SalesOrder;
-use App\Models\Tenant\Penjualan\Order\SalesOrderMeta;
-use App\Models\Tenant\Penjualan\Order\SalesOrderProduct;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDelivery;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDeliveryProduct;
-use App\Models\Tenant\Penjualan\Spk\SalesSpkProduct;
-use App\Repositories\ElequentRepository;
-use App\Services\FileUploadService;
-use App\Utils\KeyNomor;
-use App\Utils\ProductType;
-use App\Utils\Utility;
+
+use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SalesOrderRepo extends ElequentRepository
 {
@@ -132,7 +125,7 @@ class SalesOrderRepo extends ElequentRepository
                 return false;
             }
         }catch (\Exception $e) {
-            //echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

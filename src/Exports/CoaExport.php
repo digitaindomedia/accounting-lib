@@ -2,7 +2,7 @@
 
 namespace Icso\Accounting\Exports;
 
-use App\Models\Tenant\Master\Coa;
+use Icso\Accounting\Models\Master\Coa;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 

@@ -1,10 +1,10 @@
 <?php
 namespace Icso\Accounting\Repositories\Master\Vendor;
 
-use App\Models\Tenant\Master\Vendor;
-use App\Repositories\ElequentRepository;
-use App\Utils\Constants;
-use App\Utils\Utility;
+use Icso\Accounting\Models\Master\Vendor;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\Constants;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 
 class VendorRepo extends ElequentRepository

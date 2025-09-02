@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models\Tenant\AsetTetap\Pembelian;
+namespace Icso\Accounting\Models\AsetTetap\Pembelian;
 
 use Illuminate\Database\Eloquent\Model;
 

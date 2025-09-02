@@ -1,8 +1,8 @@
 <?php
 namespace Icso\Accounting\Repositories\Utils;
 
-use App\Models\Tenant\Setting;
 use Config;
+use Icso\Accounting\Models\Setting;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Utils\VarType;
 

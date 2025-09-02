@@ -2,15 +2,16 @@
 
 namespace Icso\Accounting\Repositories\AsetTetap\Pembelian;
 
-use App\Enums\StatusEnum;
-use App\Models\Tenant\AsetTetap\Pembelian\PurchaseOrder;
-use App\Models\Tenant\AsetTetap\Pembelian\PurchaseOrderMeta;
-use App\Repositories\ElequentRepository;
-use App\Services\FileUploadService;
-use App\Utils\KeyNomor;
-use App\Utils\Utility;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrderMeta;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class OrderRepo extends ElequentRepository
 {
@@ -169,6 +170,7 @@ class OrderRepo extends ElequentRepository
             return true;
         }
         catch (\Exception $e) {
+            Log::error($e->getMessage());
             DB::rollback();
             return false;
         }

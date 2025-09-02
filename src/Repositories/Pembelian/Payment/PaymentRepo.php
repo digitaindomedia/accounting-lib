@@ -2,26 +2,26 @@
 
 namespace Icso\Accounting\Repositories\Pembelian\Payment;
 
-use App\Enums\JurnalStatusEnum;
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrderMeta;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePayment;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePaymentInvoice;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePaymentMeta;
-use App\Models\Tenant\Pembelian\Retur\PurchaseRetur;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Repositories\Tenant\Pembelian\Invoice\InvoiceRepo;
-use App\Repositories\Tenant\Pembelian\Payment\Interface\PaymentInterface;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\KeyNomor;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
+
+use Icso\Accounting\Enums\JurnalStatusEnum;
+use Icso\Accounting\Enums\SettingEnum;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePayment;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
+use Icso\Accounting\Models\Pembelian\Retur\PurchaseRetur;
+use Icso\Accounting\Models\Tenant\Pembayaran\PurchasePaymentMeta;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PaymentRepo extends ElequentRepository
 {
@@ -199,7 +199,7 @@ class PaymentRepo extends ElequentRepository
 
         }
         catch (\Exception $e) {
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

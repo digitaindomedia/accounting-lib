@@ -2,10 +2,10 @@
 
 namespace Icso\Accounting\Repositories\Pembelian\Payment;
 
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePaymentInvoice;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Pembelian\Invoice\InvoiceRepo;
-use App\Repositories\Tenant\Pembelian\Payment\Interface\PaymentInvoiceInterface;
+
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
 use Illuminate\Http\Request;
 
 class PaymentInvoiceRepo extends ElequentRepository

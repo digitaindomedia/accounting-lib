@@ -2,26 +2,22 @@
 
 namespace Icso\Accounting\Repositories\Pembelian\Order;
 
-use App\Enums\StatusEnum;
-use App\Enums\TransactionType;
-use App\Enums\TypeEnum;
-use App\Models\Tenant\Master\Tax;
-use App\Models\Tenant\Pembelian\Bast\PurchaseBastProduct;
-use App\Models\Tenant\Pembelian\Invoicing\PurchaseInvoicingMeta;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrder;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrderMeta;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrderProduct;
-use App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceived;
-use App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceivedProduct;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Master\TaxRepo;
-use App\Repositories\Tenant\Pembelian\Request\RequestRepo;
-use App\Services\FileUploadService;
-use App\Utils\Helpers;
-use App\Utils\KeyNomor;
-use App\Utils\ProductType;
-use App\Utils\Utility;
-use App\Utils\VarType;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Enums\TransactionType;
+use Icso\Accounting\Models\Pembelian\Bast\PurchaseBastProduct;
+use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
+use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderMeta;
+use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProduct;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Pembelian\Request\RequestRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\Helpers;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\Utility;
+use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -293,6 +289,7 @@ class OrderRepo extends ElequentRepository
             return true;
         }
         catch (\Exception $e) {
+            Log::error($e->getMessage());
             DB::rollback();
             return false;
         }

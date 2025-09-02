@@ -2,10 +2,10 @@
 
 namespace Icso\Accounting\Models\Akuntansi;
 
-use App\Models\Tenant\Pembelian\Invoicing\PurchaseInvoicing;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Models\Master\Coa;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Utils\VarType;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Database\Eloquent\Model;

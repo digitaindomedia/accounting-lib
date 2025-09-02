@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Repositories\Akuntansi;
 
+use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Models\Akuntansi\BukuPembantu;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Utils\InputType;

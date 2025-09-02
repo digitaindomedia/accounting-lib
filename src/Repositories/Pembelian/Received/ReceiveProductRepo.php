@@ -4,10 +4,9 @@
 namespace Icso\Accounting\Repositories\Pembelian\Received;
 
 
-use App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceivedProduct;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Pembelian\Received\Interface\ReceiveProductInterface;
-use App\Utils\Utility;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProduct;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 
 class ReceiveProductRepo extends ElequentRepository

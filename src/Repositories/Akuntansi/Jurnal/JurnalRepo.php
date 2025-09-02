@@ -2,7 +2,6 @@
 namespace Icso\Accounting\Repositories\Akuntansi\Jurnal;
 
 
-use App\Repositories\Tenant\Persediaan\Inventory\Interface\InventoryRepo;
 use Exception;
 use Faker\Core\File;
 use Icso\Accounting\Enums\JurnalStatusEnum;
@@ -16,6 +15,8 @@ use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePayment;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\BukuPembantuRepo;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -24,6 +25,7 @@ use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentRepo;
+use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\JurnalType;
@@ -206,6 +208,7 @@ class JurnalRepo extends ElequentRepository
             return true;
         }
         catch (\Exception $e) {
+            Log::error($e->getMessage());
             DB::rollback();
             return false;
         }

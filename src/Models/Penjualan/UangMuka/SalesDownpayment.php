@@ -2,11 +2,12 @@
 
 namespace Icso\Accounting\Models\Penjualan\UangMuka;
 
-use App\Models\Tenant\Master\Coa;
-use App\Models\Tenant\Master\Tax;
-use App\Models\Tenant\Penjualan\Order\SalesOrder;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDeliveryMeta;
-use App\Utils\Helpers;
+
+use Icso\Accounting\Models\Master\Coa;
+use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryMeta;
+use Icso\Accounting\Utils\Helpers;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesDownpayment extends Model

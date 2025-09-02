@@ -2,13 +2,12 @@
 
 namespace Icso\Accounting\Utils;
 
-use App\Enums\TypeEnum;
-use App\Models\Tenant\Master\Tax;
-use App\Models\User;
-use App\Models\UserInfo;
-use App\Repositories\Tenant\Master\TaxRepo;
-use App\Repositories\Tenant\Utils\SettingRepo;
+
 use Exception;
+use Icso\Accounting\Enums\TypeEnum;
+use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Repositories\Master\TaxRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
 
 class Helpers
 {

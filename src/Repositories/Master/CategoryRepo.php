@@ -1,8 +1,8 @@
 <?php
 namespace Icso\Accounting\Repositories\Master;
 
-use App\Models\Tenant\Master\Category;
-use App\Repositories\ElequentRepository;
+use Icso\Accounting\Models\Master\Category;
+use Icso\Accounting\Repositories\ElequentRepository;
 use Illuminate\Http\Request;
 
 class CategoryRepo extends ElequentRepository{

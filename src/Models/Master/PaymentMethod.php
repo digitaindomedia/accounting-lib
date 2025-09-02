@@ -1,8 +1,9 @@
 <?php
 namespace Icso\Accounting\Models\Master;
 
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePayment;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPayment;
+
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchasePayment;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
 use Illuminate\Database\Eloquent\Model;
 
 class PaymentMethod extends Model

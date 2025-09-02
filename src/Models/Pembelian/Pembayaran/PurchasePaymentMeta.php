@@ -1,6 +1,6 @@
 <?php
 
-namespace Icso\Accounting\Models\Tenant\Pembayaran;
+namespace Icso\Accounting\Models\Pembelian\Pembayaran;
 
 use Illuminate\Database\Eloquent\Model;
 

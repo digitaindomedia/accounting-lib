@@ -2,14 +2,15 @@
 
 namespace Icso\Accounting\Utils;
 
-use App\Models\Tenant\Pembelian\Invoicing\PurchaseInvoicing;
-use App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceived;
-use App\Models\Tenant\Pembelian\Retur\PurchaseRetur;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDelivery;
-use App\Models\Tenant\Penjualan\Retur\SalesRetur;
-use App\Models\Tenant\Persediaan\Adjustment;
-use App\Models\Tenant\Persediaan\StockUsage;
+
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Retur\PurchaseRetur;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
+use Icso\Accounting\Models\Persediaan\Adjustment;
+use Icso\Accounting\Models\Persediaan\StockUsage;
 
 class TransactionsCode
 {

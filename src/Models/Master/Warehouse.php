@@ -1,14 +1,15 @@
 <?php
 namespace Icso\Accounting\Models\Master;
 
-use App\Models\Tenant\Pembelian\Invoicing\PurchaseInvoicing;
-use App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceived;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDelivery;
-use App\Models\Tenant\Persediaan\Adjustment;
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Models\Tenant\Persediaan\StockAwal;
-use App\Models\Tenant\Persediaan\StockUsage;
+
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Persediaan\Adjustment;
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Models\Persediaan\StockAwal;
+use Icso\Accounting\Models\Persediaan\StockUsage;
 use Illuminate\Database\Eloquent\Model;
 
 class Warehouse extends Model

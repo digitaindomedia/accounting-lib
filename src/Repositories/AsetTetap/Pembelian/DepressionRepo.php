@@ -2,15 +2,17 @@
 
 namespace Icso\Accounting\Repositories\AsetTetap\Pembelian;
 
-use App\Models\Tenant\AsetTetap\Pembelian\Depression;
+
 use DateInterval;
 use DatePeriod;
 use DateTime;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\AsetTetap\Pembelian\Depression;
 use Icso\Accounting\Models\Persediaan\Adjustment;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 

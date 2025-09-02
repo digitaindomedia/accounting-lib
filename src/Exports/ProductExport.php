@@ -2,9 +2,10 @@
 
 namespace Icso\Accounting\Exports;
 
-use App\Models\Tenant\Master\Coa;
-use App\Repositories\Tenant\Master\Product\ProductRepo;
-use App\Utils\ProductType;
+
+use Icso\Accounting\Models\Master\Coa;
+use Icso\Accounting\Repositories\Master\Product\ProductRepo;
+use Icso\Accounting\Utils\ProductType;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;

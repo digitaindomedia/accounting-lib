@@ -1,16 +1,16 @@
 <?php
 namespace Icso\Accounting\Repositories\Master\Product;
 
-use App\Models\Tenant\Master\Product;
-use App\Models\Tenant\Master\ProductCategory;
-use App\Models\Tenant\Master\ProductMeta;
-use App\Models\Tenant\Pembelian\Bast\PurchaseBastMeta;
-use App\Repositories\ElequentRepository;
-use App\Services\FileUploadService;
-use App\Utils\Constants;
-use App\Utils\Utility;
+use Icso\Accounting\Models\Master\Product;
+use Icso\Accounting\Models\Master\ProductCategory;
+use Icso\Accounting\Models\Master\ProductMeta;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\Constants;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ProductRepo extends ElequentRepository
 {
@@ -161,6 +161,7 @@ class ProductRepo extends ElequentRepository
             }
         }
         catch (\Exception $e) {
+            Log::error($e->getMessage());
             DB::rollback();
             return array('status' => false, 'message' => 'Data gagal disimpan');
         }

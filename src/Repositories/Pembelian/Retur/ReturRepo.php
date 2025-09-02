@@ -3,7 +3,6 @@
 namespace Icso\Accounting\Repositories\Pembelian\Retur;
 
 
-use App\Repositories\Tenant\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
@@ -17,6 +16,7 @@ use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
+use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
@@ -26,6 +26,7 @@ use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ReturRepo extends ElequentRepository
 {
@@ -218,7 +219,7 @@ class ReturRepo extends ElequentRepository
             }
         }catch (\Exception $e) {
             // Rollback Transaction
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

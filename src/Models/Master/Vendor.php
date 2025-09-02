@@ -1,18 +1,19 @@
 <?php
 namespace Icso\Accounting\Models\Master;
 
-use App\Models\Tenant\Pembelian\Bast\PurchaseBast;
-use App\Models\Tenant\Pembelian\Invoicing\PurchaseInvoicing;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrder;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePayment;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePaymentInvoice;
-use App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceived;
-use App\Models\Tenant\Pembelian\Retur\PurchaseRetur;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPaymentInvoice;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDelivery;
-use App\Models\Tenant\Penjualan\Retur\SalesRetur;
-use App\Models\Tenant\Penjualan\Spk\SalesSpk;
+
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchasePayment;
+use Icso\Accounting\Models\Pembelian\Bast\PurchaseBast;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Retur\PurchaseRetur;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
+use Icso\Accounting\Models\Penjualan\Spk\SalesSpk;
 use Illuminate\Database\Eloquent\Model;
 
 class Vendor extends Model

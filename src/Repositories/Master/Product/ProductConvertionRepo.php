@@ -2,8 +2,9 @@
 
 namespace Icso\Accounting\Repositories\Master\Product;
 
-use App\Models\Tenant\Master\ProductConvertion;
-use App\Repositories\ElequentRepository;
+
+use Icso\Accounting\Models\Master\ProductConvertion;
+use Icso\Accounting\Repositories\ElequentRepository;
 
 class ProductConvertionRepo extends ElequentRepository
 {

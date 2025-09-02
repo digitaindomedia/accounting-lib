@@ -1,13 +1,14 @@
 <?php
 namespace Icso\Accounting\Repositories\Master;
 
-use App\Models\Tenant\Master\Tax;
-use App\Models\Tenant\Master\TaxGroup;
-use App\Repositories\BaseRepo;
-use App\Repositories\ElequentRepository;
-use App\Utils\VarType;
+
+use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\Master\TaxGroup;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TaxRepo extends ElequentRepository
 {
@@ -100,7 +101,7 @@ class TaxRepo extends ElequentRepository
             }
         }
         catch (\Exception $e) {
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

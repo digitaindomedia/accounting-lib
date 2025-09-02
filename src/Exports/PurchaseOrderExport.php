@@ -2,8 +2,9 @@
 
 namespace Icso\Accounting\Exports;
 
-use App\Models\Tenant\Pembelian\Permintaan\PurchaseRequest;
-use App\Repositories\Tenant\Utils\SettingRepo;
+
+use Icso\Accounting\Models\Pembelian\Permintaan\PurchaseRequest;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;

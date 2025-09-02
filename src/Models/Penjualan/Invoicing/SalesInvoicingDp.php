@@ -1,9 +1,8 @@
 <?php
 
-namespace Icso\Accounting\Accountingp\Models\Penjualan\Invoicing;
+namespace Icso\Accounting\Models\Penjualan\Invoicing;
 
 
-use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Illuminate\Database\Eloquent\Model;
 

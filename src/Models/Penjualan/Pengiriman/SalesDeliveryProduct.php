@@ -2,10 +2,11 @@
 
 namespace Icso\Accounting\Models\Penjualan\Pengiriman;
 
-use App\Models\Tenant\Master\Product;
-use App\Models\Tenant\Master\Tax;
-use App\Models\Tenant\Master\Unit;
-use App\Models\Tenant\Penjualan\Order\SalesOrderProduct;
+
+use Icso\Accounting\Models\Master\Product;
+use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\Master\Unit;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesDeliveryProduct extends Model

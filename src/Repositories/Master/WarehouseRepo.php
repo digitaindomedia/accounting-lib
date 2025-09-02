@@ -1,9 +1,9 @@
 <?php
-namespace App\Repositories\Master;
+namespace Icso\Accounting\Repositories\Master;
 
-use App\Models\Tenant\Master\Warehouse;
-use App\Repositories\ElequentRepository;
-use App\Utils\Utility;
+use Icso\Accounting\Models\Master\Warehouse;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 
 class WarehouseRepo extends ElequentRepository

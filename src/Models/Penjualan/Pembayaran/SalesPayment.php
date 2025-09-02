@@ -2,9 +2,9 @@
 
 namespace Icso\Accounting\Models\Penjualan\Pembayaran;
 
-use App\Models\Tenant\Master\PaymentMethod;
-use App\Models\Tenant\Master\Vendor;
-use App\Utils\Helpers;
+use Icso\Accounting\Models\Master\PaymentMethod;
+use Icso\Accounting\Models\Master\Vendor;
+use Icso\Accounting\Utils\Helpers;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesPayment extends Model

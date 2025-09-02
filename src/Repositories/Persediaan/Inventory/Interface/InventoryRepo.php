@@ -1,15 +1,14 @@
 <?php
 
-namespace App\Repositories\Tenant\Persediaan\Inventory\Interface;
+namespace Icso\Accounting\Repositories\Persediaan\Inventory\Interface;
 
-use App\Models\Tenant\Master\ProductConvertion;
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Models\Tenant\Master\Product;
-use App\Models\Tenant\Persediaan\StockAwal;
-use App\Repositories\ElequentRepository;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
-use App\Utils\VarType;
+use Icso\Accounting\Models\Master\Product;
+use Icso\Accounting\Models\Master\ProductConvertion;
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Models\Persediaan\StockAwal;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\Utility;
+use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 

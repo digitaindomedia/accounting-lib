@@ -2,7 +2,8 @@
 
 namespace Icso\Accounting\Exports;
 
-use App\Repositories\Tenant\Master\Coa\CoaRepo;
+
+use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;

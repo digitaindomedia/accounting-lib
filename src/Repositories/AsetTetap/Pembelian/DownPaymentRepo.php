@@ -5,7 +5,9 @@ namespace Icso\Accounting\Repositories\AsetTetap\Pembelian;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseDownPaymentMeta;
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
@@ -16,6 +18,7 @@ use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DownPaymentRepo extends ElequentRepository
 {
@@ -150,7 +153,7 @@ class DownPaymentRepo extends ElequentRepository
                 return false;
             }
         }catch (\Exception $e) {
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -264,6 +267,7 @@ class DownPaymentRepo extends ElequentRepository
             return true;
         }
         catch (\Exception $e) {
+            Log::error($e->getMessage());
             DB::rollback();
             return false;
         }

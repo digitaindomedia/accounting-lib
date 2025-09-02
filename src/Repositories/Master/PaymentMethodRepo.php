@@ -1,10 +1,9 @@
 <?php
 namespace Icso\Accounting\Repositories\Master;
 
-use App\Models\Tenant\Master\Coa;
-use App\Models\Tenant\Master\PaymentMethod;
-use App\Repositories\BaseRepo;
-use App\Repositories\ElequentRepository;
+
+use Icso\Accounting\Models\Master\PaymentMethod;
+use Icso\Accounting\Repositories\ElequentRepository;
 use Illuminate\Http\Request;
 
 class PaymentMethodRepo extends ElequentRepository

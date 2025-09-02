@@ -2,30 +2,31 @@
 
 namespace Icso\Accounting\Repositories\Penjualan\Retur;
 
-use App\Enums\JurnalStatusEnum;
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Enums\TypeEnum;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePaymentInvoice;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicingDelivery;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPaymentMeta;
-use App\Models\Tenant\Penjualan\Retur\SalesRetur;
-use App\Models\Tenant\Penjualan\Retur\SalesReturMeta;
-use App\Models\Tenant\Penjualan\Retur\SalesReturProduct;
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Repositories\Tenant\Penjualan\Invoice\InvoiceRepo;
-use App\Repositories\Tenant\Persediaan\Inventory\Interface\InventoryRepo;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\KeyNomor;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
-use App\Utils\VarType;
+
+use Icso\Accounting\Enums\JurnalStatusEnum;
+use Icso\Accounting\Enums\SettingEnum;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Enums\TypeEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDelivery;
+use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
+use Icso\Accounting\Models\Penjualan\Retur\SalesReturMeta;
+use Icso\Accounting\Models\Penjualan\Retur\SalesReturProduct;
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
+use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
+use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ReturRepo extends ElequentRepository
 {
@@ -209,7 +210,7 @@ class ReturRepo extends ElequentRepository
             }
         }catch (\Exception $e) {
             // Rollback Transaction
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

@@ -1,15 +1,16 @@
 <?php
 namespace Icso\Accounting\Models\Master;
 
-use App\Models\Tenant\Pembelian\Bast\PurchaseBastProduct;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrderProduct;
-use App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceivedProduct;
-use App\Models\Tenant\Pembelian\Retur\PurchaseReturProduct;
-use App\Models\Tenant\Pembelian\UangMuka\PurchaseDownPayment;
-use App\Models\Tenant\Penjualan\Order\SalesOrderProduct;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDeliveryProduct;
-use App\Models\Tenant\Penjualan\Retur\SalesReturProduct;
-use App\Models\Tenant\Penjualan\UangMuka\SalesDownpayment;
+
+use Icso\Accounting\Models\Pembelian\Bast\PurchaseBastProduct;
+use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProduct;
+use Icso\Accounting\Models\Pembelian\Retur\PurchaseReturProduct;
+use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProduct;
+use Icso\Accounting\Models\Penjualan\Retur\SalesReturProduct;
+use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Illuminate\Database\Eloquent\Model;
 
 class Tax extends Model

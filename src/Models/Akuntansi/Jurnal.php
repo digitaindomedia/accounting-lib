@@ -3,6 +3,7 @@
 namespace Icso\Accounting\Models\Akuntansi;
 
 use Icso\Accounting\Models\Master\Coa;
+use Icso\Accounting\Utils\JurnalType;
 use Illuminate\Database\Eloquent\Model;
 
 class Jurnal extends Model

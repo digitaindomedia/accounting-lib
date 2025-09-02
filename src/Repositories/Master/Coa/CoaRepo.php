@@ -1,11 +1,11 @@
 <?php
 namespace Icso\Accounting\Repositories\Master\Coa;
 
-use App\Models\Tenant\Master\Coa;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Utils\Constants;
 use DateTime;
+use Icso\Accounting\Models\Master\Coa;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Utils\Constants;
 use Illuminate\Http\Request;
 
 class CoaRepo extends ElequentRepository

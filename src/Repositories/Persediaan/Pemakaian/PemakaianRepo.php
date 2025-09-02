@@ -1,25 +1,26 @@
 <?php
 
-namespace App\Repositories\Tenant\Persediaan\Pemakaian;
+namespace Icso\Accounting\Repositories\Persediaan\Pemakaian;
 
-use App\Enums\JurnalStatusEnum;
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Models\Tenant\Persediaan\StockUsage;
-use App\Models\Tenant\Persediaan\StockUsageMeta;
-use App\Models\Tenant\Persediaan\StockUsageProduct;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Repositories\Tenant\Persediaan\Inventory\Interface\InventoryRepo;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\KeyNomor;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
+use Icso\Accounting\Enums\JurnalStatusEnum;
+use Icso\Accounting\Enums\SettingEnum;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Models\Persediaan\StockUsage;
+use Icso\Accounting\Models\Persediaan\StockUsageMeta;
+use Icso\Accounting\Models\Persediaan\StockUsageProduct;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PemakaianRepo extends ElequentRepository
 {
@@ -97,7 +98,7 @@ class PemakaianRepo extends ElequentRepository
                 return false;
             }
         } catch (\Exception $e) {
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

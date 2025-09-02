@@ -2,7 +2,8 @@
 
 namespace Icso\Accounting\Exports;
 
-use App\Utils\ProductType;
+
+use Icso\Accounting\Utils\ProductType;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;

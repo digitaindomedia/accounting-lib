@@ -1,41 +1,40 @@
 <?php
 namespace Icso\Accounting\Repositories\Penjualan\Invoice;
 
-use App\Enums\InvoiceStatusEnum;
-use App\Enums\JurnalStatusEnum;
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Enums\TypeEnum;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\Master\PaymentMethod;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicingDelivery;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicingDp;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicingMeta;
-use App\Models\Tenant\Penjualan\Order\SalesOrderProduct;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPayment;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPaymentInvoice;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDelivery;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDeliveryMeta;
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Repositories\Tenant\Penjualan\Delivery\DeliveryRepo;
-use App\Repositories\Tenant\Penjualan\Downpayment\DpRepo;
-use App\Repositories\Tenant\Penjualan\Order\SalesOrderRepo;
-use App\Repositories\Tenant\Penjualan\Payment\PaymentInvoiceRepo;
-use App\Repositories\Tenant\Persediaan\Inventory\Interface\InventoryRepo;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\Helpers;
-use App\Utils\InputType;
-use App\Utils\KeyNomor;
-use App\Utils\ProductType;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
-use App\Utils\VarType;
+
+use Icso\Accounting\Accountingp\Models\Penjualan\Invoicing\SalesInvoicingDp;
+use Icso\Accounting\Enums\InvoiceStatusEnum;
+use Icso\Accounting\Enums\JurnalStatusEnum;
+use Icso\Accounting\Enums\SettingEnum;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Enums\TypeEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Master\PaymentMethod;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDelivery;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
+use Icso\Accounting\Repositories\Penjualan\Downpayment\DpRepo;
+use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
+use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\Helpers;
+use Icso\Accounting\Utils\InputType;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
+use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceRepo extends ElequentRepository
 {
@@ -146,7 +145,7 @@ class InvoiceRepo extends ElequentRepository
         } catch (\Exception $e) {
             DB::rollBack();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             return false;
         }
     }

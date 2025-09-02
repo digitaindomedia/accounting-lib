@@ -2,25 +2,26 @@
 
 namespace Icso\Accounting\Repositories\AsetTetap\Penjualan;
 
-use App\Enums\InvoiceStatusEnum;
-use App\Enums\JurnalStatusEnum;
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\AsetTetap\Pembelian\PurchasePayment;
-use App\Models\Tenant\AsetTetap\Penjualan\SalesInvoice;
-use App\Models\Tenant\AsetTetap\Penjualan\SalesInvoiceMeta;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Akuntansi\JurnalTransaksiRepo;
-use App\Repositories\Tenant\AsetTetap\Pembelian\OrderRepo;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\InputType;
-use App\Utils\KeyNomor;
-use App\Utils\TransactionsCode;
-use App\Utils\Utility;
+use Icso\Accounting\Enums\InvoiceStatusEnum;
+use Icso\Accounting\Enums\JurnalStatusEnum;
+use Icso\Accounting\Enums\SettingEnum;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchasePayment;
+use Icso\Accounting\Models\AsetTetap\Penjualan\SalesInvoice;
+use Icso\Accounting\Models\AsetTetap\Penjualan\SalesInvoiceMeta;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\AsetTetap\Pembelian\OrderRepo;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\InputType;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SalesInvoiceRepo extends ElequentRepository
 {
@@ -159,7 +160,7 @@ class SalesInvoiceRepo extends ElequentRepository
         }
         catch (\Exception $e) {
             // Rollback Transaction
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -176,7 +177,7 @@ class SalesInvoiceRepo extends ElequentRepository
         }
         catch (\Exception $e) {
             // Rollback Transaction
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

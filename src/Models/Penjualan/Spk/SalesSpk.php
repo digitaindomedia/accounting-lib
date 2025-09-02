@@ -2,9 +2,9 @@
 
 namespace Icso\Accounting\Models\Penjualan\Spk;
 
-use App\Models\Tenant\Master\Vendor;
-use App\Models\Tenant\Penjualan\Order\SalesOrder;
-use App\Utils\Helpers;
+use Icso\Accounting\Models\Master\Vendor;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
+use Icso\Accounting\Utils\Helpers;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesSpk extends Model

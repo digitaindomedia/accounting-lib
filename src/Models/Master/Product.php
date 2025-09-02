@@ -1,9 +1,10 @@
 <?php
 namespace Icso\Accounting\Models\Master;
 
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Models\Tenant\Persediaan\StockAwal;
-use App\Models\Tenant\Persediaan\StockUsageProduct;
+
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Models\Persediaan\StockAwal;
+use Icso\Accounting\Models\Persediaan\StockUsageProduct;
 use Illuminate\Database\Eloquent\Model;
 
 class Product extends Model

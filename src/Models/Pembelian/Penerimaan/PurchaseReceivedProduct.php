@@ -7,6 +7,7 @@ use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\Master\Unit;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
+use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
 use Illuminate\Database\Eloquent\Model;
 
 class PurchaseReceivedProduct extends Model

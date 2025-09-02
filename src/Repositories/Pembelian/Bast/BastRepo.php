@@ -2,22 +2,21 @@
 
 namespace Icso\Accounting\Repositories\Pembelian\Bast;
 
-use App\Enums\SettingEnum;
-use App\Enums\StatusEnum;
-use App\Enums\TypeEnum;
-use App\Models\Tenant\Akuntansi\JurnalMeta;
-use App\Models\Tenant\Pembelian\Bast\PurchaseBast;
-use App\Models\Tenant\Pembelian\Bast\PurchaseBastMeta;
-use App\Models\Tenant\Pembelian\Bast\PurchaseBastProduct;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrderProduct;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Utils\SettingRepo;
-use App\Services\FileUploadService;
-use App\Utils\Helpers;
-use App\Utils\KeyNomor;
-use App\Utils\Utility;
+
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Enums\TypeEnum;
+use Icso\Accounting\Models\Pembelian\Bast\PurchaseBast;
+use Icso\Accounting\Models\Pembelian\Bast\PurchaseBastMeta;
+use Icso\Accounting\Models\Pembelian\Bast\PurchaseBastProduct;
+use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\Helpers;
+use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BastRepo extends ElequentRepository
 {
@@ -168,7 +167,7 @@ class BastRepo extends ElequentRepository
             }
         }
         catch (\Exception $e){
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

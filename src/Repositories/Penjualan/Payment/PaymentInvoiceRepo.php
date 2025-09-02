@@ -2,9 +2,10 @@
 
 namespace Icso\Accounting\Repositories\Penjualan\Payment;
 
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPaymentInvoice;
-use App\Repositories\ElequentRepository;
-use App\Repositories\Tenant\Penjualan\Invoice\InvoiceRepo;
+
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Illuminate\Http\Request;
 
 class PaymentInvoiceRepo extends ElequentRepository

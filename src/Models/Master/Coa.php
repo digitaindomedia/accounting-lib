@@ -1,22 +1,23 @@
 <?php
 namespace Icso\Accounting\Models\Master;
 
-use App\Models\Tenant\Akuntansi\BukuPembantu;
-use App\Models\Tenant\Akuntansi\Jurnal;
-use App\Models\Tenant\Akuntansi\JurnalTransaksi;
-use App\Models\Tenant\Pembelian\Invoicing\PurchaseInvoicing;
-use App\Models\Tenant\Pembelian\Order\PurchaseOrder;
-use App\Models\Tenant\Pembelian\Pembayaran\PurchasePaymentInvoice;
-use App\Models\Tenant\Pembelian\UangMuka\PurchaseDownPayment;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
-use App\Models\Tenant\Penjualan\Pembayaran\SalesPaymentInvoice;
-use App\Models\Tenant\Penjualan\UangMuka\SalesDownpayment;
-use App\Models\Tenant\Persediaan\Adjustment;
-use App\Models\Tenant\Persediaan\AdjustmentProducts;
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Models\Tenant\Persediaan\StockAwal;
-use App\Models\Tenant\Persediaan\StockUsage;
-use App\Models\Tenant\Persediaan\StockUsageProduct;
+
+use Icso\Accounting\Models\Akuntansi\BukuPembantu;
+use Icso\Accounting\Models\Akuntansi\Jurnal;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseDownPayment;
+use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
+use Icso\Accounting\Models\Persediaan\Adjustment;
+use Icso\Accounting\Models\Persediaan\AdjustmentProducts;
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Models\Persediaan\StockAwal;
+use Icso\Accounting\Models\Persediaan\StockUsage;
+use Icso\Accounting\Models\Persediaan\StockUsageProduct;
 use Illuminate\Database\Eloquent\Model;
 
 class Coa extends Model

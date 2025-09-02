@@ -1,9 +1,9 @@
 <?php
 namespace Icso\Accounting\Models\Master;
 
-use App\Models\Tenant\Persediaan\AdjustmentProducts;
-use App\Models\Tenant\Persediaan\Inventory;
-use App\Models\Tenant\Persediaan\StockAwal;
+use Icso\Accounting\Models\Persediaan\AdjustmentProducts;
+use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Models\Persediaan\StockAwal;
 use Illuminate\Database\Eloquent\Model;
 
 class Unit extends Model

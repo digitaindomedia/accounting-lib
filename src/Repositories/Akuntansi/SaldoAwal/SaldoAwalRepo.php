@@ -100,7 +100,7 @@ class SaldoAwalRepo extends ElequentRepository
         }
         catch (\Exception $e) {
             // Rollback Transaction
-            //echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollback();
             return false;
         }
@@ -116,7 +116,7 @@ class SaldoAwalRepo extends ElequentRepository
             return true;
         }
         catch (\Exception $e) {
-            // Rollback Transaction
+            Log::error($e->getMessage());
             DB::rollback();
             return false;
         }

@@ -156,14 +156,14 @@ Route::group([
     Route::delete('delete-jurnal',[JurnalController::class, 'deleteById']);
     Route::delete('delete-all-jurnal',[JurnalController::class, 'deleteAllJurnal']);
     Route::get('show-jurnal',[JurnalController::class, 'showAccountJurnal']);
-    Route::get('/download-sample-jurnal-umum', [JurnalController::class, 'downloadSample']);
-    Route::get('/download-sample-jurnal-kas-bank', [JurnalController::class, 'downloadKasBankSample']);
-    Route::post('/import-jurnal-umum', [JurnalController::class, 'import']);
-    Route::post('/import-jurnal-kas-bank', [JurnalController::class, 'importKasBank']);
-    Route::get('/export-excel-jurnal', [JurnalController::class, 'export']);
-    Route::get('/export-pdf-jurnal', [JurnalController::class, 'exportPdf']);
-    Route::get('/export-excel-saldo-awal', [SaldoAwalController::class, 'exportExcel']);
-    Route::get('/export-pdf-saldo-awal', [SaldoAwalController::class, 'exportPdf']);
+    Route::get('download-sample-jurnal-umum', [JurnalController::class, 'downloadSample']);
+    Route::get('download-sample-jurnal-kas-bank', [JurnalController::class, 'downloadKasBankSample']);
+    Route::post('import-jurnal-umum', [JurnalController::class, 'import']);
+    Route::post('import-jurnal-kas-bank', [JurnalController::class, 'importKasBank']);
+    Route::get('export-excel-jurnal', [JurnalController::class, 'export']);
+    Route::get('export-pdf-jurnal', [JurnalController::class, 'exportPdf']);
+    Route::get('export-excel-saldo-awal', [SaldoAwalController::class, 'exportExcel']);
+    Route::get('export-pdf-saldo-awal', [SaldoAwalController::class, 'exportPdf']);
 
     //persediaan
     Route::prefix('stock')->group(function () {

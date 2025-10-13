@@ -32,7 +32,7 @@ use Illuminate\Support\Facades\Route;
 use Stancl\Tenancy\Middleware\InitializeTenancyByPath;
 
 Route::group([
-    'prefix'     => '/api/{tenant}',
+    'prefix'     => '/{tenant}',
     'middleware' => [InitializeTenancyByPath::class],
 ], function () {
     Route::get('system-setting',[Setting::class, 'getSystemSetting']);

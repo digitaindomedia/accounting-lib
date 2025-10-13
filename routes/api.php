@@ -91,8 +91,8 @@ Route::group([
     Route::get('vendor-count',[VendorController::class, 'getCountVendor']);
     Route::delete('vendor-delete-by-id',[VendorController::class, 'destroy']);
     Route::delete('vendor-delete-all',[VendorController::class, 'deleteAll']);
-    Route::get('/download-sample-vendor', [VendorController::class, 'downloadSample']);
-    Route::post('/import-vendor', [VendorController::class, 'import']);
+    Route::get('download-sample-vendor', [VendorController::class, 'downloadSample']);
+    Route::post('import-vendor', [VendorController::class, 'import']);
     Route::get('vendor-export-pdf', [VendorController::class, 'exportPdf']);
     Route::get('vendor-export-excel', [VendorController::class, 'export']);
     Route::get('vendor-export-csv', [VendorController::class, 'exportCsv']);
@@ -121,9 +121,9 @@ Route::group([
     Route::get('product-convertion-get-by-product',[ProductController::class, 'getAllProductConvertion']);
     Route::post('product-convertion-save-data',[ProductController::class, 'storeProductConvertion']);
     Route::get('product-count',[ProductController::class, 'getCountProduct']);
-    Route::get('/download-sample-products', [ProductController::class, 'downloadSample']);
-    Route::post('/import-products', [ProductController::class, 'import']);
-    Route::get('/download-product-image', [ProductController::class, 'downloadimage']);
+    Route::get('download-sample-products', [ProductController::class, 'downloadSample']);
+    Route::post('import-products', [ProductController::class, 'import']);
+    Route::get('download-product-image', [ProductController::class, 'downloadimage']);
     Route::get('product-export-pdf', [ProductController::class, 'exportPdf']);
     Route::get('product-export-excel', [ProductController::class, 'export']);
     Route::get('product-export-csv', [ProductController::class, 'exportCsv']);

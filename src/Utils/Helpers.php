@@ -6,6 +6,8 @@ namespace Icso\Accounting\Utils;
 use Exception;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\User;
+use Icso\Accounting\Models\UserInfo;
 use Icso\Accounting\Repositories\Master\TaxRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
 

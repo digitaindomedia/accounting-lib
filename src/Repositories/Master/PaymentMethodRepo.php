@@ -2,6 +2,7 @@
 namespace Icso\Accounting\Repositories\Master;
 
 
+use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Models\Master\PaymentMethod;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Illuminate\Http\Request;

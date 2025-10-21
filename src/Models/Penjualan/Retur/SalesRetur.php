@@ -2,10 +2,10 @@
 
 namespace Icso\Accounting\Models\Penjualan\Retur;
 
-use App\Models\Tenant\Master\Vendor;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDelivery;
-use App\Utils\Helpers;
+use Icso\Accounting\Models\Master\Vendor;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Utils\Helpers;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesRetur extends Model

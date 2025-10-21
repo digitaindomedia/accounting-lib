@@ -2,10 +2,10 @@
 
 namespace Icso\Accounting\Models\Penjualan\Pembayaran;
 
-use App\Models\Tenant\Akuntansi\Jurnal;
-use App\Models\Tenant\Master\Coa;
-use App\Models\Tenant\Penjualan\Invoicing\SalesInvoicing;
-use App\Models\Tenant\Penjualan\Retur\SalesRetur;
+use Icso\Accounting\Models\Akuntansi\Jurnal;
+use Icso\Accounting\Models\Master\Coa;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesPaymentInvoice extends Model

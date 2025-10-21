@@ -2,8 +2,8 @@
 
 namespace Icso\Accounting\Models\Penjualan\Spk;
 
-use App\Models\Tenant\Master\Product;
-use App\Models\Tenant\Penjualan\Order\SalesOrderProduct;
+use Icso\Accounting\Models\Master\Product;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesSpkProduct extends Model

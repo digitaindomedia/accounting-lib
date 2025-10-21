@@ -40,7 +40,7 @@ class Tax extends Model
     public function canDelete()
     {
         // Check if there are associated comments
-        if ($this->taxgroup()->count() > 0 || $this->purchasecoa()->count() > 0 || $this->salescoa()->count() || $this->purchasebastproduct()->count() > 0 || $this->purchasereturproduct()->count() > 0 || $this->purchasedownpayment()->count() > 0 || $this->purchaseorderproduct()->count() > 0 || $this->purchasereceiveproduct()->count() > 0 || $this->salesdeliveryproduct()->count() > 0 || $this->salesreturproduct()->count() > 0 || $this->salesdownpayment()->count() > 0 || $this->salesorderproduct()->count() > 0) {
+        if ($this->taxgroup()->count() > 0 || $this->purchasebastproduct()->count() > 0 || $this->purchasereturproduct()->count() > 0 || $this->purchasedownpayment()->count() > 0 || $this->purchaseorderproduct()->count() > 0 || $this->purchasereceiveproduct()->count() > 0 || $this->salesdeliveryproduct()->count() > 0 || $this->salesreturproduct()->count() > 0 || $this->salesdownpayment()->count() > 0 || $this->salesorderproduct()->count() > 0) {
             return false; // Deletion not allowed
         }
 

@@ -2,14 +2,12 @@
 
 namespace Icso\Accounting\Models\Penjualan\Order;
 
-use App\Enums\StatusEnum;
-use App\Models\Tenant\Master\Vendor;
-use App\Models\Tenant\Penjualan\Pengiriman\SalesDelivery;
-use App\Models\Tenant\Penjualan\UangMuka\SalesDownpayment;
-use App\Repositories\Tenant\Penjualan\Delivery\DeliveryRepo;
-use App\Repositories\Tenant\Penjualan\Downpayment\DpRepo;
-use App\Repositories\Tenant\Penjualan\Order\SalesOrderRepo;
-use App\Utils\Helpers;
+use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Master\Vendor;
+use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
+use Icso\Accounting\Repositories\Penjualan\Downpayment\DpRepo;
+use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
+use Icso\Accounting\Utils\Helpers;
 use Illuminate\Database\Eloquent\Model;
 
 class SalesOrder extends Model

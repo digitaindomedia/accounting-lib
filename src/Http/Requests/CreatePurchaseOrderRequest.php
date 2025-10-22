@@ -58,6 +58,9 @@ class CreatePurchaseOrderRequest extends FormRequest
         if ($orderType == ProductType::SERVICE) {
             $baseRules['orderproduct.*.service_name'] = 'required|string';
         }
+        if( $orderType == ProductType::ITEM){
+            $baseRules['orderproduct.*.product_id'] = 'required|string';
+        }
 
         return $baseRules;
     }
@@ -69,6 +72,7 @@ class CreatePurchaseOrderRequest extends FormRequest
             'vendor_id.required' => 'Supplier masih kosong.',
             'orderproduct.required' => 'Daftar transaksi Order Pembelian masih kosong.',
             'order_no.required' => 'Nomor Order Pembelian masih kosong.',
+            'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.',
             'orderproduct.*.service_name.required' => 'Nama jasa pada salah satu item masih kosong.',
             'orderproduct.*.service_name.string' => 'Nama jasa harus berupa teks.',

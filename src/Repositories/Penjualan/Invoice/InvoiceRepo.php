@@ -22,6 +22,7 @@ use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
 use Icso\Accounting\Repositories\Penjualan\Downpayment\DpRepo;
 use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
+use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Services\FileUploadService;

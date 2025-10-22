@@ -49,7 +49,7 @@ class CreatePurchaseRequestRequest extends FormRequest
                 Rule::unique($table, 'request_no'),
             ];
         }
-
+        $baseRules['requestproduct.*.product_id'] = 'required|string';
         return $baseRules;
     }
 
@@ -58,7 +58,8 @@ class CreatePurchaseRequestRequest extends FormRequest
         return ['request_date.required' => 'Tanggal permintaan Masih Kosong',
             'request_no.required' => 'Nomor permintaan masih kosong.',
             'request_no.unique' => 'Nomor permintaan sudah digunakan.',
-            'requestproduct.required' => 'Daftar barang yang di minta Masih Kosong'];
+            'requestproduct.required' => 'Daftar barang yang di minta Masih Kosong',
+            'requestproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.'];
     }
 
     public function failedValidation(Validator $validator)

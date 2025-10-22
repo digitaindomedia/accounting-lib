@@ -49,7 +49,6 @@ class CreatePurchaseReceivedRequest extends FormRequest
                 Rule::unique($table, 'received_no'),
             ];
         }
-
         return $baseRules;
     }
 

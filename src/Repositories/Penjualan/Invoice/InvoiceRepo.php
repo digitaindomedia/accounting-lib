@@ -2,7 +2,7 @@
 namespace Icso\Accounting\Repositories\Penjualan\Invoice;
 
 
-use Icso\Accounting\Accountingp\Models\Penjualan\Invoicing\SalesInvoicingDp;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDp;
 use Icso\Accounting\Enums\InvoiceStatusEnum;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;

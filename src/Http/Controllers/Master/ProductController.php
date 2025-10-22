@@ -257,14 +257,11 @@ class ProductController extends Controller
         $errors = $import->getErrors();
         $results = $import->getRowResults();
         $totalRow = count($errors) + $success;
+        if($errors){
+            return response()->json(['status' => false, 'success' => $success,'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+        }
+        return response()->json(['status' => true,'success' => $success,'errors' => count($errors), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows()], 200);
 
-        return response()->json([
-            'success_count' => $success,
-            'total_row' => $totalRow,
-            'failed_count' => count($errors),
-            'results' => $results,
-            'message' => "Import selesai. Berhasil: {$success}, Gagal: " . count($errors)
-        ]);
     }
 
     public function downloadSample(Request $request)

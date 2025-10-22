@@ -199,13 +199,11 @@ class VendorController extends Controller
         $results = $import->getRowResults();
         $totalRow = count($errors) + $success;
 
-        return response()->json([
-            'success_count' => $success,
-            'total_row' => $totalRow,
-            'failed_count' => count($errors),
-            'results' => $results,
-            'message' => "Import selesai. Berhasil: {$success}, Gagal: " . count($errors)
-        ]);
+        if($errors){
+            return response()->json(['status' => false, 'success' => $success,'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+        }
+        return response()->json(['status' => true,'success' => $success,'errors' => count($errors), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows()], 200);
+
     }
 
     private function getVendorData(Request $request)

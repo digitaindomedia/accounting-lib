@@ -51,6 +51,7 @@ class CreatePurchaseInvoiceRequest extends FormRequest
         // Tambahkan validasi warehouse_id jika tipe invoice ITEM dan tidak ada order_id
         if ($invoiceType === InvoiceTypeEnum::ITEM->toString() && empty($orderId)) {
             $rules['warehouse_id'] = ['required'];
+            $rules['orderproduct.*.product_id'] = 'required|string';
         }
 
         // Tambahkan validasi unique jika invoice_no tidak kosong (manual input)
@@ -70,6 +71,7 @@ class CreatePurchaseInvoiceRequest extends FormRequest
             'invoice_no.required' => 'Nomor invoice masih kosong.',
             'vendor_id.required' => 'Supplier masih belum dipilih',
             'warehouse_id.required' => 'Gudang masih belum dipilih',
+            'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'invoice_no.unique'   => 'No Invoice sudah ada yang dipakai.',
         ];
     }

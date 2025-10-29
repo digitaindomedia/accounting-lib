@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
+use Icso\Accounting\Utils\Helpers;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -28,6 +30,10 @@ class CreatePurchaseDpRequest extends FormRequest
      */
     public function rules()
     {
+        $this->merge([
+            'nominal' => Utility::remove_commas($this->input('nominal'))
+        ]);
+
         $id = $this->input('id') ?? $this->route('id');
         $refNo = $this->input('ref_no');
         $table = (new PurchaseDownPayment())->getTable();
@@ -57,7 +63,7 @@ class CreatePurchaseDpRequest extends FormRequest
     {
         return ['downpayment_date.required' => 'Tanggal Uang Muka Masih Kosong',
             'ref_no.required' => 'Nomor uang muka masih kosong.',
-            'ref_no.unique' => 'Nomor uang muka sudah digunakan.',
+            'ref_no.unique' => 'Nomor uang muka sudah digunakan.','nominal.gt' => 'Nominal uang muka tidak boleh 0.',
             'nominal.required' => 'Nominal uang muka masih Kosong', 'order_id.required' => 'Order pembelian masih belum dipilih'];
     }
 

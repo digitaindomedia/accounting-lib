@@ -49,6 +49,7 @@ class CreatePurchaseReceivedRequest extends FormRequest
                 Rule::unique($table, 'received_no'),
             ];
         }
+        $baseRules['receiveproduct.*.qty'] = ['required', 'numeric', 'min:0'];
         return $baseRules;
     }
 

@@ -59,7 +59,9 @@ class CreatePurchaseReceivedRequest extends FormRequest
             'received_no.required' => 'Nomor penerimaan masih kosong.',
             'received_no.unique' => 'Nomor penerimaan sudah digunakan.',
             'warehouse_id.required' => 'Nama Gudang Masih Belum dipilih',
-            'order_id.required' => 'Order Pembelian Belum dipilih', 'receiveproduct.required' => 'Daftar barang yang akan diterima masih kosong'];
+            'order_id.required' => 'Order Pembelian Belum dipilih', 'receiveproduct.required' => 'Daftar barang yang akan diterima masih kosong', 'receiveproduct.*.qty.required' => 'Kuantitas barang masih kosong',
+            'receiveproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
+            'receiveproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0'];
     }
 
     public function failedValidation(Validator $validator)

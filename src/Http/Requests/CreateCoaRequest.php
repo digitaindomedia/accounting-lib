@@ -37,6 +37,7 @@ class CreateCoaRequest extends FormRequest
                 Coa::$rules,
                 [
                     'coa_code' => 'required|unique:als_coa,coa_code',
+                    'coa_name' => 'required|unique:als_coa,coa_name',
                 ]
             );
         }
@@ -60,6 +61,7 @@ class CreateCoaRequest extends FormRequest
             'head_coa.required' => 'Head COA masih belum dipilih.',
             'coa_code.required' => 'Kode COA masih kosong.',
             'coa_code.unique'   => 'Kode COA sudah dipakai.',
+            'coa_name.unique'   => 'Nama COA sudah dipakai.',
         ];
     }
 

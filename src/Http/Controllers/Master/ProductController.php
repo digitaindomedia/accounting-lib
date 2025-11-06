@@ -321,7 +321,7 @@ class ProductController extends Controller
         }
         $data = $this->getProductData($request);
 
-        $pdf = Pdf::loadView('master.product', ['arrData' => $data, 'productType' => $productType]);
+        $pdf = Pdf::loadView('accounting::master.product', ['arrData' => $data, 'productType' => $productType]);
         return $pdf->download($fileName);
     }
 

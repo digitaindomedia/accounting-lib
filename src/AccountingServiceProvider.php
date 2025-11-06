@@ -8,7 +8,7 @@ class AccountingServiceProvider extends ServiceProvider
 {
     public function boot()
     {
-
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'accounting');
     }
 
     public function register()

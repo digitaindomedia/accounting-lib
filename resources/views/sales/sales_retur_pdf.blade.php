@@ -39,7 +39,7 @@
             <td>{{ $data['delivery'] }}</td>
             <td>{{ $data['invoice'] }}</td>
             <td>{{ $data['vendor'] }}</td>
-            <td>{{ $data['total'] }}</td>
+            <td>{{ number_format($data['total'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             <td>{{ $data['retur_status'] }}</td>
         </tr>
     @endforeach

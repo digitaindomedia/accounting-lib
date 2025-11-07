@@ -33,15 +33,15 @@
     <tbody>
     @foreach ($jurnalData as $jurnal)
         <tr><td colspan="6">{{ $jurnal['coa']['coa_name'] }} - {{ $jurnal['coa']['coa_code'] }}</td></tr>
-        <tr><td colspan="5">Saldo Awal</td><td>{{ number_format($jurnal['saldo_awal'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td></tr>
+        <tr><td colspan="5">Saldo Awal</td><td>{{ number_format($jurnal['saldo_awal'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td></tr>
         @foreach ($jurnal['data'] as $data)
             <tr>
                 <td>{{ $data['transaction_date'] }}</td>
                 <td>{{ $data['transaction_no'] }}</td>
                 <td>{{ $data['note'] }}</td>
-                <td style="text-align: right">{{ number_format($data['debet'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td style="text-align: right">{{ number_format($data['kredit'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td style="text-align: right">{{ number_format($data['saldo'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td style="text-align: right">{{ number_format($data['debet'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td style="text-align: right">{{ number_format($data['kredit'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td style="text-align: right">{{ number_format($data['saldo'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             </tr>
         @endforeach
     @endforeach

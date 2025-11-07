@@ -36,7 +36,7 @@
             <td>{{ $data['ref_no'] }}</td>
             <td>{{ $data['order'] }}</td>
             <td>{{ $data['vendor'] }}</td>
-            <td>{{ $data['nominal'] }}</td>
+            <td>{{ number_format($data['nominal'],\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
         </tr>
     @endforeach
     </tbody>

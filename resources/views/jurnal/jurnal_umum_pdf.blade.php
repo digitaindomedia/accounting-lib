@@ -34,7 +34,7 @@
             <td>{{ $data['jurnal_date'] }}</td>
             <td>{{ $data['jurnal_no'] }}</td>
             <td>{{ $data['note'] }}</td>
-            <td>{{ $data['total'] }}</td>
+            <td>{{ number_format($data['total'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
         </tr>
     @endforeach
     </tbody>

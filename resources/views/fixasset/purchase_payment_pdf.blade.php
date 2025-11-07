@@ -35,7 +35,7 @@
             <td>{{ $data['payment_date'] }}</td>
             <td>{{ $data['payment_no'] }}</td>
             <td>{{ $data['invoice'] }}</td>
-            <td>{{ $data['total'] }}</td>
+            <td>{{ number_format($data['total'],\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             <td>{{ $data['method'] }}</td>
         </tr>
     @endforeach

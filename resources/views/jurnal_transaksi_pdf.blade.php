@@ -37,8 +37,8 @@
                 <td>{{ $data['transaction_no'] }}</td>
                 <td>{{ $data['coa']['coa_name']." ".$data['coa']['coa_code'] }}</td>
                 <td>{{ $data['note'] }}</td>
-                <td style="text-align: right">{{ number_format($data['debet'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td style="text-align: right">{{ number_format($data['kredit'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td style="text-align: right">{{ number_format($data['debet'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td style="text-align: right">{{ number_format($data['kredit'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             </tr>
     @endforeach
     </tbody>

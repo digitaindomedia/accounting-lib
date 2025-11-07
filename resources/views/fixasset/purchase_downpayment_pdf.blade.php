@@ -36,7 +36,7 @@
             <td>{{ $data['ref_no'] }}</td>
             <td>{{ $data['nama_aset'] }}</td>
             <td>{{ $data['order'] }}</td>
-            <td style="text-align: right;">{{ $data['nominal'] }}</td>
+            <td style="text-align: right;">{{ number_format($data['nominal'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
         </tr>
     @endforeach
     </tbody>

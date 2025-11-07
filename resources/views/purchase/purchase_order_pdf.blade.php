@@ -37,7 +37,7 @@
             <td>{{ $data['order_no'] }}</td>
             <td>{{ $data['request_no'] }}</td>
             <td>{{ $data['vendor'] }}</td>
-            <td>{{ number_format($data['grandtotal'],\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+            <td>{{ number_format($data['grandtotal'],\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             <td>{{ $data['order_status'] }}</td>
         </tr>
     @endforeach

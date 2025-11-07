@@ -37,8 +37,8 @@
             <td>{{ $data['jurnal_no'] }}</td>
             <td>{{ $data['akun'] }}</td>
             <td>{{ $data['note'] }}</td>
-            <td>{{ $data['income'] }}</td>
-            <td>{{ $data['outcome'] }}</td>
+            <td>{{ number_format($data['income'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+            <td>{{ number_format($data['outcome'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
         </tr>
     @endforeach
     </tbody>

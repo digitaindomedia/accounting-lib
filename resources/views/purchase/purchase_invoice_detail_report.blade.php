@@ -1,4 +1,5 @@
- <!DOCTYPE html>
+@php use Icso\Accounting\Enums\TypeEnum;use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo; @endphp
+        <!DOCTYPE html>
 <html>
 <head>
     <title>Invoice Pembelian</title>
@@ -7,11 +8,13 @@
             width: 100%;
             border-collapse: collapse;
         }
+
         th, td {
             border: 1px solid black;
             padding: 8px;
             text-align: left;
         }
+
         th {
             background-color: #f2f2f2;
         }
@@ -25,7 +28,8 @@
     </tr>
     <tr>
         <td style="text-align: center" colspan="5">
-            {{ \Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
+            {{ \Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}}
+            - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
     </tr>
     <tr>
         <td style="text-align: center" colspan="5"></td>
@@ -109,19 +113,19 @@
             </tr>
             @foreach ($post->invoicereceived as $item)
                 @php
-                    $receiveRepo = new \App\Repositories\Tenant\Pembelian\Received\ReceiveRepo(new \App\Models\Tenant\Pembelian\Penerimaan\PurchaseReceived());
+                    $receiveRepo = new ReceiveRepo(new PurchaseReceived());
                     $total = $receiveRepo->getTotalReceived($item->id);
                 @endphp
                 <tr>
                     <td>{{$item->receive->receive_no}}</td>
                     <td>{{$item->receive->receive_date}}</td>
                     <td>{{$item->receive->warehouse->warehouse_name}}</td>
-                    <td style="text-align: right">{{ number_format($total, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                    <td style="text-align: right">{{ number_format($total, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 </tr>
                 @foreach($item->receive->receiveproduct as $val)
                     @php
-                        $taxname = \App\Utils\Helpers::getTaxName($val->tax_id, $val->tax_percentage, $val->tax_group);
-                        $taxCalc = \App\Utils\Helpers::hitungTaxDpp($val->subtotal,$val->tax_id,$val->tax_type,$val->tax_percentage);
+                        $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($val->tax_id, $val->tax_percentage, $val->tax_group);
+                        $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($val->subtotal,$val->tax_id,$val->tax_type,$val->tax_percentage);
                         if(!empty($val->tax_id)){
                             $arrTax[] = array(
                                 'id' => $val->tax_id,
@@ -136,21 +140,21 @@
 
         <tr>
             <td colspan="{{$colspan}}" style="text-align: right">Subtotal</td>
-            <td style="text-align: right">{{number_format($post->subtotal, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat())}}</td>
+            <td style="text-align: right">{{number_format($post->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
         </tr>
         <tr>
             <td style="text-align: right" colspan="{{$colspan}}">Diskon</td>
-            <td style="text-align: right">{{number_format($post->total_discount, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat())}}</td>
+            <td style="text-align: right">{{number_format($post->total_discount, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
         </tr>
         @php
             if(!empty($arrTax)){
-                $resultTax = \App\Utils\Helpers::sumTotalsByTaxId($arrTax);
+                $resultTax = \Icso\Accounting\Utils\Helpers::sumTotalsByTaxId($arrTax);
                 if(!empty($resultTax)){
                     foreach ($resultTax as $item){
         @endphp
         <tr>
             <td style="text-align: right" colspan="{{$colspan}}">{{$item['name']}}</td>
-            <td style="text-align: right">{{number_format($item['total'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat())}}</td>
+            <td style="text-align: right">{{number_format($item['total'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
         </tr>
         @php
             }
@@ -159,7 +163,7 @@
         @endphp
         <tr>
             <td style="text-align: right" colspan="{{$colspan}}">Grand Total</td>
-            <td style="text-align: right">{{number_format($post->grandtotal, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat())}}</td>
+            <td style="text-align: right">{{number_format($post->grandtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
         </tr>
         <tr>
             <td colspan="6"></td>

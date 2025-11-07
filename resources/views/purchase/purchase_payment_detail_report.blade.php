@@ -25,7 +25,7 @@
     </tr>
     <tr>
         <td style="text-align: center" colspan="5">
-            {{\App\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\App\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
+            {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
     </tr>
     <tr>
         <td style="text-align: center" colspan="5"></td>
@@ -54,7 +54,7 @@
                 {{$post->payment_method->payment_name}}
             </td>
             <td>
-                {{number_format($post->total, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat())}}
+                {{number_format($post->total, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}
             </td>
         </tr>
         <tr>
@@ -67,19 +67,19 @@
         @foreach ($post->invoice as $item)
             <tr>
                 <td>{{ $item->purchaseinvoice->invoice_no }}</td>
-                <td>{{ number_format($item->purchaseinvoice->grandtotal, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($item->total_payment,\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($item->total_discount,\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($item->total_overpayment,\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->purchaseinvoice->grandtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->total_payment,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->total_discount,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->total_overpayment,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             </tr>
         @endforeach
         @foreach ($post->invoiceretur as $item)
             <tr>
                 <td>{{ $item->retur->retur_no }}</td>
-                <td>{{ number_format($item->retur->total, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($item->total_payment,\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($item->total_discount,\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($item->total_overpayment,\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->retur->total, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->total_payment,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->total_discount,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($item->total_overpayment,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             </tr>
         @endforeach
         <tr>

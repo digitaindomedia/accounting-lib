@@ -35,7 +35,7 @@
             <td>{{ $data['nama_aset'] }}</td>
             <td>{{ $data['no_aset'] }}</td>
             <td>{{ $data['aset_tetap_date'] }}</td>
-            <td>{{ number_format($data['harga_beli'],\App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+            <td>{{ number_format($data['harga_beli'],\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             <td>{{ $data['status_aset_tetap'] }}</td>
         </tr>
     @endforeach

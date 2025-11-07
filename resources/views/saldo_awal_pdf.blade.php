@@ -31,8 +31,8 @@
     @foreach ($data as $item)
         <tr>
             <td style="white-space: pre;">{!! $item['coa_name'] !!}</td>
-            <td style="text-align: right">{{ number_format($item['debet'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-            <td style="text-align: right">{{ number_format($item['kredit'], \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+            <td style="text-align: right">{{ number_format($item['debet'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+            <td style="text-align: right">{{ number_format($item['kredit'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
         </tr>
     @endforeach
     </tbody>

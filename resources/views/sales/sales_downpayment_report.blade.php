@@ -25,7 +25,7 @@
     </tr>
     <tr>
         <td style="text-align: center" colspan="9">
-            {{\App\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\App\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
+            {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
     </tr>
     <tr>
         <td style="text-align: center" colspan="9"></td>
@@ -52,7 +52,7 @@
                 {{ $item->order->vendor->vendor_company_name }}
             </td>
             <td>{{ $item->coa->coa_name." - ".$item->coa->coa_code }}</td>
-            <td style="text-align: right;">{{ number_format($item->nominal, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+            <td style="text-align: right;">{{ number_format($item->nominal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             <td>{{ $item->note }}</td>
         </tr>
     @endforeach

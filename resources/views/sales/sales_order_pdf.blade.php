@@ -35,7 +35,7 @@
             <td>{{ $data['order_date'] }}</td>
             <td>{{ $data['order_no'] }}</td>
             <td>{{ $data['vendor'] }}</td>
-            <td>{{ $data['grandtotal'] }}</td>
+            <td>{{ number_format($data['grandtotal'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             <td>{{ $data['order_status'] }}</td>
         </tr>
     @endforeach

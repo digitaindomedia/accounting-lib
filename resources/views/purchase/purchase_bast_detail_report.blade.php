@@ -25,7 +25,7 @@
     </tr>
     <tr>
         <td style="text-align: center" colspan="5">
-            {{\App\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\App\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
+            {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
     </tr>
     <tr>
         <td style="text-align: center" colspan="5"></td>

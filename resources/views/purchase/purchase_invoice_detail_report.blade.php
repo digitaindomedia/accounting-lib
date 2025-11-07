@@ -1,5 +1,4 @@
-@php use App\Enums\TypeEnum; @endphp
-    <!DOCTYPE html>
+ <!DOCTYPE html>
 <html>
 <head>
     <title>Invoice Pembelian</title>
@@ -26,7 +25,7 @@
     </tr>
     <tr>
         <td style="text-align: center" colspan="5">
-            {{\App\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\App\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
+            {{ \Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}} - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
     </tr>
     <tr>
         <td style="text-align: center" colspan="5"></td>
@@ -74,8 +73,8 @@
             </tr>
             @foreach ($post->orderproduct as $item)
                 @php
-                    $taxname = \App\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, $item->tax_group);
-                    $taxCalc = \App\Utils\Helpers::hitungTaxDpp($item->subtotal,$item->tax_id,$item->tax_type,$item->tax_percentage);
+                    $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, $item->tax_group);
+                    $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($item->subtotal,$item->tax_id,$item->tax_type,$item->tax_percentage);
                 @endphp
                 <tr>
                     <td>{{ !empty($item->product) ? $item->product->item_name."(".$item->product->item_code.")" : $item->service_name }}</td>
@@ -83,10 +82,10 @@
                         {{ $item->qty }}
                         {{ !empty($item->unit) && !empty($item->unit->unit_code) ? $item->unit->unit_code : "" }}
                     </td>
-                    <td style="text-align: right">{{ number_format($item->price, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                    <td style="text-align: right">{{ \App\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
+                    <td style="text-align: right">{{ number_format($item->price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                    <td style="text-align: right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
                     <td>{{ $taxname }}</td>
-                    <td style="text-align: right">{{ number_format($item->subtotal, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                    <td style="text-align: right">{{ number_format($item->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 </tr>
                 @php
                     if(!empty($item->tax_id)){

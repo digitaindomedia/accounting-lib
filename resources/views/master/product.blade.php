@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{$productType === \App\Utils\ProductType::ITEM ? "Barang" : "Jasa"}}</title>
+    <title>{{$productType === \Icso\Accounting\Utils\ProductType::ITEM ? "Barang" : "Jasa"}}</title>
     <style>
         table {
             width: 100%;
@@ -19,7 +19,7 @@
     </style>
 </head>
 <body>
-<h1 style="text-align: center;">{{$productType === \App\Utils\ProductType::ITEM ? "Barang" : "Jasa"}}</h1>
+<h1 style="text-align: center;">{{$productType === \Icso\Accounting\Utils\ProductType::ITEM ? "Barang" : "Jasa"}}</h1>
 <table>
     <thead>
     <tr>

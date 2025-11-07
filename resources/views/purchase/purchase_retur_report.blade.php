@@ -1,6 +1,4 @@
-@php use App\Enums\TypeEnum; @endphp
 <!DOCTYPE html>
-<html>
 <head>
     <title>Laporan Retur Pembelian</title>
     <style>
@@ -19,8 +17,8 @@
     </tr>
     <tr>
         <td class="text-center" colspan="6">
-            {{ \App\Utils\Utility::convert_tanggal($params['fromDate']) }}
-            - {{ \App\Utils\Utility::convert_tanggal($params['untilDate']) }}
+            {{ \Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate']) }}
+            - {{ \Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate']) }}
         </td>
     </tr>
     <tr>
@@ -59,7 +57,7 @@
 
         @foreach ($post->returproduct as $item)
             @php
-                $taxname = \App\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, null);
+                $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, null);
             @endphp
             <tr>
                 <td>{{ !empty($item->product) ? ($item->product->item_name . ' (' . $item->product->item_code . ')') : '' }}</td>
@@ -67,7 +65,7 @@
                     {{ $item->qty }}
                     {{ !empty($item->unit) && !empty($item->unit->unit_code) ? $item->unit->unit_code : "" }}
                 </td>
-                <td class="text-right">{{ number_format($item->buy_price, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td class="text-right">{{ number_format($item->buy_price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 <td class="text-right">{{ \App\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
                 <td>{{ $taxname }}</td>
                 <td class="text-right">{{ number_format($item->subtotal, \App\Repositories\Tenant\Utils\SettingRepo::getSeparatorFormat()) }}</td>
@@ -118,4 +116,4 @@
     </tbody>
 </table>
 </body>
-</html>
+</h

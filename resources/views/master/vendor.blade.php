@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{$vendorType == \App\Utils\VendorType::SUPPLIER ? "Supplier" : "Customer"}}</title>
+    <title>{{$vendorType == \Icso\Accounting\Utils\VendorType::SUPPLIER ? "Supplier" : "Customer"}}</title>
     <style>
         table {
             width: 100%;
@@ -18,7 +18,7 @@
     </style>
 </head>
 <body>
-<h1 style="text-align: center;">{{$vendorType == \App\Utils\VendorType::SUPPLIER ? "Supplier" : "Customer"}}</h1>
+<h1 style="text-align: center;">{{$vendorType == \Icso\Accounting\Utils\VendorType::SUPPLIER ? "Supplier" : "Customer"}}</h1>
 <table>
     <thead>
     <tr>

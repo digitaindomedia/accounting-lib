@@ -225,7 +225,7 @@ class DeliveryController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesDeliveryExport($data);
-        $pdf = PDF::loadView('sales/sales_delivery_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::sales.sales_delivery_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pengiriman-penjualan.pdf');
     }
 }

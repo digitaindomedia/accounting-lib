@@ -78,7 +78,7 @@ class SaldoAwalController extends Controller
     public function exportPdf()
     {
         $data = $this->prepareData();
-        $pdf = PDF::loadView('saldo_awal_pdf', ['data' => $data]);
+        $pdf = PDF::loadView('accounting::saldo_awal_pdf', ['data' => $data]);
         return $pdf->download('saldo-awal.pdf');
     }
 

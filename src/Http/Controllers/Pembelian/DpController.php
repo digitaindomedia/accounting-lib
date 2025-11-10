@@ -134,7 +134,7 @@ class DpController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchaseDownPaymentExport($data);
-        $pdf = PDF::loadView('purchase/purchase_downpayment_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_downpayment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('uang-muka-pembelian.pdf');
     }
 
@@ -154,7 +154,7 @@ class DpController extends Controller
         extract($params);
 
         $data = $this->dpRepo->getAllDataBetweenBy($search, $page, $perpage, $where, $whereBetween);
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_downpayment_detail_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_downpayment_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

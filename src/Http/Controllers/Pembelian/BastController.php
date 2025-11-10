@@ -169,7 +169,7 @@ class BastController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchaseBastExport($data);
-        $pdf = PDF::loadView('purchase/purchase_bast_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_bast_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('bast-pembelian.pdf');
     }
 
@@ -206,7 +206,7 @@ class BastController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params);
         $data = $this->purchaseBastRepo->getAllDataBy($search,$page,$perpage,$where);
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_bast_detail_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_bast_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

@@ -163,7 +163,7 @@ class SalesInvoiceController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesInvoiceExport($data);
-        $pdf = PDF::loadView('fixasset/sales_invoice_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::fixasset.sales_invoice_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('invoice-penjualan-aset-tetap.pdf');
     }
 }

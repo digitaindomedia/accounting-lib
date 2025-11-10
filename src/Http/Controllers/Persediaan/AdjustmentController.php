@@ -204,7 +204,7 @@ class AdjustmentController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new AdjustmentStockExport($data);
-        $pdf = PDF::loadView('stock/adjustment_stock_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::stock.adjustment_stock_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('penyesuaian-stok.pdf');
     }
 

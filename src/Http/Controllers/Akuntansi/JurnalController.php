@@ -223,10 +223,10 @@ class JurnalController extends Controller
     private function handleExportPdf($data, $jurnalType)
     {
         if ($jurnalType) {
-            $pdf = PDF::loadView('jurnal/jurnal_kas_bank_pdf', ['arrData' => (new JurnalKasBankExport($data))->collection()]);
+            $pdf = PDF::loadView('accounting::jurnal.jurnal_kas_bank_pdf', ['arrData' => (new JurnalKasBankExport($data))->collection()]);
             return $pdf->download('jurnal-kas-bank.pdf');
         }
-        $pdf = PDF::loadView('jurnal/jurnal_umum_pdf', ['arrData' => (new JurnalUmumExport($data))->collection()]);
+        $pdf = PDF::loadView('accounting::jurnal.jurnal_umum_pdf', ['arrData' => (new JurnalUmumExport($data))->collection()]);
         return $pdf->download('jurnal-umum.pdf');
     }
 

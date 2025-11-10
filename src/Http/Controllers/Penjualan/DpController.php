@@ -194,7 +194,7 @@ class DpController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesDownPaymentExport($data);
-        $pdf = PDF::loadView('sales/sales_downpayment_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::sales.sales_downpayment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('uang-muka-penjualan.pdf');
     }
 
@@ -215,7 +215,7 @@ class DpController extends Controller
     }
 
     private function downloadPdf(Request $request, $data, $params, $filename){
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('sales/sales_downpayment_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_downpayment_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

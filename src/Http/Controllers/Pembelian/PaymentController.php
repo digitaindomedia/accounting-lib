@@ -246,7 +246,7 @@ class PaymentController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchasePaymentExport($data);
-        $pdf = PDF::loadView('purchase/purchase_payment_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_payment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pelunasan-pembelian.pdf');
     }
 
@@ -265,7 +265,7 @@ class PaymentController extends Controller
         extract($params);
         $data = $this->paymentRepo->getAllDataBy($search, $page, $perpage,$where);
         // $total = $this->paymentRepo->getAllTotalDataBy($search, $where);
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_payment_detail_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_payment_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

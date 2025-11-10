@@ -195,7 +195,7 @@ class ReturController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesReturExport($data);
-        $pdf = PDF::loadView('sales/sales_retur_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::sales.sales_retur_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('retur-penjualan.pdf');
     }
 }

@@ -69,7 +69,7 @@ class BukuBesarController extends Controller
         $request->perpage = $total;
         $data = $this->getFilteredData($request);
         $export = new JurnalTransaksiExport($data);
-        $pdf = PDF::loadView('jurnal_transaksi_pdf', ['jurnalData' => $export->getData()]);
+        $pdf = PDF::loadView('accounting::jurnal_transaksi_pdf', ['jurnalData' => $export->getData()]);
 
         return $pdf->download('jurnal-transaksi.pdf');
 
@@ -97,7 +97,7 @@ class BukuBesarController extends Controller
     public function exportToPdf(Request $request)
     {
         $arrData = $this->getExportData($request);
-        $pdf = PDF::loadView('buku_besar_pdf', ['jurnalData' => $arrData]);
+        $pdf = PDF::loadView('accounting::buku_besar_pdf', ['jurnalData' => $arrData]);
 
         return $pdf->download('bukubesar.pdf');
     }

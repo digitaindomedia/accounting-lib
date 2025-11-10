@@ -48,7 +48,7 @@ class LabaRugiController extends Controller
         $data = $this->prepareLabaRugiData($fromDate, $untilDate);
         $export = new LabaRugiExport($data);
         $data = $export->getData();
-        $pdf = PDF::loadView('laba_rugi_pdf', ['data' => $data]);
+        $pdf = PDF::loadView('accounting::laba_rugi_pdf', ['data' => $data]);
         return $pdf->download('labarugi.pdf');
 
     }

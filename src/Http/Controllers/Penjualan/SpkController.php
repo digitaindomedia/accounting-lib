@@ -184,7 +184,7 @@ class SpkController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesSpkExport($data);
-        $pdf = PDF::loadView('sales/sales_spk_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::sales.sales_spk_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('spk-penjualan.pdf');
     }
 }

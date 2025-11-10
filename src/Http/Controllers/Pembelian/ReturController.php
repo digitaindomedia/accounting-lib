@@ -191,7 +191,7 @@ class ReturController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchaseReturExport($data);
-        $pdf = PDF::loadView('purchase/purchase_retur_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_retur_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('retur-pembelian.pdf');
     }
 
@@ -217,7 +217,7 @@ class ReturController extends Controller
         $data = $this->returRepo->getAllDataBy($search, $page, $perpage, $where);
 
         // Render the same Blade report view to PDF
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_retur_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_retur_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

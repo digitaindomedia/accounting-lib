@@ -208,7 +208,7 @@ class ReceiveController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchaseReceivedExport($data);
-        $pdf = PDF::loadView('purchase/purchase_received_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_received_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('penerimaan-pembelian.pdf');
     }
 
@@ -226,7 +226,7 @@ class ReceiveController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params);
         $data = $this->purchaseReceivedRepo->getAllDataBetweenBy($search, $page, $perpage, $where, $whereBetween);
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_received_detail_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_received_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

@@ -527,7 +527,7 @@ class InvoiceController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesInvoiceExport($data);
-        $pdf = PDF::loadView('sales/sales_invoice_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::sales.sales_invoice_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('invoice-penjualan.pdf');
     }
 

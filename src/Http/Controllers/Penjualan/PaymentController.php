@@ -225,7 +225,7 @@ class PaymentController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesPaymentExport($data);
-        $pdf = PDF::loadView('sales/sales_payment_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::sales.sales_payment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pembayaran-penjualan.pdf');
     }
 }

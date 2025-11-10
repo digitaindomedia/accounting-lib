@@ -203,7 +203,7 @@ class PemakaianController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new UsageStockExport($data);
-        $pdf = PDF::loadView('stock/usage_stock_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::stock.usage_stock_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pemakaian-stok.pdf');
     }
 }

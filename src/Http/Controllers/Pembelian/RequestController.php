@@ -290,7 +290,7 @@ class RequestController extends Controller
         );
 
         // Render the same Blade report view to PDF
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_request_detail_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_request_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

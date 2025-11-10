@@ -313,7 +313,7 @@ class OrderController extends Controller
         $total = $this->purchaseOrderRepo->getAllTotalDataBetweenBy($search, $where, $whereBetween);
         $data = $this->purchaseOrderRepo->getAllDataBetweenBy($search, $page, $total, $where, $whereBetween);
         $export = new PurchaseOrderExport($data);
-        $pdf = PDF::loadView('purchase/purchase_order_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_order_pdf', ['arrData' => $export->collection()]);
 
         return $pdf->download('order-pembelian.pdf');
     }
@@ -337,7 +337,7 @@ class OrderController extends Controller
         $where = $this->buildWhereClause($vendorId, $orderType, $from);
         $total = $this->purchaseOrderRepo->getAllTotalDataBetweenBy($search, $where, $whereBetween);
         $data = $this->purchaseOrderRepo->getAllDataBetweenBy($search, $page, $total, $where, $whereBetween);
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_order_detail_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_order_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

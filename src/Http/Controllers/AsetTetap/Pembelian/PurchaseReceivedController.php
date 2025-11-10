@@ -169,7 +169,7 @@ class PurchaseReceivedController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchasePenerimaanAsetTetapExport($data);
-        $pdf = PDF::loadView('fixasset/purchase_received_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::fixasset.purchase_received_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('penerimaan-pembelian-aset-tetap.pdf');
     }
 }

@@ -533,7 +533,7 @@ class InvoiceController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchaseInvoiceExport($data);
-        $pdf = PDF::loadView('purchase/purchase_invoice_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_invoice_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('invoice-pembelian.pdf');
     }
 
@@ -551,7 +551,7 @@ class InvoiceController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params);
         $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage, $where);
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('purchase/purchase_invoice_detail_report', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_invoice_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

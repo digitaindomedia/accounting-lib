@@ -247,7 +247,7 @@ class OrderController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesOrderExport($data);
-        $pdf = PDF::loadView('sales/sales_order_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::sales.sales_order_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('order-penjualan.pdf');
     }
 
@@ -282,7 +282,7 @@ class OrderController extends Controller
     }
 
     private function downloadPdf(Request $request, $data, $params, $filename){
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('sales/sales_order_report_detail', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_order_report_detail', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

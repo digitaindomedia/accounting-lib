@@ -232,7 +232,7 @@ class NeracaController extends Controller
     public function exportToPdf(Request $request)
     {
         $export = new NeracaListExport($request);
-        $pdfRes = 'neraca_list_pdf';
+        $pdfRes = 'accounting::neraca_list_pdf';
         $data = $export->getData();
         $pdf = PDF::loadView($pdfRes, ['data' => $data]);
         if($request->layout == 'grid'){

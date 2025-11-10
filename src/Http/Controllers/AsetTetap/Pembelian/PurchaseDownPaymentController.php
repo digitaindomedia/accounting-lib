@@ -168,7 +168,7 @@ class PurchaseDownPaymentController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchaseDpAsetTetapExport($data);
-        $pdf = PDF::loadView('fixasset/purchase_downpayment_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::fixasset.purchase_downpayment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('uang-muka-pembelian-aset-tetap.pdf');
     }
 }

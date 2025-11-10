@@ -190,7 +190,7 @@ class PurchasePaymentController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new PurchasePaymentAsetTetapExport($data);
-        $pdf = PDF::loadView('fixasset/purchase_order_pdf', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::fixasset.purchase_order_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('order-pembelian-aset-tetap.pdf');
     }
 }

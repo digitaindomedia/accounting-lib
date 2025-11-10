@@ -360,6 +360,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\DeliveryController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\DeliveryController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\DeliveryController::class, 'exportPdf']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\Penjualan\DeliveryController::class, 'exportReportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\DeliveryController::class, 'exportReportExcel']);
     });
 
     Route::prefix('sales-invoice')->group(function () {

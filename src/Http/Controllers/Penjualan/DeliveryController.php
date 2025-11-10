@@ -228,4 +228,47 @@ class DeliveryController extends Controller
         $pdf = PDF::loadView('accounting::sales.sales_delivery_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pengiriman-penjualan.pdf');
     }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-pengiriman-penjualan.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pengiriman-penjualan.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pengiriman-penjualan.pdf', 'pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->deliveryRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new SalesOrderReportDetail($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_delivery_report_detail', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
 }

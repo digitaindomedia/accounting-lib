@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
+use Als\Accounting\Exports\SalesInvoiceReportExport;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\SalesInvoiceExport;
 use Icso\Accounting\Exports\SampleSalesInvoiceExport;
@@ -48,7 +49,9 @@ class InvoiceController extends Controller
         $perpage = $request->perpage;
         $page = ($page -1) * $perpage;
         $where = $this->buildWhereClause($request);
-        return compact('search', 'page', 'perpage', 'where');
+        $fromDate = $request->from_date;
+        $untilDate = $request->until_date;
+        return compact('search', 'page', 'perpage', 'where', 'fromDate', 'untilDate');
     }
 
     public function getAllData(Request $request)
@@ -529,6 +532,49 @@ class InvoiceController extends Controller
         $export = new SalesInvoiceExport($data);
         $pdf = PDF::loadView('accounting::sales.sales_invoice_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('invoice-penjualan.pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new SalesInvoiceReportExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_invoice_detail_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-invoice-penjualan.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-invoice-penjualan.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-invoice-penjualan.pdf', 'pdf');
     }
 
 

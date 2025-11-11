@@ -51,7 +51,7 @@ class DeliveryController extends Controller
                 'method' => 'whereBetween',
                 'value' => array('field' => 'delivery_date', 'value' => [$fromDate,$untilDate]));
         }
-        return compact('search', 'page', 'perpage', 'where');
+        return compact('search', 'page', 'perpage', 'where','fromDate','untilDate');
     }
 
     public function getAllData(Request $request): \Illuminate\Http\JsonResponse

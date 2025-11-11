@@ -4,6 +4,7 @@ namespace Icso\Accounting\Http\Controllers\Penjualan;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Exports\SalesDeliveryExport;
+use Icso\Accounting\Exports\SalesDeliveryReportDetail;
 use Icso\Accounting\Http\Requests\CreateSalesDeliveryRequest;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
@@ -256,7 +257,7 @@ class DeliveryController extends Controller
     }
 
     private function downloadExcel($data, $params, $filename){
-        return Excel::download(new SalesOrderReportDetail($data,$params), $filename);
+        return Excel::download(new SalesDeliveryReportDetail($data,$params), $filename);
     }
 
     private function downloadPdf(Request $request, $data, $params, $filename){

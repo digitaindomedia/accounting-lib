@@ -122,7 +122,7 @@
                     <td>{{$item->delivery->warehouse->warehouse_name}}</td>
                     <td style="text-align: right">{{ number_format($total, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 </tr>
-                @foreach($item->receive->receiveproduct as $val)
+                @foreach($item->delivery->deliveryproduct as $val)
                     @php
                         $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($val->tax_id, $val->tax_percentage, $val->tax_group);
                         $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($val->subtotal,$val->tax_id,$val->tax_type,$val->tax_percentage);

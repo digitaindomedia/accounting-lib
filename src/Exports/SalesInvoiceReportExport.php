@@ -1,8 +1,6 @@
 <?php
 
-namespace Als\Accounting\Exports;
-
-use Icso\Accounting\Exports\BaseReportExport;
+namespace Icso\Accounting\Exports;
 
 class SalesInvoiceReportExport extends BaseReportExport
 {

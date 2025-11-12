@@ -3,6 +3,7 @@
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\SalesDeliveryExport;
 use Icso\Accounting\Exports\SalesDeliveryReportDetail;
 use Icso\Accounting\Http\Requests\CreateSalesDeliveryRequest;

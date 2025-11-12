@@ -2,7 +2,7 @@
 
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
-use Als\Accounting\Exports\SalesReturReportExport;
+use Icso\Accounting\Exports\SalesReturReportExport;
 use Icso\Accounting\Exports\SalesReturExport;
 use Icso\Accounting\Http\Requests\CreateSalesReturRequest;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;

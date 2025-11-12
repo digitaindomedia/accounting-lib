@@ -2,7 +2,7 @@
 
 namespace Icso\Accounting\Http\Controllers\Persediaan;
 
-use Als\Accounting\Exports\UsageStockReportExport;
+use Icso\Accounting\Exports\UsageStockReportExport;
 use Icso\Accounting\Exports\SamplePemakaianExport;
 use Icso\Accounting\Exports\UsageStockExport;
 use Icso\Accounting\Http\Requests\CreatePemakaianRequest;

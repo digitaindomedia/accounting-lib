@@ -1,6 +1,6 @@
 <?php
 
-namespace Als\Accounting\Exports;
+namespace Icso\Accounting\Exports;
 
 use Icso\Accounting\Exports\BaseReportExport;
 

@@ -28,11 +28,11 @@
     </tr>
     </thead>
     <tbody>
-    @foreach ($arrData as $data)
+    @foreach ($data as $item)
         <tr>
-            <td>{{ $data['usage_date'] }}</td>
-            <td>{{ $data['ref_no'] }}</td>
-            <td>{{ $data['warehouse'] }}</td>
+            <td>{{ $item['usage_date'] }}</td>
+            <td>{{ $item['ref_no'] }}</td>
+            <td>{{ $item['warehouse'] }}</td>
         </tr>
     @endforeach
     </tbody>

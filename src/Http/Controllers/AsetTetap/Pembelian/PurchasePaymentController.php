@@ -4,6 +4,7 @@ namespace Icso\Accounting\Http\Controllers\AsetTetap\Pembelian;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Exports\PurchasePaymentAsetTetapExport;
+use Icso\Accounting\Exports\PurchasePaymentAsetTetapReportExport;
 use Icso\Accounting\Http\Requests\CreatePurchasePaymentAsetTetapRequest;
 use Icso\Accounting\Repositories\AsetTetap\Pembelian\PaymentRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -192,5 +193,48 @@ class PurchasePaymentController extends Controller
         $export = new PurchasePaymentAsetTetapExport($data);
         $pdf = PDF::loadView('accounting::fixasset.purchase_order_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('order-pembelian-aset-tetap.pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->purchaseInvoiceRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new PurchasePaymentAsetTetapReportExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::fixasset.purchase_payment_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-pembayaran-pembelian-aset-tetap.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pembayaran-pembelian-aset-tetap.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pembayaran-pembelian-aset-tetap.pdf', 'pdf');
     }
 }

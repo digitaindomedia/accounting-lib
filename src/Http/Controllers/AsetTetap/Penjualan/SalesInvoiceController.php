@@ -3,6 +3,7 @@
 namespace Icso\Accounting\Http\Controllers\AsetTetap\Penjualan;
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Icso\Accounting\Exports\SalesInvoiceAsetTetapReportExport;
 use Icso\Accounting\Exports\SalesInvoiceExport;
 use Icso\Accounting\Http\Requests\CreateSalesInvoiceAsetTetapRequest;
 use Icso\Accounting\Repositories\AsetTetap\Penjualan\SalesInvoiceRepo;
@@ -39,7 +40,7 @@ class SalesInvoiceController extends Controller
                 'method' => 'whereBetween',
                 'value' => array('field' => 'sales_date', 'value' => [$fromDate,$untilDate]));
         }
-        return compact('search', 'page', 'perpage', 'where');
+        return compact('search', 'page', 'perpage', 'where','fromDate','untilDate');
     }
 
     public function getAllData(Request $request)
@@ -165,5 +166,48 @@ class SalesInvoiceController extends Controller
         $export = new SalesInvoiceExport($data);
         $pdf = PDF::loadView('accounting::fixasset.sales_invoice_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('invoice-penjualan-aset-tetap.pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->salesInvoiceRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new SalesInvoiceAsetTetapReportExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::fixasset.sales_invoice_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-invoice-penjualan-aset-tetap.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-invoice-penjualan-aset-tetap.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-invoice-penjualan-aset-tetap.pdf', 'pdf');
     }
 }

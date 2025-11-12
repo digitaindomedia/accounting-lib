@@ -5,6 +5,7 @@ namespace Icso\Accounting\Http\Controllers\AsetTetap\Pembelian;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Exports\PurchaseDpAsetTetapExport;
+use Icso\Accounting\Exports\PurchaseDpAsetTetapReportExport;
 use Icso\Accounting\Http\Requests\CreatePurchaseDownPaymentAsetTetapRequest;
 use Icso\Accounting\Repositories\AsetTetap\Pembelian\DownPaymentRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -47,7 +48,7 @@ class PurchaseDownPaymentController extends Controller
                 'method' => 'whereBetween',
                 'value' => array('field' => 'downpayment_date', 'value' => [$fromDate,$untilDate]));
         }
-        return compact('search', 'page', 'perpage', 'where');
+        return compact('search', 'page', 'perpage', 'where', 'fromDate', 'untilDate');
     }
 
     public function getAllData(Request $request)
@@ -170,5 +171,48 @@ class PurchaseDownPaymentController extends Controller
         $export = new PurchaseDpAsetTetapExport($data);
         $pdf = PDF::loadView('accounting::fixasset.purchase_downpayment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('uang-muka-pembelian-aset-tetap.pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->dpRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new PurchaseDpAsetTetapReportExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::fixasset.purchase_downpayment_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-uang-muka-aset-tetap.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-uang-muka-aset-tetap.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-uang-muka-aset-tetap.pdf', 'pdf');
     }
 }

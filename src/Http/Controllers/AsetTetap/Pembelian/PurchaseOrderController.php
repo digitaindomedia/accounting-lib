@@ -4,6 +4,7 @@ namespace Icso\Accounting\Http\Controllers\AsetTetap\Pembelian;
 
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\PurchaseOrderAsetTetapExport;
+use Icso\Accounting\Exports\PurchaseOrderAsetTetapReportExport;
 use Icso\Accounting\Http\Requests\CreatePurchaseOrderAsetTetapRequest;
 use Icso\Accounting\Repositories\AsetTetap\Pembelian\OrderRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -56,7 +57,7 @@ class PurchaseOrderController extends Controller
                 'method' => 'whereBetween',
                 'value' => array('field' => 'aset_tetap_date', 'value' => [$fromDate,$untilDate]));
         }
-        return compact('search', 'page', 'perpage', 'where');
+        return compact('search', 'page', 'perpage', 'where','fromDate','untilDate');
     }
 
     public function getAllData(Request $request)
@@ -178,5 +179,48 @@ class PurchaseOrderController extends Controller
         $export = new PurchaseOrderAsetTetapExport($data);
         $pdf = PDF::loadView('accounting::fixasset.purchase_order_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('order-pembelian-aset-tetap.pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->purchaseOrderRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new PurchaseOrderAsetTetapReportExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::fixasset.purchase_order_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-order-pembelian-aset-tetap.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-order-pembelian-aset-tetap.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-order-pembelian-aset-tetap.pdf', 'pdf');
     }
 }

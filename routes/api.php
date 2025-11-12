@@ -460,6 +460,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'exportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'exportReportPdf']);
     });
 
     Route::prefix('purchase-dp-aset-tetap')->group(function () {
@@ -471,6 +473,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseDownPaymentController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseDownPaymentController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseDownPaymentController::class, 'exportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseDownPaymentController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseDownPaymentController::class, 'exportReportPdf']);
     });
 
     Route::prefix('purchase-receive-aset-tetap')->group(function () {
@@ -482,6 +486,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'exportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'exportReportPdf']);
     });
 
     Route::prefix('purchase-invoice-aset-tetap')->group(function () {
@@ -493,6 +499,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseInvoiceController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseInvoiceController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseInvoiceController::class, 'exportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseInvoiceController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseInvoiceController::class, 'exportReportPdf']);
     });
 
     Route::prefix('purchase-payment-aset-tetap')->group(function () {
@@ -504,6 +512,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchasePaymentController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchasePaymentController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchasePaymentController::class, 'exportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchasePaymentController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchasePaymentController::class, 'exportReportPdf']);
     });
 
     Route::prefix('sales-invoice-aset-tetap')->group(function () {
@@ -515,6 +525,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Penjualan\SalesInvoiceController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\AsetTetap\Penjualan\SalesInvoiceController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\AsetTetap\Penjualan\SalesInvoiceController::class, 'exportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Penjualan\SalesInvoiceController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\AsetTetap\Penjualan\SalesInvoiceController::class, 'exportReportPdf']);
     });
 
     Route::prefix('mutation-stock')->group(function () {

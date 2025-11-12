@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Http\Controllers\Persediaan;
 
+use Als\Accounting\Exports\UsageStockReportExport;
 use Icso\Accounting\Exports\SamplePemakaianExport;
 use Icso\Accounting\Exports\UsageStockExport;
 use Icso\Accounting\Http\Requests\CreatePemakaianRequest;
@@ -205,5 +206,48 @@ class PemakaianController extends Controller
         $export = new UsageStockExport($data);
         $pdf = PDF::loadView('accounting::stock.usage_stock_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pemakaian-stok.pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->pemakaianRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new UsageStockReportExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::stock.usage_stock_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-pemakaian-stok.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pemakaian-stok.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pemakaian-stok.pdf', 'pdf');
     }
 }

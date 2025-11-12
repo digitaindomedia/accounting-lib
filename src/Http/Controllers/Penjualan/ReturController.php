@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
+use Als\Accounting\Exports\SalesReturReportExport;
 use Icso\Accounting\Exports\SalesReturExport;
 use Icso\Accounting\Http\Requests\CreateSalesReturRequest;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
@@ -30,13 +31,20 @@ class ReturController extends Controller
         $page = $request->page;
         $perpage = $request->perpage;
         $vendorId = $request->vendor_id;
+        $fromDate = $request->from_date;
+        $untilDate = $request->until_date;
         $where=array();
         if(!empty($vendorId)){
             $where[] = array(
                 'method' => 'where',
                 'value' => [['vendor_id','=',$vendorId]]);
         }
-        return compact('search', 'page', 'perpage', 'where');
+        if (!empty($fromDate) && !empty($untilDate)) {
+            $where[] = array(
+                'method' => 'whereBetween',
+                'value' => array('field' => 'retur_date', 'value' => [$fromDate,$untilDate]));
+        }
+        return compact('search', 'page', 'perpage', 'where','fromDate','untilDate');
     }
 
     public function getAllData(Request $request):JsonResponse
@@ -197,5 +205,39 @@ class ReturController extends Controller
         $export = new SalesReturExport($data);
         $pdf = PDF::loadView('accounting::sales.sales_retur_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('retur-penjualan.pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+        $data = $this->returRepo->getAllDataBy($search,$page,$perpage,$where);
+        return Excel::download(new SalesReturReportExport($data,$params), $filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-retur-penjualan.xlsx');
+    }
+
+    public function exportReportPdf(Request $request)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        // Reuse the same dataset as the on-screen report
+        $data = $this->returRepo->getAllDataBy($search, $page, $perpage, $where);
+
+        // Render the same Blade report view to PDF
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_retur_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream('laporan-retur-penjualan.pdf');
+        }
+
+        return $pdf->download('laporan-retur-penjualan.pdf');
     }
 }

@@ -417,6 +417,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'exportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'exportReportPdf']);
     });
 
     Route::prefix('adjustment-stock')->group(function () {
@@ -430,6 +432,8 @@ Route::group([
         Route::get('export-excel', [AdjustmentController::class, 'export']);
         Route::get('export-csv', [AdjustmentController::class, 'exportCsv']);
         Route::get('export-pdf', [AdjustmentController::class, 'exportPdf']);
+        Route::get('export-excel-report', [AdjustmentController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [AdjustmentController::class, 'exportReportPdf']);
     });
 
     Route::prefix('usage-stock')->group(function () {
@@ -443,6 +447,8 @@ Route::group([
         Route::get('export-excel', [PemakaianController::class, 'export']);
         Route::get('export-csv', [PemakaianController::class, 'exportCsv']);
         Route::get('export-pdf', [PemakaianController::class, 'exportPdf']);
+        Route::get('export-excel-report', [PemakaianController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [PemakaianController::class, 'exportReportPdf']);
     });
 
     Route::prefix('purchase-order-aset-tetap')->group(function () {

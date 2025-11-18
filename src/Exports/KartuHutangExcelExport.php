@@ -38,8 +38,8 @@ class KartuHutangExcelExport implements FromView
         foreach ($vendors as $vendor) {
 
             // Hitung saldo awal
-            $saldoAwalInvoice = InvoiceRepo::sumGrandTotalByVendor($this->vendorId, $this->fromDate, $this->untilDate, "<");
-            $saldoAwalPelunasan = PaymentInvoiceRepo::sumGrandTotalByVendor($this->vendorId, $this->fromDate, $this->untilDate, "<");
+            $saldoAwalInvoice = InvoiceRepo::sumGrandTotalByVendor($vendor->id, $this->fromDate, $this->untilDate, "<");
+            $saldoAwalPelunasan = PaymentInvoiceRepo::sumGrandTotalByVendor($vendor->id, $this->fromDate, $this->untilDate, "<");
             $saldoAwal = $saldoAwalInvoice - $saldoAwalPelunasan;
 
             // Ambil transaksi
@@ -50,7 +50,7 @@ class KartuHutangExcelExport implements FromView
                 DB::raw("'0' as debet"),
                 'grandtotal as kredit'
             )
-                ->where('vendor_id', $this->vendorId)
+                ->where('vendor_id', $vendor->id)
                 ->whereBetween('invoice_date', [$this->fromDate, $this->untilDate]);
 
             $resultPayment = PurchasePaymentInvoice::select(
@@ -60,7 +60,7 @@ class KartuHutangExcelExport implements FromView
                 DB::raw('(total_payment + total_discount) - total_overpayment as debet'),
                 DB::raw("'0' as kredit")
             )
-                ->where('vendor_id', $this->vendorId)
+                ->where('vendor_id', $vendor->id)
                 ->whereBetween('payment_date', [$this->fromDate, $this->untilDate]);
 
             $transaksi = $resultInvoice

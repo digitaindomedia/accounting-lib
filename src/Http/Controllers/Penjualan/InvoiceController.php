@@ -632,7 +632,7 @@ class InvoiceController extends Controller
             'untilDate' => $untilDate
         ])->setPaper('A4', 'portrait');
 
-        return $pdf->download('kartu_hutang_rekap.pdf');
+        return $pdf->download('kartu_piutang_rekap.pdf');
     }
 
 

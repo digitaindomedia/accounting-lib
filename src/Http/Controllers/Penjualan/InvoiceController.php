@@ -599,7 +599,7 @@ class InvoiceController extends Controller
         // Jika vendorId terisi → ambil 1 vendor
         $vendors = $vendorId
             ? Vendor::where('id', $vendorId)->get()
-            : Vendor::where('vendor_type', 'supplier')->get();
+            : Vendor::where('vendor_type', VendorType::CUSTOMER)->get();
 
         $result = [];
 

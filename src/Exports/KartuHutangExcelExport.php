@@ -25,50 +25,63 @@ class KartuHutangExcelExport implements FromView
 
     public function view(): View
     {
-        $vendor = Vendor::find($this->vendorId);
-
-        // Hitung saldo awal
-        $saldoAwalInvoice = InvoiceRepo::sumGrandTotalByVendor($this->vendorId, $this->fromDate, $this->untilDate, "<");
-        $saldoAwalPelunasan = PaymentInvoiceRepo::sumGrandTotalByVendor($this->vendorId, $this->fromDate, $this->untilDate, "<");
-        $saldoAwal = $saldoAwalInvoice - $saldoAwalPelunasan;
-
-        // Ambil transaksi
-        $resultInvoice = PurchaseInvoicing::select(
-            'invoice_date as tanggal',
-            'invoice_no as nomor',
-            DB::raw("'Pembelian' as note"),
-            DB::raw("'0' as debet"),
-            'grandtotal as kredit'
-        )
-            ->where('vendor_id', $this->vendorId)
-            ->whereBetween('invoice_date', [$this->fromDate, $this->untilDate]);
-
-        $resultPayment = PurchasePaymentInvoice::select(
-            'payment_date as tanggal',
-            'payment_no as nomor',
-            DB::raw("'Pelunasan' as note"),
-            DB::raw('(total_payment + total_discount) - total_overpayment as debet'),
-            DB::raw("'0' as kredit")
-        )
-            ->where('vendor_id', $this->vendorId)
-            ->whereBetween('payment_date', [$this->fromDate, $this->untilDate]);
-
-        $transaksi = $resultInvoice
-            ->union($resultPayment)
-            ->orderBy('tanggal', 'asc')
-            ->get();
-
-        // Hitung saldo berjalan
-        $runningSaldo = $saldoAwal;
-        foreach ($transaksi as $t) {
-            $runningSaldo = $runningSaldo + $t->kredit - $t->debet;
-            $t->saldo = $runningSaldo;
+        if ($this->vendorId) {
+            $vendors = Vendor::where('id', $this->vendorId)->get();
+        }
+        else {
+            // Kosong → ambil semua vendor supplier
+            $vendors = Vendor::where('vendor_type', 'supplier')->get();
         }
 
+        $hasil = [];
+
+        foreach ($vendors as $vendor) {
+
+            // Hitung saldo awal
+            $saldoAwalInvoice = InvoiceRepo::sumGrandTotalByVendor($this->vendorId, $this->fromDate, $this->untilDate, "<");
+            $saldoAwalPelunasan = PaymentInvoiceRepo::sumGrandTotalByVendor($this->vendorId, $this->fromDate, $this->untilDate, "<");
+            $saldoAwal = $saldoAwalInvoice - $saldoAwalPelunasan;
+
+            // Ambil transaksi
+            $resultInvoice = PurchaseInvoicing::select(
+                'invoice_date as tanggal',
+                'invoice_no as nomor',
+                DB::raw("'Pembelian' as note"),
+                DB::raw("'0' as debet"),
+                'grandtotal as kredit'
+            )
+                ->where('vendor_id', $this->vendorId)
+                ->whereBetween('invoice_date', [$this->fromDate, $this->untilDate]);
+
+            $resultPayment = PurchasePaymentInvoice::select(
+                'payment_date as tanggal',
+                'payment_no as nomor',
+                DB::raw("'Pelunasan' as note"),
+                DB::raw('(total_payment + total_discount) - total_overpayment as debet'),
+                DB::raw("'0' as kredit")
+            )
+                ->where('vendor_id', $this->vendorId)
+                ->whereBetween('payment_date', [$this->fromDate, $this->untilDate]);
+
+            $transaksi = $resultInvoice
+                ->union($resultPayment)
+                ->orderBy('tanggal', 'asc')
+                ->get();
+
+            // Hitung saldo berjalan
+            $runningSaldo = $saldoAwal;
+            foreach ($transaksi as $t) {
+                $runningSaldo = $runningSaldo + $t->kredit - $t->debet;
+                $t->saldo = $runningSaldo;
+            }
+            $hasil[] = [
+                'vendor' => $vendor,
+                'saldoAwal' => $saldoAwal,
+                'transaksi' => $transaksi
+            ];
+        }
         return view('accounting::purchase.kartu_hutang_report', [
-            'vendor' => $vendor,
-            'saldoAwal' => $saldoAwal,
-            'transaksi' => $transaksi
+            'listVendor' => $hasil
         ]);
     }
 }

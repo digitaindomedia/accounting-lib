@@ -2,8 +2,9 @@
 
 namespace Icso\Accounting\Exports;
 
-use Icso\Accounting\Models\AsetTetap\Penjualan\SalesInvoice;
+
 use Icso\Accounting\Models\Master\Vendor;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
@@ -44,7 +45,7 @@ class KartuPiutangExcelExport implements FromView
             $saldoAwal = $saldoAwalInvoice - $saldoAwalPelunasan;
 
             // Ambil transaksi
-            $resultInvoice = SalesInvoice::select(
+            $resultInvoice = SalesInvoicing::select(
                 'invoice_date as tanggal',
                 'invoice_no as nomor',
                 DB::raw("'Penjualan' as note"),

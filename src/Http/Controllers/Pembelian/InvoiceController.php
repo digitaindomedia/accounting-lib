@@ -4,6 +4,7 @@ namespace Icso\Accounting\Http\Controllers\Pembelian;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Exports\KartuHutangExcelExport;
 use Icso\Accounting\Exports\PurchaseInvoiceExport;
 use Icso\Accounting\Exports\PurchaseInvoiceReportDetailExport;
 use Icso\Accounting\Exports\SamplePurchaseInvoiceExport;
@@ -562,6 +563,18 @@ class InvoiceController extends Controller
 
         return $pdf->download('laporan-invoice-pembelian.pdf');
 
+    }
+
+    public function exportKartuHutangExcel(Request $request)
+    {
+        $vendorId = $request->vendor_id;
+        $fromDate = $request->from_date ?? date('Y-m-d');
+        $untilDate = $request->until_date ?? date('Y-m-d');
+
+        return Excel::download(
+            new KartuHutangExcelExport($vendorId, $fromDate, $untilDate),
+            'kartu_hutang.xlsx'
+        );
     }
 
 }

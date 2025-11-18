@@ -3,6 +3,7 @@
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
 use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Exports\KartuPiutangExcelExport;
 use Icso\Accounting\Exports\SalesInvoiceExport;
 use Icso\Accounting\Exports\SalesInvoiceReportExport;
 use Icso\Accounting\Exports\SampleSalesInvoiceExport;
@@ -575,6 +576,63 @@ class InvoiceController extends Controller
 
     public function exportReportPdf(Request $request){
         return $this->exportReportAsFormat($request,'laporan-invoice-penjualan.pdf', 'pdf');
+    }
+
+    public function exportKartuPiutangExcel(Request $request)
+    {
+        $vendorId = $request->vendor_id;
+        $fromDate = $request->from_date ?? date('Y-m-d');
+        $untilDate = $request->until_date ?? date('Y-m-d');
+
+        return Excel::download(
+            new KartuPiutangExcelExport($vendorId, $fromDate, $untilDate),
+            'kartu_piutang.xlsx'
+        );
+    }
+
+    public function exportKartuPiutangSummaryPdf(Request $request)
+    {
+        $fromDate  = $request->from_date ?? date('Y-m-d');
+        $untilDate = $request->until_date ?? Utility::lastDateMonth();
+        $vendorId  = $request->vendor_id;
+
+        // Jika vendorId terisi → ambil 1 vendor
+        $vendors = $vendorId
+            ? Vendor::where('id', $vendorId)->get()
+            : Vendor::where('vendor_type', 'supplier')->get();
+
+        $result = [];
+
+        foreach ($vendors as $vendor) {
+
+            // Hitung saldo awal
+            $saldoAwalInvoice   = InvoiceRepo::sumGrandTotalByVendor($vendor->id, $fromDate, $untilDate, "<");
+            $saldoAwalPelunasan = PaymentInvoiceRepo::sumGrandTotalByVendor($vendor->id, $fromDate, $untilDate, "<");
+            $saldoAwal          = $saldoAwalInvoice - $saldoAwalPelunasan;
+
+            // Hitung pembelian & pelunasan periode berjalan
+            $totalInvoice  = InvoiceRepo::sumGrandTotalByVendor($vendor->id, $fromDate, $untilDate);
+            $totalPayment  = PaymentInvoiceRepo::sumGrandTotalByVendor($vendor->id, $fromDate, $untilDate);
+
+            $saldoAkhir = ($saldoAwal + $totalInvoice) - $totalPayment;
+
+            // Simpan ringkasan
+            $result[] = [
+                'vendor_name' => $vendor->vendor_name,
+                'saldo_awal'  => $saldoAwal,
+                'penjualan'   => $totalInvoice,
+                'pelunasan'   => $totalPayment,
+                'saldo_akhir' => $saldoAkhir,
+            ];
+        }
+
+        $pdf = PDF::loadView('accounting::sales.kartu_piutang_summary', [
+            'summary' => $result,
+            'fromDate' => $fromDate,
+            'untilDate' => $untilDate
+        ])->setPaper('A4', 'portrait');
+
+        return $pdf->download('kartu_hutang_rekap.pdf');
     }
 
 

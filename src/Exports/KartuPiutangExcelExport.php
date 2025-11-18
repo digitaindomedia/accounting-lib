@@ -2,16 +2,16 @@
 
 namespace Icso\Accounting\Exports;
 
+use Icso\Accounting\Models\AsetTetap\Penjualan\SalesInvoice;
 use Icso\Accounting\Models\Master\Vendor;
-use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
-use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
-use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
-use Icso\Accounting\Repositories\Pembelian\Payment\PaymentInvoiceRepo;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
+use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
 use DB;
-class KartuHutangExcelExport implements FromView
+class KartuPiutangExcelExport implements FromView
 {
     protected $vendorId;
     protected $fromDate;
@@ -31,7 +31,7 @@ class KartuHutangExcelExport implements FromView
         }
         else {
             // Kosong → ambil semua vendor supplier
-            $vendors = Vendor::where('vendor_type', VendorType::SUPPLIER)->get();
+            $vendors = Vendor::where('vendor_type', VendorType::CUSTOMER)->get();
         }
 
         $hasil = [];
@@ -44,22 +44,23 @@ class KartuHutangExcelExport implements FromView
             $saldoAwal = $saldoAwalInvoice - $saldoAwalPelunasan;
 
             // Ambil transaksi
-            $resultInvoice = PurchaseInvoicing::select(
+            $resultInvoice = SalesInvoice::select(
                 'invoice_date as tanggal',
                 'invoice_no as nomor',
-                DB::raw("'Pembelian' as note"),
-                DB::raw("'0' as debet"),
-                'grandtotal as kredit'
+                DB::raw("'Penjualan' as note"),
+                'grandtotal as debet',
+                DB::raw("'0' as kredit")
             )
                 ->where('vendor_id', $vendor->id)
                 ->whereBetween('invoice_date', [$this->fromDate, $this->untilDate]);
 
-            $resultPayment = PurchasePaymentInvoice::select(
+            $resultPayment = SalesPaymentInvoice::select(
                 'payment_date as tanggal',
                 'payment_no as nomor',
                 DB::raw("'Pelunasan' as note"),
-                DB::raw('(total_payment + total_discount) - total_overpayment as debet'),
-                DB::raw("'0' as kredit")
+                DB::raw("'0' as debet"),
+                DB::raw('(total_payment + total_discount) - total_overpayment as kredit'),
+
             )
                 ->where('vendor_id', $vendor->id)
                 ->whereBetween('payment_date', [$this->fromDate, $this->untilDate]);
@@ -72,7 +73,7 @@ class KartuHutangExcelExport implements FromView
             // Hitung saldo berjalan
             $runningSaldo = $saldoAwal;
             foreach ($transaksi as $t) {
-                $runningSaldo = $runningSaldo + $t->kredit - $t->debet;
+                $runningSaldo = $runningSaldo + $t->debet - $t->kredit;
                 $t->saldo = $runningSaldo;
             }
             $hasil[] = [
@@ -81,7 +82,7 @@ class KartuHutangExcelExport implements FromView
                 'transaksi' => $transaksi
             ];
         }
-        return view('accounting::purchase.kartu_hutang_report', [
+        return view('accounting::sales.kartu_piutang_report', [
             'listVendor' => $hasil
         ]);
     }

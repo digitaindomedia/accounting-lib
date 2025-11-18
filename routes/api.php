@@ -386,6 +386,8 @@ Route::group([
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportPdf']);
         Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportReportPdf']);
         Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportReportExcel']);
+        Route::get('export-kartu-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangExcel']);
+        Route::get('export-kartu-piutang-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangSummaryPdf']);
     });
 
     Route::prefix('sales-payment')->group(function () {

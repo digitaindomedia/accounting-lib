@@ -580,7 +580,7 @@ class InvoiceController extends Controller
     public function exportKartuHutangSummaryPdf(Request $request)
     {
         $fromDate  = $request->from_date ?? date('Y-m-d');
-        $untilDate = $request->until_date ?? \Utility::lastDateMonth();
+        $untilDate = $request->until_date ?? Utility::lastDateMonth();
         $vendorId  = $request->vendor_id;
 
         // Jika vendorId terisi → ambil 1 vendor

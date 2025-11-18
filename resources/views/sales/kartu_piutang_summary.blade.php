@@ -13,7 +13,7 @@
 </head>
 <body>
 
-<h3>Ringkasan Kartu Hutang Supplier</h3>
+<h3>Ringkasan Kartu Piutang</h3>
 <p class="text-center">Periode: {{ $fromDate }} s/d {{ $untilDate }}</p>
 
 <table>
@@ -21,7 +21,7 @@
     <tr>
         <th>Nama Vendor</th>
         <th class="text-right">Saldo Awal</th>
-        <th class="text-right">Pembelian</th>
+        <th class="text-right">Penjualan</th>
         <th class="text-right">Pelunasan</th>
         <th class="text-right">Saldo Akhir</th>
     </tr>
@@ -32,7 +32,7 @@
         <tr>
             <td>{{ $row['vendor_name'] }}</td>
             <td class="text-right">{{ number_format($row['saldo_awal'], 0, ',', '.') }}</td>
-            <td class="text-right">{{ number_format($row['pembelian'], 0, ',', '.') }}</td>
+            <td class="text-right">{{ number_format($row['penjualan'], 0, ',', '.') }}</td>
             <td class="text-right">{{ number_format($row['pelunasan'], 0, ',', '.') }}</td>
             <td class="text-right"><strong>{{ number_format($row['saldo_akhir'], 0, ',', '.') }}</strong></td>
         </tr>

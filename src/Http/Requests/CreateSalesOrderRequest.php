@@ -7,6 +7,7 @@ use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
 
 class CreateSalesOrderRequest extends FormRequest
 {
@@ -27,12 +28,41 @@ class CreateSalesOrderRequest extends FormRequest
      */
     public function rules()
     {
-        return SalesOrder::$rules;
+        $id = $this->input('id') ?? $this->route('id');
+        $orderNo = $this->input('order_no');
+        $table = (new SalesOrder())->getTable();
+        $baseRules = empty($id)
+            ? SalesOrder::$rules
+            : array_merge(
+                SalesOrder::$rules,
+                [
+                    'order_no' => [
+                        'required',
+                        Rule::unique($table, 'order_no')->ignore($id),
+                    ],
+                ]
+            );
+
+        // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
+        if (empty($id) && !empty($orderNo)) {
+            $baseRules['order_no'] = [
+                Rule::unique($table, 'order_no'),
+            ];
+        }
+
+        // Tambahkan validasi service_name jika order_type SERVICE
+
+        $baseRules['orderproduct.*.product_id'] = 'required|string';
+        return $baseRules;
     }
 
     public function messages()
     {
-        return ['order_date.required' => 'Tanggal Order Penjualan Masih Kosong', 'vendor_id.required' => 'Customer Masih Kosong', 'orderproduct.required' => 'Daftar Transaksi Order Penjualan Masih Kosong'];
+        return ['order_date.required' => 'Tanggal Order Penjualan Masih Kosong',
+            'vendor_id.required' => 'Customer Masih Kosong',
+            'orderproduct.required' => 'Daftar Transaksi Order Penjualan Masih Kosong',
+            'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
+            'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.'];
     }
 
     public function failedValidation(Validator $validator)

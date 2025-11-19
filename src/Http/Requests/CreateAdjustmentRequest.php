@@ -49,7 +49,7 @@ class CreateAdjustmentRequest extends FormRequest
                 Rule::unique($table, 'ref_no'),
             ];
         }
-        $baseRules['adjustmentproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        $baseRules['adjustmentproduct.*.qty_actual'] = ['required', 'numeric'];
         $baseRules['adjustmentproduct.*.product_id'] = 'required';
         return $baseRules;
     }
@@ -59,9 +59,8 @@ class CreateAdjustmentRequest extends FormRequest
         return ['adjustment_date.required' => 'Tanggal penyesuaian Masih Kosong', 'warehouse_id.required' => 'Nama Gudang Masih Kosong',
             'coa_adjustment_id.required' => 'Akun penyesuaian Masih Kosong',
             'adjustmentproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
-            'adjustmentproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
-            'adjustmentproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
-            'adjustmentproduct.*.qty.required' => 'Kuantitas barang masih kosong',
+            'adjustmentproduct.*.qty_actual.numeric' => 'Kuantitas barang harus berupa angka',
+            'adjustmentproduct.*.qty_actual.required' => 'Kuantitas barang masih kosong',
             'adjustment_type.required' => 'Tipe penyesuaian','adjustmentproduct.required' => 'Daftar Barang Yang Akan disesuikan masih kosong'];
     }
 

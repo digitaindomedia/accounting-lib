@@ -61,6 +61,7 @@ class CreateSalesDeliveryRequest extends FormRequest
             'warehouse_id.required' => 'Nama Gudang Masih Kosong' ,
             'deliveryproduct.required' => 'Daftar barang yang akan dikirim Masih Kosong',
             'deliveryproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
+            'deliveryproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'deliveryproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0'];
     }
 

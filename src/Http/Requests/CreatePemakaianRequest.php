@@ -59,6 +59,7 @@ class CreatePemakaianRequest extends FormRequest
             'stockusageproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'stockusageproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
             'stockusageproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
+            'stockusageproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'warehouse_id.required' => 'Nama Gudang Masih Belum diPilih'
         ];
     }

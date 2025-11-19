@@ -61,6 +61,7 @@ class CreateAdjustmentRequest extends FormRequest
             'adjustmentproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'adjustmentproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
             'adjustmentproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
+            'adjustmentproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'adjustment_type.required' => 'Tipe penyesuaian','adjustmentproduct.required' => 'Daftar Barang Yang Akan disesuikan masih kosong'];
     }
 

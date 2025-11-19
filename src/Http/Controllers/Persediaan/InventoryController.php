@@ -18,7 +18,8 @@ use Icso\Accounting\Utils\Utility;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
+use Maatwebsite\Excel\Facades\Excel;
+use Barryvdh\DomPDF\Facade\Pdf;
 class InventoryController extends Controller
 {
     protected $inventoryRepo;
@@ -317,7 +318,7 @@ class InventoryController extends Controller
         $warehouseId = $request->warehouse_id;
 
         $fromDate = $request->from_date ?? date('Y-m-d');
-        $untilDate = $request->until_date ?? \Utility::lastDateMonth();
+        $untilDate = $request->until_date ?? Utility::lastDateMonth();
 
         // === Ambil data produk ===
         $productRepo = new ProductRepo(new Product());

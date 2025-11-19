@@ -82,7 +82,7 @@ class KartuStokExport implements FromView
                 $inv->transaction_name = $trx['transaction_name'];
 
                 $runningQty   += ($inv->qty_in - $inv->qty_out);
-                $runningNilai += ($inv->value_in - $inv->value_out);
+                $runningNilai += ($inv->total_in - $inv->total_out);
 
                 $inv->saldo_qty   = $runningQty;
                 $inv->saldo_nilai = $runningNilai;

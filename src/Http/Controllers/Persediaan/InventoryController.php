@@ -466,7 +466,7 @@ class InventoryController extends Controller
                 );
 
                 $saldoNilaiGudang =
-                    $awalNilai + ($currVal['total_in'] - $currVal['tota_out']);
+                    $awalNilai + ($currVal['total_in'] - $currVal['total_out']);
 
                 if (!isset($warehouseValues[$wh->id])) {
                     $warehouseValues[$wh->id] = [

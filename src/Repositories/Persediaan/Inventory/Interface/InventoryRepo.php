@@ -349,7 +349,7 @@ class InventoryRepo extends ElequentRepository
         $total = $totalIn - $totalOut;
         return array(
             'total_in' => $totalIn,
-            'tota_out' => $totalOut,
+            'total_out' => $totalOut,
             'total' => $total
         );
     }

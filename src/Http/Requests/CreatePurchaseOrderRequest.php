@@ -74,6 +74,9 @@ class CreatePurchaseOrderRequest extends FormRequest
             'order_no.required' => 'Nomor Order Pembelian masih kosong.',
             'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.',
+            'orderproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
+            'orderproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
+            'orderproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'orderproduct.*.service_name.required' => 'Nama jasa pada salah satu item masih kosong.',
             'orderproduct.*.service_name.string' => 'Nama jasa harus berupa teks.',
         ];

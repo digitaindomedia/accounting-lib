@@ -53,6 +53,7 @@ class CreateSalesOrderRequest extends FormRequest
         // Tambahkan validasi service_name jika order_type SERVICE
 
         $baseRules['orderproduct.*.product_id'] = 'required|string';
+        $baseRules['orderproduct.*.qty'] = ['required', 'numeric', 'min:0'];
         return $baseRules;
     }
 
@@ -62,6 +63,9 @@ class CreateSalesOrderRequest extends FormRequest
             'vendor_id.required' => 'Customer Masih Kosong',
             'orderproduct.required' => 'Daftar Transaksi Order Penjualan Masih Kosong',
             'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
+            'orderproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
+            'orderproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
+            'orderproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.'];
     }
 

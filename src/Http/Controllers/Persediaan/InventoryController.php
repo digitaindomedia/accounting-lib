@@ -4,14 +4,17 @@
 namespace Icso\Accounting\Http\Controllers\Persediaan;
 
 
+use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\KartuStokExport;
 use Icso\Accounting\Models\Akuntansi\SaldoAwal;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\ProductConvertion;
+use Icso\Accounting\Models\Master\Warehouse;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Models\Persediaan\StockAwal;
 use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Utils\Constants;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
@@ -20,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 class InventoryController extends Controller
 {
     protected $inventoryRepo;
@@ -374,5 +378,135 @@ class InventoryController extends Controller
         ])->setPaper('A4', 'landscape');
 
         return $pdf->download('kartu_stok_ringkasan.pdf');
+    }
+
+    public function inventoryKpis(Request $request)
+    {
+        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
+        $untilToday = date('Y-m-d');
+        $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
+
+        $products = Product::where('item_status', Constants::AKTIF)->get();
+
+        $totalInventoryValue = 0;
+        $lowStockItems = 0;
+        $outOfStockItems = 0;
+
+        $warehouseValues = [];
+
+        foreach ($products as $product) {
+
+            // ==== SALDO AWAL ====
+            $saldoAwalQty = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday,
+                "<"
+            )['total'];
+
+            $saldoAwalNilai = InventoryRepo::getStokValueBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday,
+                "<"
+            )['total'];
+
+            // ==== PERGERAKAN HINGGA HARI INI ====
+            $current = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday
+            );
+
+            $currentValue = InventoryRepo::getStokValueBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday
+            );
+
+            // SALDO AKHIR
+            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
+            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['value_in'] - $currentValue['value_out']);
+
+            // TOTAL NILAI PERSEDIAAN
+            $totalInventoryValue += $saldoAkhirNilai;
+
+            // Barang Hampir Habis
+            if ($saldoAkhirQty < $product->minimum_stock) {
+                $lowStockItems++;
+            }
+
+            // Barang Habis
+            if ($saldoAkhirQty == 0) {
+                $outOfStockItems++;
+            }
+
+            // ==== NILAI PER GUDANG ====
+            foreach (Warehouse::all() as $wh) {
+
+                // Saldo awal nilai per gudang
+                $awalNilai = InventoryRepo::getStokValueBy(
+                    $product->id,
+                    $wh->id,
+                    $fromDateAll,
+                    $untilToday,
+                    "<"
+                )['total'];
+
+                // Nilai mutasi per gudang
+                $currVal = InventoryRepo::getStokValueBy(
+                    $product->id,
+                    $wh->id,
+                    $fromDateAll,
+                    $untilToday
+                );
+
+                $saldoNilaiGudang =
+                    $awalNilai + ($currVal['value_in'] - $currVal['value_out']);
+
+                if (!isset($warehouseValues[$wh->id])) {
+                    $warehouseValues[$wh->id] = [
+                        'warehouse_id' => $wh->id,
+                        'warehouse_name' => $wh->warehouse_name,
+                        'total_value' => 0
+                    ];
+                }
+
+                $warehouseValues[$wh->id]['total_value'] += $saldoNilaiGudang;
+            }
+        }
+
+        // ==== SLOW MOVING (tidak bergerak 30 hari) ====
+        $slowMoving = Product::whereNotExists(function ($q) use ($thirtyDaysAgo) {
+            $q->select(DB::raw(1))
+                ->from('als_inventory')
+                ->whereColumn('als_inventory.product_id', 'als_product.id')
+                ->where('inventory_date', '>=', $thirtyDaysAgo);
+        })->count();
+
+        // ==== FAST MOVING ====
+        $fastMoving = Inventory::where('inventory_date', '>=', $thirtyDaysAgo)
+            ->where('qty_out', '>', 0)
+            ->groupBy('product_id')
+            ->count();
+
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Berhasil mengambil KPI persediaan',
+            'data' => [
+                'total_inventory_value' => $totalInventoryValue,
+                'total_active_products' => $products->count(),
+                'low_stock_items' => $lowStockItems,
+                'out_of_stock_items' => $outOfStockItems,
+                'inventory_value_by_warehouse' => array_values($warehouseValues),
+                'slow_moving_items' => $slowMoving,
+                'fast_moving_items' => $fastMoving
+            ]
+        ]);
     }
 }

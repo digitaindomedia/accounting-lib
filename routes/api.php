@@ -177,6 +177,7 @@ Route::group([
         Route::get('kartu-stok-detail', [InventoryController::class, 'showKartuStockDetail']);
         Route::get('export-kartu-stok-excel', [InventoryController::class, 'exportKartuStokExcel']);
         Route::get('export-kartu-stok-pdf', [InventoryController::class, 'exportKartuStokPdf']);
+        Route::get('dashboard-kpi', [InventoryController::class, 'inventoryKpis']);
     });
 
     Route::prefix('purchase-invoice')->group(function () {

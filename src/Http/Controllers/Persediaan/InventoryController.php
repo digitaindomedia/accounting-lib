@@ -509,4 +509,205 @@ class InventoryController extends Controller
             ]
         ]);
     }
+
+    public function lowStockList()
+    {
+        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
+        $untilToday = date('Y-m-d');
+        $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
+
+        $products = Product::where('item_status', Constants::AKTIF)->get();
+
+        $lowStock = [];
+        foreach ($products as $product) {
+            $saldoAwalQty = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday,
+                "<"
+            )['total'];
+
+
+            // ==== PERGERAKAN ====
+            $current = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday
+            );
+
+
+            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
+
+            // ================================
+            // 1️⃣ BARANG HAMPIR HABIS (Top 10)
+            // ================================
+            if ($saldoAkhirQty < $product->minimum_stock) {
+                $lowStock[] = [
+                    'product_name' => $product->item_name,
+                    'qty' => $saldoAkhirQty,
+                    'minimum_stock' => $product->minimum_stock,
+                    'status' => 'Butuh restock'
+                ];
+            }
+        }
+        $lowStock = collect($lowStock)->sortBy('qty')->take(10)->values();
+        return response()->json([
+            'status' => true,
+            'message' => 'Berhasil mengambil data dashboard inventory',
+            'data' => $lowStock
+        ]);
+    }
+    public function topValueStockList()
+    {
+        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
+        $untilToday = date('Y-m-d');
+        $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
+
+        $products = Product::where('item_status', Constants::AKTIF)->get();
+
+        $topValue = [];
+        foreach ($products as $product) {
+            $saldoAwalQty = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday,
+                "<"
+            )['total'];
+            $saldoAwalNilai = InventoryRepo::getStokValueBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday,
+                "<"
+            )['total'];
+
+            // ==== PERGERAKAN ====
+            $current = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday
+            );
+            $currentValue = InventoryRepo::getStokValueBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday
+            );
+
+            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
+            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['total_in'] - $currentValue['total_out']);
+            // ================================
+            // 1️⃣ BARANG HAMPIR HABIS (Top 10)
+            // ================================
+            $topValue[] = [
+                'product_name' => $product->product_name,
+                'qty' => $saldoAkhirQty,
+                'nilai_akhir' => $saldoAkhirNilai
+            ];
+        }
+        $topValue = collect($topValue)->sortByDesc('nilai_akhir')->take(10)->values();
+        return response()->json([
+            'status' => true,
+            'message' => 'Berhasil mengambil data dashboard inventory',
+            'data' => $topValue
+        ]);
+    }
+    public function slowMovingStockList()
+    {
+        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
+        $untilToday = date('Y-m-d');
+        $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
+
+        $products = Product::where('item_status', Constants::AKTIF)->get();
+
+        $slowMoving = [];
+        foreach ($products as $product) {
+            $saldoAwalQty = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday,
+                "<"
+            )['total'];
+            $saldoAwalNilai = InventoryRepo::getStokValueBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday,
+                "<"
+            )['total'];
+
+            // ==== PERGERAKAN ====
+            $current = InventoryRepo::getStokBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday
+            );
+            $currentValue = InventoryRepo::getStokValueBy(
+                $product->id,
+                null,
+                $fromDateAll,
+                $untilToday
+            );
+
+            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
+            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['total_in'] - $currentValue['total_out']);
+            // ================================
+            // 1️⃣ BARANG HAMPIR HABIS (Top 10)
+            // ================================
+            $latestMovement = Inventory::where('product_id', $product->id)
+                ->orderBy('inventory_date', 'desc')
+                ->value('inventory_date');
+
+            if (!$latestMovement || $latestMovement < $thirtyDaysAgo) {
+                $slowMoving[] = [
+                    'product_name' => $product->item_name,
+                    'last_movement' => $latestMovement,
+                    'qty' => $saldoAkhirQty
+                ];
+            }
+        }
+        $slowMoving = collect($slowMoving)->sortBy('last_movement')->take(10)->values();
+        return response()->json([
+            'status' => true,
+            'message' => 'Berhasil mengambil data dashboard inventory',
+            'data' => $slowMoving
+        ]);
+    }
+
+    public function fastMovingStockList()
+    {
+        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
+        $untilToday = date('Y-m-d');
+        $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
+
+        $products = Product::where('item_status', Constants::AKTIF)->get();
+
+        $fastMoving = [];
+        foreach ($products as $product) {
+
+            $soldQty30Days = Inventory::where('product_id', $product->id)
+                ->where('inventory_date', '>=', $thirtyDaysAgo)
+                ->sum('qty_out');
+
+            if ($soldQty30Days > 0) {
+                $fastMoving[] = [
+                    'product_name' => $product->item_name,
+                    'qty_terjual' => $soldQty30Days,
+                    'trend' => $soldQty30Days > 50 ? 'Naik' : 'Stabil'
+                ];
+            }
+        }
+        $fastMoving = collect($fastMoving)->sortByDesc('qty_terjual')->take(10)->values();
+        return response()->json([
+            'status' => true,
+            'message' => 'Berhasil mengambil data dashboard inventory',
+            'data' => $fastMoving
+        ]);
+    }
 }

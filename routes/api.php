@@ -178,6 +178,10 @@ Route::group([
         Route::get('export-kartu-stok-excel', [InventoryController::class, 'exportKartuStokExcel']);
         Route::get('export-kartu-stok-pdf', [InventoryController::class, 'exportKartuStokPdf']);
         Route::get('dashboard-kpi', [InventoryController::class, 'inventoryKpis']);
+        Route::get('dashboard-low', [InventoryController::class, 'lowStockList']);
+        Route::get('dashboard-top-value', [InventoryController::class, 'topValueStockList']);
+        Route::get('dashboard-slow-moving', [InventoryController::class, 'slowMovingStockList']);
+        Route::get('dashboard-fast-moving', [InventoryController::class, 'fastMovingStockList']);
     });
 
     Route::prefix('purchase-invoice')->group(function () {

@@ -129,7 +129,7 @@ class SaldoAwalController extends Controller
                     $kredit = InvoiceRepo::getTotalInvoiceBySaldoAwalCoaId($item->id);
                     break;
                 case VarType::CONNECT_DB_CUSTOMER:
-                    $debet = \App\Repositories\Tenant\Penjualan\Invoice\InvoiceRepo::getTotalInvoiceBySaldoAwalCoaId($item->id);
+                    $debet = \Icso\Accounting\Repositories\Tenant\Penjualan\Invoice\InvoiceRepo::getTotalInvoiceBySaldoAwalCoaId($item->id);
                     break;
                 case VarType::CONNECT_DB_PERSEDIAAN:
                     $totalStock = InventoryRepo::getTotalStockBySaldoAwalCoaId($item->id);

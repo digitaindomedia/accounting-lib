@@ -175,6 +175,8 @@ Route::group([
         Route::delete('delete-awal', [InventoryController::class, 'deleteSaldoAwal']);
         Route::get('kartu-stok', [InventoryController::class, 'kartuStok']);
         Route::get('kartu-stok-detail', [InventoryController::class, 'showKartuStockDetail']);
+        Route::get('export-kartu-stok-excel', [InventoryController::class, 'exportKartuStokExcel']);
+        Route::get('export-kartu-stok-pdf', [InventoryController::class, 'exportKartuStokPdf']);
     });
 
     Route::prefix('purchase-invoice')->group(function () {

@@ -4,6 +4,7 @@
 namespace Icso\Accounting\Http\Controllers\Persediaan;
 
 
+use Icso\Accounting\Exports\KartuStokExport;
 use Icso\Accounting\Models\Akuntansi\SaldoAwal;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\ProductConvertion;
@@ -294,5 +295,83 @@ class InventoryController extends Controller
             $this->data['message'] = 'Data tidak ditemukan';
         }
         return response()->json($this->data);
+    }
+
+    public function exportKartuStokExcel(Request $request)
+    {
+        return Excel::download(
+            new KartuStokExport(
+                $request->product_id,      // boleh kosong
+                $request->warehouse_id,
+                $request->from_date ?? date('Y-m-d'),
+                $request->until_date ?? Utility::lastDateMonth()
+            ),
+            'kartu_stok_detail.xlsx'
+        );
+    }
+
+    public function exportKartuStokPdf(Request $request)
+    {
+        $search = $request->q;
+        $productId = $request->product_id;
+        $warehouseId = $request->warehouse_id;
+
+        $fromDate = $request->from_date ?? date('Y-m-d');
+        $untilDate = $request->until_date ?? \Utility::lastDateMonth();
+
+        // === Ambil data produk ===
+        $productRepo = new ProductRepo(new Product());
+
+        $where = ['product_type' => ProductType::ITEM];
+        if (!empty($productId)) {
+            $where[] = ['id', '=', $productId];
+        }
+
+        $products = $productRepo->getAllDataProduct($search, $where)->get();
+
+        $summary = [];
+
+        foreach ($products as $product) {
+
+            // Saldo awal
+            $saldoAwal = InventoryRepo::getStokBy(
+                $product->id,
+                $warehouseId,
+                $fromDate,
+                $untilDate,
+                "<"
+            )['total'];
+
+            // Nilai masuk & keluar selama periode
+            $current = InventoryRepo::getStokBy(
+                $product->id,
+                $warehouseId,
+                $fromDate,
+                $untilDate
+            );
+
+            $qtyIn = $current['qty_in'];
+            $qtyOut = $current['qty_out'];
+
+            // Saldo akhir
+            $saldoAkhir = $saldoAwal + ($qtyIn - $qtyOut);
+
+            $summary[] = [
+                'product_name' => $product->product_name,
+                'product_code' => $product->product_code,
+                'saldo_awal'   => $saldoAwal,
+                'qty_in'       => $qtyIn,
+                'qty_out'      => $qtyOut,
+                'saldo_akhir'  => $saldoAkhir,
+            ];
+        }
+
+        $pdf = Pdf::loadView('accounting::stock.kartu_stok_summary_pdf', [
+            'summary' => $summary,
+            'fromDate' => $fromDate,
+            'untilDate' => $untilDate,
+        ])->setPaper('A4', 'landscape');
+
+        return $pdf->download('kartu_stok_ringkasan.pdf');
     }
 }

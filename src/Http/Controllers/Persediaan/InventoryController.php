@@ -604,7 +604,7 @@ class InventoryController extends Controller
             // 1️⃣ BARANG HAMPIR HABIS (Top 10)
             // ================================
             $topValue[] = [
-                'product_name' => $product->product_name,
+                'product_name' => $product->item_name,
                 'qty' => $saldoAkhirQty,
                 'nilai_akhir' => $saldoAkhirNilai
             ];

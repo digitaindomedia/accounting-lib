@@ -430,7 +430,7 @@ class InventoryController extends Controller
 
             // SALDO AKHIR
             $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
-            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['total_in'] - $currentValue['tota_out']);
+            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['total_in'] - $currentValue['total_out']);
 
             // TOTAL NILAI PERSEDIAAN
             $totalInventoryValue += $saldoAkhirNilai;

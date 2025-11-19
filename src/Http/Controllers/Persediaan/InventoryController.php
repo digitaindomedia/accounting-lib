@@ -516,7 +516,7 @@ class InventoryController extends Controller
         $untilToday = date('Y-m-d');
         $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
-        $products = Product::where('item_status', Constants::AKTIF)->get();
+        $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
 
         $lowStock = [];
         foreach ($products as $product) {
@@ -565,7 +565,7 @@ class InventoryController extends Controller
         $untilToday = date('Y-m-d');
         $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
-        $products = Product::where('item_status', Constants::AKTIF)->get();
+        $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
 
         $topValue = [];
         foreach ($products as $product) {
@@ -622,7 +622,7 @@ class InventoryController extends Controller
         $untilToday = date('Y-m-d');
         $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
-        $products = Product::where('item_status', Constants::AKTIF)->get();
+        $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
 
         $slowMoving = [];
         foreach ($products as $product) {
@@ -686,7 +686,7 @@ class InventoryController extends Controller
         $untilToday = date('Y-m-d');
         $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
-        $products = Product::where('item_status', Constants::AKTIF)->get();
+        $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
 
         $fastMoving = [];
         foreach ($products as $product) {

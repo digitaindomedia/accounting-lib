@@ -193,7 +193,7 @@ class CoaController extends Controller
 
     public function getAllMasterCoa()
     {
-        $res = $this->coaRepo->findAllByWhere(array(),array());
+        $res = $this->coaRepo->findAllByWhere(array(),['coa_code', 'asc']);
         if($res)
         {
             $arr = array();

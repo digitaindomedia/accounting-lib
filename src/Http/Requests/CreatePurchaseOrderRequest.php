@@ -61,7 +61,7 @@ class CreatePurchaseOrderRequest extends FormRequest
         if( $orderType == ProductType::ITEM){
             $baseRules['orderproduct.*.product_id'] = 'required|string';
         }
-
+        $baseRules['orderproduct.*.qty'] = ['required', 'numeric', 'min:0'];
         return $baseRules;
     }
 

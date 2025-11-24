@@ -18,8 +18,9 @@ class PurchaseDownPayment extends Model
 
     public static $rules = [
         'downpayment_date' => 'required',
-        'nominal' => 'required',
-        'order_id' => 'required'
+        'nominal' => 'required|numeric|gt:0',
+        'order_id' => 'required',
+        'coa_id' => 'required',
     ];
 
     public function order(): \Illuminate\Database\Eloquent\Relations\BelongsTo

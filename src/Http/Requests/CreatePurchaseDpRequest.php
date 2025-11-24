@@ -4,7 +4,6 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
-use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -63,6 +62,7 @@ class CreatePurchaseDpRequest extends FormRequest
     {
         return ['downpayment_date.required' => 'Tanggal Uang Muka Masih Kosong',
             'ref_no.required' => 'Nomor uang muka masih kosong.',
+            'coa_id.required' => 'Akun Kas/Bank masih kosong.',
             'ref_no.unique' => 'Nomor uang muka sudah digunakan.','nominal.gt' => 'Nominal uang muka tidak boleh 0.',
             'nominal.required' => 'Nominal uang muka masih Kosong', 'order_id.required' => 'Order pembelian masih belum dipilih'];
     }

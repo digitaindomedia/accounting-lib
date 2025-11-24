@@ -61,6 +61,7 @@ class CreateSalesDpRequest extends FormRequest
     {
         return ['downpayment_date.required' => 'Tanggal Uang Muka Masih Kosong',
             'nominal.required' => 'Nominal uang muka Masih Kosong',
+            'coa_id.required' => 'Akun Kas/Bank masih kosong.',
             'ref_no.unique' => 'Nomor uang muka sudah digunakan.','nominal.gt' => 'Nominal uang muka tidak boleh 0.',
             'order_id.required' => 'Order pembelian masih belum dipilih'];
     }

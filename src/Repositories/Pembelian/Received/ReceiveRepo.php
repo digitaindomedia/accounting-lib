@@ -162,6 +162,29 @@ class ReceiveRepo extends ElequentRepository
                 $products = json_decode(json_encode($request->receiveproduct));
                 if (count($products) > 0) {
                     foreach ($products as $item) {
+
+                        $orderProduct = PurchaseOrderProduct::find($item->order_product_id);
+
+                        if (!$orderProduct) {
+                            throw new \Exception("Order tidak ditemukan");
+                        }
+
+                        // Total qty sudah diterima
+                        $totalReceived = PurchaseReceivedProduct::where('order_product_id', $item->order_product_id)
+                            ->sum('qty');
+
+                        // QTY baru
+                        $newQty = $item->qty;
+
+                        if (($totalReceived + $newQty) > $orderProduct->qty) {
+                            $productName = optional($orderProduct->product)->item_name ?? '-';
+
+                            throw new \Exception(
+                                "Qty penerimaan untuk product '".$productName."' (".
+                                ($totalReceived + $newQty).") melebihi qty order (".$orderProduct->qty.")"
+                            );
+                        }
+
                         $getDetailHpp = $this->getHppPrice($item->qty, $item->order_product_id);
                         $subtotal = Helpers::hitungSubtotal($item->qty,$item->buy_price,$item->discount,$item->discount_type);
                         $arrItem = array(

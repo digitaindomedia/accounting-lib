@@ -126,7 +126,7 @@ class Coa extends Model
 
     public function purchaseorder(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->hasMany(PurchaseOrder::class, 'coa_id');
+        return $this->hasMany(PurchaseOrder::class, 'aset_tetap_coa_id');
     }
 
     public function purchasepaymentinvoicediscount(): \Illuminate\Database\Eloquent\Relations\HasMany

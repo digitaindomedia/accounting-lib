@@ -2,10 +2,10 @@
 namespace Icso\Accounting\Models\Master;
 
 
-use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
-use Icso\Accounting\Models\AsetTetap\Pembelian\PurchasePayment;
 use Icso\Accounting\Models\Pembelian\Bast\PurchaseBast;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePayment;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
 use Icso\Accounting\Models\Pembelian\Retur\PurchaseRetur;

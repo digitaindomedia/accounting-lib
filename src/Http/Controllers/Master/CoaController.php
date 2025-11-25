@@ -169,7 +169,7 @@ class CoaController extends Controller
             }
         } catch (\Exception $e) {
             $this->data['status'] = false;
-            $this->data['message'] = 'parameter salah';
+            $this->data['message'] = $e->getMessage();
         }
         return response()->json($this->data);
     }
@@ -242,7 +242,7 @@ class CoaController extends Controller
 
     public function exportCsv()
     {
-        return Excel::download(new CoaExport, 'coa.xlsx', \Maatwebsite\Excel\Excel::CSV);
+        return Excel::download(new CoaExport, 'coa.csv', \Maatwebsite\Excel\Excel::CSV);
     }
 
     public function exportPdf()

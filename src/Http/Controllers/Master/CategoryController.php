@@ -170,7 +170,7 @@ class CategoryController extends Controller
     {
         $data = $this->getCategoryData($request);
 
-        $pdf = Pdf::loadView('master.category', ['arrData' => $data]);
+        $pdf = Pdf::loadView('accounting::master.category', ['arrData' => $data]);
         return $pdf->download('category.pdf');
     }
 

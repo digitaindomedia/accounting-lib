@@ -250,7 +250,7 @@ class VendorController extends Controller
         }
         $data = $this->getVendorData($request);
 
-        $pdf = Pdf::loadView('master.vendor', ['arrData' => $data, 'vendorType' => $vendorType]);
+        $pdf = Pdf::loadView('accounting::master.vendor', ['arrData' => $data, 'vendorType' => $vendorType]);
         return $pdf->download($fileName);
     }
 

@@ -194,7 +194,7 @@ class UnitController extends Controller
     {
         $data = $this->getUnitData($request);
 
-        $pdf = Pdf::loadView('master.unit', ['arrData' => $data]);
+        $pdf = Pdf::loadView('accounting::master.unit', ['arrData' => $data]);
         return $pdf->download('satuan.pdf');
     }
 

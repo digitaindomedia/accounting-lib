@@ -172,7 +172,7 @@ class TaxController extends Controller
     {
         $data = $this->getTaxData($request);
         $export = new TaxExport($data);
-        $pdf = PDF::loadView('master/tax', ['arrData' => $export->collection()]);
+        $pdf = PDF::loadView('accounting::master.tax', ['arrData' => $export->collection()]);
         return $pdf->download('pajak.pdf');
     }
 

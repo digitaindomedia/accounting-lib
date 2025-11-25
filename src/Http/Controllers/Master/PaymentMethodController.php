@@ -167,7 +167,7 @@ class PaymentMethodController extends Controller
     {
         $data = $this->getPaymentData($request);
 
-        $pdf = Pdf::loadView('master.payment', ['arrData' => $data]);
+        $pdf = Pdf::loadView('accounting::master.payment', ['arrData' => $data]);
         return $pdf->download('payment.pdf');
     }
 

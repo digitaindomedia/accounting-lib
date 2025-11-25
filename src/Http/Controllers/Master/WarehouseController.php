@@ -165,7 +165,7 @@ class WarehouseController extends Controller
     {
         $data = $this->getWarehouseData($request);
 
-        $pdf = Pdf::loadView('master.gudang', ['arrData' => $data]);
+        $pdf = Pdf::loadView('accounting::master.gudang', ['arrData' => $data]);
         return $pdf->download('gudang.pdf');
     }
 

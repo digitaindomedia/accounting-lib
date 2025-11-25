@@ -270,7 +270,7 @@ class CoaController extends Controller
             $flatten($coa, $result);
         }
 
-        $pdf = Pdf::loadView('master.coa', ['coaList' => $result]);
+        $pdf = Pdf::loadView('accounting::master.coa', ['coaList' => $result]);
         return $pdf->download('coa.pdf');
     }
 

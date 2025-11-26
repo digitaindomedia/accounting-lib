@@ -88,7 +88,7 @@ class SalesInvoiceRepo extends ElequentRepository
     {
         $id = $request->id;
         $salesNo = $request->sales_no;
-        if(empty($receivedNo)){
+        if(empty($salesNo)){
             $salesNo = self::generateCodeTransaction(new SalesInvoice(),KeyNomor::NO_SALES_INVOICE_ASET_TETAP,'sales_no','sales_date');
         }
         $salesDate = Utility::changeDateFormat($request->sales_date);

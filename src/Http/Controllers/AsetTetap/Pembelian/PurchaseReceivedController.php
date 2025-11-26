@@ -73,7 +73,7 @@ class PurchaseReceivedController extends Controller
     }
 
     public function show(Request $request){
-        $res = $this->purchaseReceiveRepo->findOne($request->id,array(),['order']);
+        $res = $this->purchaseReceiveRepo->findOne($request->id,array(),['order','order.aset_tetap_coa','order.akumulasi_penyusutan_coa','order.penyusutan_coa']);
         if($res){
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';

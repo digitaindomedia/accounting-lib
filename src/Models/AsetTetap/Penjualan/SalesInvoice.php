@@ -22,7 +22,9 @@ class SalesInvoice extends Model
 
     public static $rules = [
         'sales_date' => 'required',
-        'price' => 'required'
+        'price' => 'required|gt:0',
+        'aset_tetap_id' => 'required',
+        'profit_loss_coa_id' => 'required',
     ];
 
     public function getCoaPiutangLainAttribute()

@@ -20,7 +20,7 @@ class PurchasePayment extends Model
         'payment_date' => 'required',
         'payment_method_id' => 'required',
         'invoice_id' => 'required',
-        'total' => 'required'
+        'total' => 'required|gt:0'
     ];
 
     public function invoice(): \Illuminate\Database\Eloquent\Relations\BelongsTo

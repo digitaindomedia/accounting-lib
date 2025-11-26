@@ -20,6 +20,7 @@ class PurchaseOrder extends Model
     public static $rules = [
         'nama_aset' => 'required',
         'aset_tetap_date' => 'required',
+        'aset_tetap_coa_id' => 'required',
         'harga_beli' => 'required|gt:0',
         'qty' => 'required|gt:0'
     ];

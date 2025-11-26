@@ -51,7 +51,7 @@ class ReceiveRepo extends ElequentRepository
                     }
                 }
             });
-        })->with(['order'])->orderBy('receive_date','desc')->offset($page)->limit($perpage)->get();
+        })->with(['order','order.aset_tetap_coa'])->orderBy('receive_date','desc')->offset($page)->limit($perpage)->get();
         return $dataSet;
     }
 

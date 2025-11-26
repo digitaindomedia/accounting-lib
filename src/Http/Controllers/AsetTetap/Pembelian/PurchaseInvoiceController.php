@@ -79,7 +79,7 @@ class PurchaseInvoiceController extends Controller
     }
 
     public function show(Request $request){
-        $res = $this->purchaseInvoiceRepo->findOne($request->id,array(),['order','order.aset_tetap_coa', 'order.dari_akun_coa','order.akumulasi_penyusutan_coa','order.penyusutan_coa']);
+        $res = $this->purchaseInvoiceRepo->findOne($request->id,array(),['order','order.aset_tetap_coa','order.downpayment', 'order.dari_akun_coa','order.akumulasi_penyusutan_coa','order.penyusutan_coa']);
         if($res){
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';

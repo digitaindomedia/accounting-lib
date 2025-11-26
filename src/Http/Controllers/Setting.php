@@ -10,6 +10,7 @@ use Icso\Accounting\Utils\Helpers;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class Setting extends Controller
 {
@@ -104,6 +105,7 @@ class Setting extends Controller
         }
         catch (\Exception $error) {
             // print_r($error->getMessage());
+            Log::error($error->getMessage());
             DB::rollback();
             $this->data['status'] = false;
             $this->data['data'] = '';
@@ -123,58 +125,48 @@ class Setting extends Controller
     }
 
     public function storeAkunCoa(Request $request){
-        $akunUangMukaPembelian = json_decode(json_encode($request->akunUangMukaPembelian));
-        $akunPpnMasukan = json_decode(json_encode($request->akunPpnMasukan));
-        $akunSediaan = json_decode(json_encode($request->akunSediaan));
-        $akunUtangBelumRealisasi = json_decode(json_encode($request->akunUtangBelumRealisasi));
-        $akunUtangUsaha = json_decode(json_encode($request->akunUtangUsaha));
-        $akunPotonganPembelian = json_decode(json_encode($request->akunPotonganPembelian));
-        $akunKasBank = json_decode(json_encode($request->akunKasBank));
-        $akunUangMukaPenjualan = json_decode(json_encode($request->akunUangMukaPenjualan));
-        $akunPpnKeluaran = json_decode(json_encode($request->akunPpnKeluaran));
-        $akunSediaanDalamPerjalanan = json_decode(json_encode($request->akunSediaanDalamPerjalanan));
-        $akunPiutangUsaha = json_decode(json_encode($request->akunPiutangUsaha));
-        $akunBebanPokokPenjualan = json_decode(json_encode($request->akunBebanPokokPenjualan));
-        $akunPotonganPenjualan = json_decode(json_encode($request->akunPotonganPenjualan));
-        $akunPenjualan = json_decode(json_encode($request->akunPenjualan));
-        $akunReturPenjualan = json_decode(json_encode($request->akunReturPenjualan));
-        $akunUangMukaPembelianAsetTetap = json_decode(json_encode($request->akunUangMukaPembelianAsetTetap));
-        $akunBebanDiBayarDiMuka = json_decode(json_encode($request->akunBebanDiBayarDiMuka));
-        $akunUtangLainLain = json_decode(json_encode($request->akunUtangLainLain));
-        $akunPiutangLainLain = json_decode(json_encode($request->akunPiutangLainLain));
         $userId = $request->user_id;
+
         DB::beginTransaction();
         try {
-            SettingRepo::setOption(SettingEnum::COA_SEDIAAN,$akunSediaan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PEMBELIAN,$akunUangMukaPembelian->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_PPN_MASUKAN,$akunPpnMasukan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_UTANG_USAHA,$akunUtangUsaha->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_UTANG_USAHA_BELUM_REALISASI,$akunUtangBelumRealisasi->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_POTONGAN_PEMBELIAN,$akunPotonganPembelian->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_KAS_BANK,$akunKasBank->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PENJUALAN,$akunUangMukaPenjualan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_SEDIAAN_DALAM_PERJALANAN,$akunSediaanDalamPerjalanan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_PPN_KELUARAN,$akunPpnKeluaran->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_PIUTANG_USAHA,$akunPiutangUsaha->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_BEBAN_POKOK_PENJUALAN,$akunBebanPokokPenjualan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_POTONGAN_PENJUALAN,$akunPotonganPenjualan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_PENJUALAN,$akunPenjualan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_RETUR_PENJUALAN,$akunReturPenjualan->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PEMBELIAN_ASET_TETAP,$akunUangMukaPembelianAsetTetap->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_BEBAN_DIBAYAR_DIMUKA,$akunBebanDiBayarDiMuka->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_UTANG_LAIN_LAIN,$akunUtangLainLain->id, $userId);
-            SettingRepo::setOption(SettingEnum::COA_PIUTANG_LAIN_LAIN,$akunPiutangLainLain->id, $userId);
+
+            SettingRepo::setOption(SettingEnum::COA_SEDIAAN, $request->akunSediaan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PEMBELIAN, $request->akunUangMukaPembelian['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_PPN_MASUKAN, $request->akunPpnMasukan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_UTANG_USAHA, $request->akunUtangUsaha['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_UTANG_USAHA_BELUM_REALISASI, $request->akunUtangBelumRealisasi['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_POTONGAN_PEMBELIAN, $request->akunPotonganPembelian['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_KAS_BANK, $request->akunKasBank['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PENJUALAN, $request->akunUangMukaPenjualan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_SEDIAAN_DALAM_PERJALANAN, $request->akunSediaanDalamPerjalanan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_PPN_KELUARAN, $request->akunPpnKeluaran['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_PIUTANG_USAHA, $request->akunPiutangUsaha['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_BEBAN_POKOK_PENJUALAN, $request->akunBebanPokokPenjualan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_POTONGAN_PENJUALAN, $request->akunPotonganPenjualan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_PENJUALAN, $request->akunPenjualan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_RETUR_PENJUALAN, $request->akunReturPenjualan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PEMBELIAN_ASET_TETAP, $request->akunUangMukaPembelianAsetTetap['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_BEBAN_DIBAYAR_DIMUKA, $request->akunBebanDiBayarDiMuka['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_UTANG_LAIN_LAIN, $request->akunUtangLainLain['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_PIUTANG_LAIN_LAIN, $request->akunPiutangLainLain['id'] ?? null, $userId);
+
             DB::commit();
-            $this->data['status'] = true;
-            $this->data['data'] = '';
-            $this->data['message'] = "Data berhasil disimpan";
+            return response()->json([
+                'status'  => true,
+                'data'    => '',
+                'message' => "Data berhasil disimpan"
+            ]);
+
         } catch (\Exception $error) {
+            Log::error($error->getMessage());
             DB::rollback();
-            $this->data['status'] = false;
-            $this->data['data'] = '';
-            $this->data['message'] = 'Data Gagal disimpan';
+
+            return response()->json([
+                'status'  => false,
+                'data'    => '',
+                'message' => "Data gagal disimpan"
+            ]);
         }
-        return response()->json($this->data);
     }
 
     public function getSettingCoa()

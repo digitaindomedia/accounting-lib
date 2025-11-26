@@ -225,7 +225,7 @@ class InvoiceRepo extends ElequentRepository
                         'transaction_date' => $invDate,
                         'transaction_datetime' => $invDate." ".date('H:i:s'),
                         'created_by' => $find->created_by,
-                        'updated_by' => $find->created_by,
+                        'updated_by' => $find->updated_by,
                         'transaction_code' => TransactionsCode::INVOICE_PEMBELIAN_ASET_TETAP,
                         'coa_id' => $coaUtangLainLain,
                         'transaction_id' => $find->id,

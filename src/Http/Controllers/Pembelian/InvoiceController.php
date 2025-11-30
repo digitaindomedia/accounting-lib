@@ -21,6 +21,7 @@ use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Pembelian\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
 use Icso\Accounting\Repositories\Pembelian\Retur\ReturRepo;
+use Icso\Accounting\Services\Domain\Purchase\Invoice\InvoiceService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
@@ -36,12 +37,14 @@ class InvoiceController extends Controller
     protected $invoiceRepo;
     protected $paymentInvoiceRepo;
     protected $returRepo;
+    protected $invoiceService;
 
-    public function __construct(InvoiceRepo $invoiceRepo, PaymentInvoiceRepo $paymentInvoiceRepo,ReturRepo $returRepo)
+    public function __construct(InvoiceRepo $invoiceRepo, PaymentInvoiceRepo $paymentInvoiceRepo,ReturRepo $returRepo,InvoiceService $invoiceService)
     {
         $this->invoiceRepo = $invoiceRepo;
         $this->paymentInvoiceRepo = $paymentInvoiceRepo;
         $this->returRepo = $returRepo;
+        $this->invoiceService = $invoiceService;
     }
 
     public function getAllData(Request $request){
@@ -185,16 +188,19 @@ class InvoiceController extends Controller
     }
 
     public function store(CreatePurchaseInvoiceRequest $request){
-        $res = $this->invoiceRepo->store($request);
-        if($res){
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil disimpan';
-            $this->data['data'] = '';
-        } else {
-            $this->data['status'] = false;
-            $this->data['message'] = "Data gagal disimpan";
+        try {
+            $res = $this->invoiceRepo->store($request);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Data berhasil disimpan',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Data gagal disimpan: ' . $e->getMessage(),
+            ], 200);
         }
-        return response()->json($this->data);
     }
 
     public function show(Request $request){

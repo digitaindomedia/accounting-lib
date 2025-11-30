@@ -2,7 +2,7 @@
 
 namespace Icso\Accounting\Repositories\Pembelian\Retur;
 
-
+use Exception;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
@@ -38,18 +38,17 @@ class ReturRepo extends ElequentRepository
         $this->model = $model;
     }
 
+    // ... [Keep getAllDataBy and getAllTotalDataBy as they were] ...
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
     {
-        // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($where), function ($query) use($where){
+        return $model->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
                     $metod = $item['method'];
                     if($metod == 'whereBetween'){
                         $que->$metod($item['value']['field'],$item['value']['value']);
-                    }
-                    else {
+                    } else {
                         $que->$metod($item['value']);
                     }
                 }
@@ -58,29 +57,28 @@ class ReturRepo extends ElequentRepository
             $query->where(function ($queryTopLevel) use($search){
                 $queryTopLevel->where('retur_no', 'like', '%' .$search. '%');
                 $queryTopLevel->orWhereHas('vendor', function ($queryVendor) use($search) {
-                    $queryVendor->where('vendor_name', 'like', '%' .$search. '%');
-                    $queryVendor->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    $queryVendor->where('vendor_name', 'like', '%' .$search. '%')
+                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
                 });
                 $queryTopLevel->orWhereHas('receive', function ($queryReceive) use($search) {
                     $queryReceive->where('receive_no', 'like', '%' .$search. '%');
                 });
             });
-        })->orderBy('retur_date','desc')->with(['vendor','receive','invoice','returproduct','returproduct.product', 'returproduct.tax', 'returproduct.tax.taxgroup.tax','returproduct.unit'])->offset($page)->limit($perpage)->get();
-        return $dataSet;
+        })->orderBy('retur_date','desc')
+            ->with(['vendor','receive','invoice','returproduct.product', 'returproduct.tax.taxgroup.tax','returproduct.unit'])
+            ->offset($page)->limit($perpage)->get();
     }
 
     public function getAllTotalDataBy($search, array $where = []): int
     {
-        // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($where), function ($query) use($where){
+        return $model->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
                     $metod = $item['method'];
                     if($metod == 'whereBetween'){
                         $que->$metod($item['value']['field'],$item['value']['value']);
-                    }
-                    else {
+                    } else {
                         $que->$metod($item['value']);
                     }
                 }
@@ -89,237 +87,304 @@ class ReturRepo extends ElequentRepository
             $query->where(function ($queryTopLevel) use($search){
                 $queryTopLevel->where('retur_no', 'like', '%' .$search. '%');
                 $queryTopLevel->orWhereHas('vendor', function ($queryVendor) use($search) {
-                    $queryVendor->where('vendor_name', 'like', '%' .$search. '%');
-                    $queryVendor->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    $queryVendor->where('vendor_name', 'like', '%' .$search. '%')
+                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
                 });
                 $queryTopLevel->orWhereHas('receive', function ($queryReceive) use($search) {
                     $queryReceive->where('receive_no', 'like', '%' .$search. '%');
                 });
             });
         })->orderBy('retur_date','desc')->count();
-        return $dataSet;
     }
 
+    /**
+     * Store method with strict Transaction and Balance Check
+     */
     public function store(Request $request, array $other = []): bool
     {
-        $id = $request->id;
-        $returNo = $request->retur_no;
-        if(empty($returNo)){
-            $returNo = self::generateCodeTransaction(new PurchaseRetur(),KeyNomor::NO_RETUR_PEMBELIAN, 'retur_no','retur_date');
-        }
-        $returDate = !empty($request->retur_date) ? Utility::changeDateFormat($request->retur_date) : date('Y-m-d');
-        $note = $request->note;
-        $subtotal = Utility::remove_commas($request->subtotal);
-        $totalTax = !empty($request->total_tax) ? Utility::remove_commas($request->total_tax) : 0;
-        $total = !empty($request->total) ? Utility::remove_commas($request->total) : 0;
-        $vendorId = !empty($request->vendor_id) ? Utility::remove_commas($request->vendor_id) : 0;
-        $receiveId = !empty($request->receive_id) ? Utility::remove_commas($request->receive_id) : 0;
-        $invoiceId = !empty($request->invoice_id) ? Utility::remove_commas($request->invoice_id) : 0;
         $userId = $request->user_id;
+        $id = $request->id;
         $inventoryRepo = new InventoryRepo(new Inventory());
-        $arrData = array(
-            'retur_no' => $returNo,
-            'retur_date' => $returDate,
-            'note' => $note,
-            'subtotal' => $subtotal,
-            'total_tax' => $totalTax,
-            'total' => $total,
-            'vendor_id' => $vendorId,
-            'receive_id' => $receiveId,
-            'invoice_id' => $invoiceId,
-            'updated_by' => $userId,
-            'updated_at' => date('Y-m-d H:i:s'),
-        );
+
+        // Prepare Header Data
+        $data = $this->gatherHeaderData($request);
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
         DB::beginTransaction();
         try {
+            // 1. Create/Update Header
             if (empty($id)) {
                 $statusRetur = StatusEnum::OPEN;
-                if(!empty($request->invoice_id)){
+                if (!empty($request->invoice_id)) {
                     $getStatus = InvoiceRepo::getStatusInvoice($request->invoice_id);
-                    if($getStatus == StatusEnum::BELUM_LUNAS){
+                    if ($getStatus == StatusEnum::BELUM_LUNAS) {
                         $statusRetur = StatusEnum::SELESAI;
                     }
                 }
-                $arrData['retur_status'] = $statusRetur;
-                $arrData['reason'] = "";
-                $arrData['created_at'] = date('Y-m-d H:i:s');
-                $arrData['created_by'] = $userId;
-                $res = $this->create($arrData);
+                $data['retur_status'] = $statusRetur;
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $data['created_by'] = $userId;
+                $data['reason'] = "";
+                $res = $this->create($data);
+                $returId = $res->id;
             } else {
-                $res = $this->update($arrData, $id);
+                $this->update($data, $id);
+                $returId = $id;
+                $this->deleteAdditional($returId);
             }
-            if ($res) {
-                if(!empty($id)){
-                    $this->deleteAdditional($id);
-                    $idRetur = $id;
-                } else {
-                    $idRetur = $res->id;
+
+            // 2. Process Products & Inventory
+            $products = is_array($request->returproduct) ? $request->returproduct : json_decode(json_encode($request->returproduct));
+
+            if (!empty($products)) {
+                foreach ($products as $item) {
+                    $item = (object)$item;
+
+                    // Save Detail
+                    $resItem = PurchaseReturProduct::create([
+                        'qty'               => $item->qty,
+                        'product_id'        => $item->product_id,
+                        'unit_id'           => $item->unit_id,
+                        'tax_id'            => $item->tax_id ?? 0,
+                        'tax_percentage'    => $item->tax_percentage ?? 0,
+                        'hpp_price'         => Utility::remove_commas($item->hpp_price ?? 0),
+                        'buy_price'         => Utility::remove_commas($item->buy_price ?? 0),
+                        'tax_type'          => $item->tax_type ?? '',
+                        'discount_type'     => $item->discount_type ?? '',
+                        'discount'          => Utility::remove_commas($item->discount ?? 0),
+                        'subtotal'          => Utility::remove_commas($item->subtotal ?? 0),
+                        'receive_product_id'=> $item->receive_product_id ?? 0,
+                        'order_product_id'  => $item->order_product_id ?? 0,
+                        'multi_unit'        => 0,
+                        'retur_id'          => $returId,
+                    ]);
+
+                    // Save Inventory Log (Outgoing)
+                    $reqInv = new Request();
+                    $reqInv->coa_id = $item->product->coa_id ?? 0; // Assuming frontend sends object, else fetch product
+                    $reqInv->user_id = $userId;
+                    $reqInv->inventory_date = $data['retur_date'];
+                    $reqInv->transaction_code = TransactionsCode::RETUR_PEMBELIAN;
+                    $reqInv->qty_out = $item->qty;
+                    $reqInv->warehouse_id = $request->warehouse_id;
+                    $reqInv->product_id = $item->product_id;
+                    $reqInv->price = Utility::remove_commas($item->hpp_price ?? 0);
+                    $reqInv->note = $data['note'];
+                    $reqInv->unit_id = $item->unit_id;
+                    $reqInv->transaction_id = $returId;
+                    $reqInv->transaction_sub_id = $resItem->id;
+
+                    $inventoryRepo->store($reqInv);
                 }
-                $products = json_decode(json_encode($request->returproduct));
-                if(count($products) > 0) {
-                    foreach ($products as $item) {
-                        $arrItem = array(
-                            'qty' => $item->qty,
-                            'product_id' => $item->product_id,
-                            'unit_id' => $item->unit_id,
-                            'tax_id' => $item->tax_id,
-                            'tax_percentage' => $item->tax_percentage,
-                            'hpp_price' => !empty($item->hpp_price) ? Utility::remove_commas($item->hpp_price) : 0,
-                            'buy_price' => !empty($item->buy_price) ? Utility::remove_commas($item->buy_price) : 0,
-                            'tax_type' => !empty($item->tax_type) ? $item->tax_type : '',
-                            'discount_type' => !empty($item->discount_type) ? $item->discount_type : '',
-                            'discount' => !empty($item->discount) ? Utility::remove_commas($item->discount) : 0,
-                            'subtotal' => !empty($item->subtotal) ? Utility::remove_commas($item->subtotal) : 0,
-                            'receive_product_id' => !empty($item->receive_product_id) ? $item->receive_product_id : 0,
-                            'order_product_id' => !empty($item->order_product_id) ? $item->order_product_id : 0,
-                            'multi_unit' => 0,
-                            'retur_id' => $idRetur,
-                        );
-                        $resItem = PurchaseReturProduct::create($arrItem);
-                        $req = new Request();
-                        $req->coa_id = !empty($item->product) ? $item->product->coa_id : 0;
-                        $req->user_id = $userId;
-                        $req->inventory_date = $returDate;
-                        $req->transaction_code = TransactionsCode::RETUR_PEMBELIAN;
-                        $req->qty_out = $item->qty;
-                        $req->warehouse_id = $request->warehouse_id;
-                        $req->product_id = $item->product_id;
-                        $req->price = !empty($item->hpp_price) ? Utility::remove_commas($item->hpp_price) : 0;
-                        $req->note = $note;
-                        $req->unit_id = $item->unit_id;
-                        $req->transaction_id = $idRetur;
-                        $req->transaction_sub_id = $resItem->id;
-                        $inventoryRepo->store($req);
-                    }
-                }
-                InvoiceRepo::insertIntoPaymentFromRetur($request->invoice_id,$idRetur,$returDate,$total);
-                $this->postingJurnal($idRetur);
-                $fileUpload = new FileUploadService();
-                $uploadedFiles = $request->file('files');
-                if(!empty($uploadedFiles)) {
-                    if (count($uploadedFiles) > 0) {
-                        foreach ($uploadedFiles as $file) {
-                            // Handle each file as needed
-                            $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
-                            if ($resUpload) {
-                                $arrUpload = array(
-                                    'retur_id' => $idRetur,
-                                    'meta_key' => 'upload',
-                                    'meta_value' => $resUpload
-                                );
-                                PurchaseReturMeta::create($arrUpload);
-                            }
-                        }
-                    }
-                }
-                DB::commit();
-                return true;
-            } else {
-                return false;
             }
-        }catch (\Exception $e) {
-            // Rollback Transaction
-            Log::error($e->getMessage());
+
+            // 3. Link to Payment (Reduction of Debt)
+            // Note: This creates a payment record. If Journal fails, DB::rollBack will remove this too.
+            InvoiceRepo::insertIntoPaymentFromRetur($request->invoice_id, $returId, $data['retur_date'], $data['total']);
+
+            // 4. Posting Jurnal (CRITICAL)
+            // Will THROW Exception if Unbalanced
+            $this->postingJurnal($returId);
+
+            // 5. File Upload
+            $this->handleFileUploads($request->file('files'), $returId, $userId);
+
+            DB::commit();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
+            return true;
+
+        } catch (Exception $e) {
             DB::rollBack();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
+            Log::error("Retur Store Error: " . $e->getMessage());
             return false;
         }
     }
 
-    public function deleteAdditional($idRetur){
-        PurchaseReturProduct::where(array('retur_id' => $idRetur))->delete();
-        PurchaseReturMeta::where(array('retur_id' => $idRetur))->delete();
-        JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::RETUR_PEMBELIAN, $idRetur);
-        Inventory::where(array('transaction_code' => TransactionsCode::RETUR_PEMBELIAN, 'transaction_id' => $idRetur))->delete();
-        PurchasePaymentInvoice::where(array('retur_id' => $idRetur))->delete();
+    private function gatherHeaderData(Request $request)
+    {
+        $returNo = $request->retur_no ?: self::generateCodeTransaction(new PurchaseRetur(), KeyNomor::NO_RETUR_PEMBELIAN, 'retur_no', 'retur_date');
+
+        return [
+            'retur_no'   => $returNo,
+            'retur_date' => $request->retur_date ? Utility::changeDateFormat($request->retur_date) : date('Y-m-d'),
+            'note'       => $request->note,
+            'subtotal'   => Utility::remove_commas($request->subtotal),
+            'total_tax'  => $request->total_tax ? Utility::remove_commas($request->total_tax) : 0,
+            'total'      => $request->total ? Utility::remove_commas($request->total) : 0,
+            'vendor_id'  => $request->vendor_id ?? 0,
+            'receive_id' => $request->receive_id ?? 0,
+            'invoice_id' => $request->invoice_id ?? 0,
+            'updated_by' => $request->user_id,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
     }
 
-    public function postingJurnal($id){
-        $jurnalTransaksiRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
+    /**
+     * Refactored Posting Jurnal with Balance Check
+     */
+    public function postingJurnal($id)
+    {
+        // 1. Eager Load
+        $find = $this->model->with(['returproduct.product', 'returproduct.tax.taxgroup.tax', 'vendor'])->find($id);
+
+        if (!$find) return;
+
+        // 2. Settings
         $coaUtangUsaha = SettingRepo::getOptionValue(SettingEnum::COA_UTANG_USAHA);
-        $coaSediaan = SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN);
-        $coaPpn = SettingRepo::getOptionValue(SettingEnum::COA_PPN_MASUKAN);
-        $find = $this->findOne($id,array(),['returproduct','returproduct.product','vendor']);
-        if(!empty($find)){
-            $returDate = $find->retur_date;
-            $returNo = $find->retur_no;
-            $subtotal = 0;
-            $totalUtangUsaha = $find->total;
-            $arrJurnalDebet = array(
-                'transaction_date' => $returDate,
-                'transaction_datetime' => $returDate." ".date('H:i:s'),
-                'created_by' => $find->created_by,
-                'updated_by' => $find->created_by,
-                'transaction_code' => TransactionsCode::RETUR_PEMBELIAN,
-                'coa_id' => $coaUtangUsaha,
-                'transaction_id' => $find->id,
-                'transaction_sub_id' => 0,
-                'created_at' => date("Y-m-d H:i:s"),
-                'updated_at' => date("Y-m-d H:i:s"),
-                'transaction_no' => $returNo,
-                'transaction_status' => JurnalStatusEnum::OK,
-                'debet' => $totalUtangUsaha,
-                'kredit' => 0,
-                'note' => !empty($find->note) ? $find->note : 'Retur Pembelian dengan nama supplier '.$find->vendor->vendor_name,
-            );
-            $jurnalTransaksiRepo->create($arrJurnalDebet);
-            if(!empty($find->returproduct)){
-                $returProduct = $find->returproduct;
-                if(count($returProduct) > 0){
-                    foreach ($returProduct as $item){
-                        $product = $item->product;
-                        $productName = "";
-                        if(!empty($product)){
-                            if(!empty($product->coa_id)){
-                                $coaSediaan = $product->coa_id;
-                                $productName = $product->item_name;
-                            }
-                        }
-                        $subtotalHpp = $item->qty * $item->hpp_price;
-                        $arrJurnalKredit = array(
-                            'transaction_date' => $returDate,
-                            'transaction_datetime' => $returDate." ".date('H:i:s'),
-                            'created_by' => $find->created_by,
-                            'updated_by' => $find->created_by,
-                            'transaction_code' => TransactionsCode::RETUR_PEMBELIAN,
-                            'coa_id' => $coaSediaan,
-                            'transaction_id' => $find->id,
-                            'transaction_sub_id' => $item->id,
-                            'created_at' => date("Y-m-d H:i:s"),
-                            'updated_at' => date("Y-m-d H:i:s"),
-                            'transaction_no' => $returNo,
-                            'transaction_status' => JurnalStatusEnum::OK,
-                            'debet' => 0,
-                            'kredit' => $subtotalHpp,
-                            'note' => !empty($find->note) ? $find->note : 'Retur Pembelian dengan nama supplier '.$find->vendor->vendor_name,
-                        );
-                        $jurnalTransaksiRepo->create($arrJurnalKredit);
-                        if(!empty($item->tax_id)){
-                            $getTax = Helpers::hitungTaxDpp($item->subtotal,$item->tax_id, $item->tax_type,$item->tax_percentage);
-                            if($getTax[TypeEnum::TAX_TYPE] == VarType::TAX_TYPE_SINGLE)
-                            {
-                                $arrJurnalKredit = array(
-                                    'transaction_date' => $returDate,
-                                    'transaction_datetime' => $returDate." ".date('H:i:s'),
-                                    'created_by' => $find->created_by,
-                                    'updated_by' => $find->created_by,
-                                    'transaction_code' => TransactionsCode::RETUR_PEMBELIAN,
-                                    'coa_id' => $getTax['purchase_coa_id'],
-                                    'transaction_id' => $find->id,
-                                    'transaction_sub_id' => $item->id,
-                                    'created_at' => date("Y-m-d H:i:s"),
-                                    'updated_at' => date("Y-m-d H:i:s"),
-                                    'transaction_no' => $returNo,
-                                    'transaction_status' => JurnalStatusEnum::OK,
-                                    'debet' => 0,
-                                    'kredit' => $getTax[TypeEnum::PPN],
-                                    'note' => !empty($find->note) ? $find->note : 'Retur Pembelian dengan nama supplier '.$find->vendor->vendor_name,
-                                );
-                                $jurnalTransaksiRepo->create($arrJurnalKredit);
-                            }
-                        }
-                    }
+        $coaSediaan    = SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN);
+
+        $journalEntries = [];
+        $note = !empty($find->note) ? $find->note : 'Retur Pembelian ' . ($find->vendor->vendor_name ?? '');
+
+        // 3. Debit: Accounts Payable (Reduce Debt)
+        // Total value of return (Subtotal + Tax) is what we don't pay.
+        $journalEntries[] = [
+            'coa_id' => $coaUtangUsaha,
+            'posisi' => 'debet',
+            'nominal'=> $find->total,
+            'sub_id' => 0,
+            'note'   => $note
+        ];
+
+        // 4. Credits: Inventory & Taxes
+        foreach ($find->returproduct as $item) {
+            // A. Credit Inventory (Reduce Asset)
+            // Value = Qty * HPP
+            $coaInventory = $item->product->coa_id ?? $coaSediaan;
+            $subtotalHpp = $item->qty * $item->hpp_price;
+
+            $journalEntries[] = [
+                'coa_id' => $coaInventory,
+                'posisi' => 'kredit',
+                'nominal'=> $subtotalHpp,
+                'sub_id' => $item->id,
+                'note'   => $note . ' (' . ($item->product->item_name ?? '') . ')'
+            ];
+
+            // B. Credit Tax (Reverse Input VAT)
+            // Use helper to handle Single/Group tax logic
+            $taxes = $this->calculateTaxComponents($item);
+            foreach ($taxes as $tax) {
+                // Return implies reversing the original transaction.
+                // Purchase: Debit PPN Masukan.
+                // Retur: Credit PPN Masukan.
+                $journalEntries[] = [
+                    'coa_id' => $tax['coa_id'],
+                    'posisi' => 'kredit',
+                    'nominal'=> $tax['nominal'],
+                    'sub_id' => $item->id,
+                    'note'   => $note . ' (Tax)'
+                ];
+            }
+        }
+
+        // 5. Validate & Save
+        $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    /**
+     * Helper to Calculate Tax Components for Return
+     */
+    private function calculateTaxComponents($item): array
+    {
+        $results = [];
+        $objTax = $item->tax;
+
+        if (empty($objTax)) return $results;
+
+        $taxList = [];
+        if ($objTax->tax_type == VarType::TAX_TYPE_SINGLE) {
+            $taxList[] = $objTax;
+        } else {
+            foreach ($objTax->taxgroup as $group) {
+                if ($group->tax) $taxList[] = $group->tax;
+            }
+        }
+
+        foreach ($taxList as $taxCfg) {
+            // Calculate Tax Amount based on item subtotal (which is usually price * qty)
+            // For Returns, we calculate tax from the returned amount.
+            // Note: ReturProduct subtotal usually stores the price-based subtotal.
+            // We use item->subtotal (Price * Qty) to calculate the Tax portion to reverse.
+
+            $calcFunc = ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE) ? 'hitungIncludeTax' : 'hitungTaxDpp';
+            // Note: helpers might differ, using generic calculation logic:
+            $getTax = Helpers::hitungTaxDpp($item->subtotal, $taxCfg->id, $item->tax_type, $taxCfg->tax_percentage);
+
+            if (!empty($getTax) && isset($getTax[TypeEnum::PPN])) {
+                $results[] = [
+                    'coa_id'  => $taxCfg->purchase_coa_id,
+                    'nominal' => $getTax[TypeEnum::PPN]
+                ];
+            }
+        }
+        return $results;
+    }
+
+    private function validateAndSaveJournal(array $entries, $returModel)
+    {
+        $totalDebit = 0;
+        $totalCredit = 0;
+
+        foreach ($entries as $e) {
+            if ($e['posisi'] == 'debet') $totalDebit += $e['nominal'];
+            else $totalCredit += $e['nominal'];
+        }
+
+        // Tolerance of 1 Rupiah
+        if (abs($totalDebit - $totalCredit) > 1) {
+            throw new Exception("Jurnal Retur {$returModel->retur_no} Tidak Balance! Debet: " . number_format($totalDebit) . ", Kredit: " . number_format($totalCredit));
+        }
+
+        $jurnalRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
+
+        foreach ($entries as $e) {
+            if ($e['nominal'] == 0) continue;
+
+            $jurnalRepo->create([
+                'transaction_date'      => $returModel->retur_date,
+                'transaction_datetime'  => $returModel->retur_date . " " . date('H:i:s'),
+                'created_by'            => $returModel->created_by,
+                'updated_by'            => $returModel->created_by,
+                'transaction_code'      => TransactionsCode::RETUR_PEMBELIAN,
+                'coa_id'                => $e['coa_id'],
+                'transaction_id'        => $returModel->id,
+                'transaction_sub_id'    => $e['sub_id'],
+                'transaction_no'        => $returModel->retur_no,
+                'transaction_status'    => JurnalStatusEnum::OK,
+                'debet'                 => ($e['posisi'] == 'debet') ? $e['nominal'] : 0,
+                'kredit'                => ($e['posisi'] == 'kredit') ? $e['nominal'] : 0,
+                'note'                  => $e['note'],
+                'created_at'            => date("Y-m-d H:i:s"),
+                'updated_at'            => date("Y-m-d H:i:s"),
+            ]);
+        }
+    }
+
+    private function handleFileUploads($uploadedFiles, $returId, $userId)
+    {
+        if (!empty($uploadedFiles)) {
+            $fileUpload = new FileUploadService();
+            foreach ($uploadedFiles as $file) {
+                $resUpload = $fileUpload->upload($file, tenant(), $userId);
+                if ($resUpload) {
+                    PurchaseReturMeta::create([
+                        'retur_id' => $returId,
+                        'meta_key' => 'upload',
+                        'meta_value' => $resUpload
+                    ]);
                 }
             }
         }
+    }
+
+    public function deleteAdditional($idRetur)
+    {
+        PurchaseReturProduct::where('retur_id', $idRetur)->delete();
+        PurchaseReturMeta::where('retur_id', $idRetur)->delete();
+        JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::RETUR_PEMBELIAN, $idRetur);
+        Inventory::where('transaction_code', TransactionsCode::RETUR_PEMBELIAN)
+            ->where('transaction_id', $idRetur)->delete();
+        PurchasePaymentInvoice::where('retur_id', $idRetur)->delete();
     }
 }

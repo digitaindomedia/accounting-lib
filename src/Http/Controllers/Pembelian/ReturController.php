@@ -7,6 +7,7 @@ use Icso\Accounting\Exports\PurchaseReturExport;
 use Icso\Accounting\Exports\PurchaseReturReportExport;
 use Icso\Accounting\Http\Requests\CreatePurchaseReturRequest;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Retur\PurchaseReturProduct;
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
 use Icso\Accounting\Repositories\Pembelian\Retur\ReturRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -85,15 +86,23 @@ class ReturController extends Controller
     public function show(Request $request): JsonResponse
     {
         $id = $request->id;
-        $res = $this->returRepo->findOne($id,array(),['vendor','receive','returproduct','returproduct.receiveproduct', 'returproduct.product','returproduct.tax','returproduct.tax.taxgroup','returproduct.tax.taxgroup.tax','returproduct.unit']);
+        $res = $this->returRepo->findOne($id,array(),['vendor','receive','returproduct','invoice','returproduct.receiveproduct','returproduct.orderproduct', 'returproduct.product','returproduct.tax','returproduct.tax.taxgroup','returproduct.tax.taxgroup.tax','returproduct.unit']);
         if($res){
             if(!empty($res->returproduct)){
                 $purchaseReceivedRepo = new ReceiveRepo(new PurchaseReceived());
                 foreach ($res->returproduct as $item){
                     $recProduct = $item->receiveproduct;
-                    $qtyRetur = $purchaseReceivedRepo->getQtyRetur($recProduct->id);
-                    $item->qty_bs_retur = ($recProduct->qty - $qtyRetur) + $item->qty;
-                    $item->qty_received = $recProduct->qty;
+                    if(!empty($recProduct)){
+                        $qtyRetur = $purchaseReceivedRepo->getQtyRetur($recProduct->id);
+                        $item->qty_bs_retur = ($recProduct->qty - $qtyRetur) + $item->qty;
+                        $item->qty_received = $recProduct->qty;
+                    } else {
+                        $orderProduct = $item->orderproduct;
+                        $qtyRetur = PurchaseReturProduct::where('order_product_id', $orderProduct->id)->sum('qty');
+                        $item->qty_received = $orderProduct->qty;
+                        $item->qty_bs_retur = ($orderProduct->qty - $qtyRetur) + $item->qty;
+                    }
+
                 }
             }
             $this->data['status'] = true;

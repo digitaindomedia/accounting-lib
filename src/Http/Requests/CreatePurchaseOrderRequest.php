@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\ProductType;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,36 +35,50 @@ class CreatePurchaseOrderRequest extends FormRequest
         $orderType = $this->input('order_type');
         $orderNo = $this->input('order_no');
         $table = (new PurchaseOrder())->getTable();
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_ORDER_PEMBELIAN);
+        $rules = PurchaseOrder::$rules;
+        if (empty($prefix)) {
+            $rules['order_no'] = [
+                'required',
+                Rule::unique($table, 'order_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($orderNo)) {
+                // kalau user isi manual
+                $rules['order_no'] = [
+                    Rule::unique($table, 'order_no'),
+                ];
+            } else {
+                // otomatis generate
+                $rules['order_no'] = ['nullable'];
+            }
+        }
 
-        // Base rules berdasarkan kondisi create/update
-        $baseRules = empty($id)
-            ? PurchaseOrder::$rules
-            : array_merge(
-                PurchaseOrder::$rules,
-                [
-                    'order_no' => [
-                        'required',
-                        Rule::unique($table, 'order_no')->ignore($id),
-                    ],
-                ]
-            );
+        // update + prefix tersedia → nomor wajib ada
+        else {
+            $rules['order_no'] = [
+                'required',
+                Rule::unique($table, 'request_no')->ignore($id),
+            ];
+        }
 
         // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
         if (empty($id) && !empty($orderNo)) {
-            $baseRules['order_no'] = [
+            $rules['order_no'] = [
                 Rule::unique($table, 'order_no'),
             ];
         }
 
         // Tambahkan validasi service_name jika order_type SERVICE
         if ($orderType == ProductType::SERVICE) {
-            $baseRules['orderproduct.*.service_name'] = 'required|string';
+            $rules['orderproduct.*.service_name'] = 'required|string';
         }
         if( $orderType == ProductType::ITEM){
-            $baseRules['orderproduct.*.product_id'] = 'required|string';
+            $rules['orderproduct.*.product_id'] = 'required|string';
         }
-        $baseRules['orderproduct.*.qty'] = ['required', 'numeric', 'min:0'];
-        return $baseRules;
+        $rules['orderproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        return $rules;
     }
 
     public function messages()
@@ -71,7 +87,7 @@ class CreatePurchaseOrderRequest extends FormRequest
             'order_date.required' => 'Tanggal Order Pembelian masih kosong.',
             'vendor_id.required' => 'Supplier masih kosong.',
             'orderproduct.required' => 'Daftar transaksi Order Pembelian masih kosong.',
-            'order_no.required' => 'Nomor Order Pembelian masih kosong.',
+            'order_no.required' => 'Nomor order belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.',
             'orderproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',

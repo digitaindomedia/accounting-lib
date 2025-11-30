@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -36,32 +38,45 @@ class CreatePurchaseDpRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $refNo = $this->input('ref_no');
         $table = (new PurchaseDownPayment())->getTable();
-        $baseRules = empty($id)
-            ? PurchaseDownPayment::$rules
-            : array_merge(
-                PurchaseDownPayment::$rules,
-                [
-                    'ref_no' => [
-                        'required',
-                        Rule::unique($table, 'ref_no')->ignore($id),
-                    ],
-                ]
-            );
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_UANG_MUKA_PEMBELIAN);
+        $rules = PurchaseDownPayment::$rules;
+        if (empty($prefix)) {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($refNo)) {
+                $rules['ref_no'] = [
+                    Rule::unique($table, 'ref_no'),
+                ];
+            }else {
+                // otomatis generate
+                $rules['ref_no'] = ['nullable'];
+            }
+        }
+        else {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
 
         // Hanya tambahkan validasi unique untuk create jika ref_no tidak kosong
         if (empty($id) && !empty($refNo)) {
-            $baseRules['ref_no'] = [
+            $rules['ref_no'] = [
                 Rule::unique($table, 'ref_no'),
             ];
         }
 
-        return $baseRules;
+        return $rules;
     }
 
     public function messages()
     {
         return ['downpayment_date.required' => 'Tanggal Uang Muka Masih Kosong',
-            'ref_no.required' => 'Nomor uang muka masih kosong.',
+            'ref_no.required' => 'Nomor uang muka belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'coa_id.required' => 'Akun Kas/Bank masih kosong.',
             'ref_no.unique' => 'Nomor uang muka sudah digunakan.','nominal.gt' => 'Nominal uang muka tidak boleh 0.',
             'nominal.required' => 'Nominal uang muka masih Kosong', 'order_id.required' => 'Order pembelian masih belum dipilih'];

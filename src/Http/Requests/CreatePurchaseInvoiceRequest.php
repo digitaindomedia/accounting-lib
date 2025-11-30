@@ -5,6 +5,8 @@ namespace Icso\Accounting\Http\Requests;
 
 use Icso\Accounting\Enums\InvoiceTypeEnum;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -34,17 +36,33 @@ class CreatePurchaseInvoiceRequest extends FormRequest
         $invoiceNo = $this->input('invoice_no');
         $orderId = $this->input('order_id');
         $table = (new PurchaseInvoicing())->getTable();
-
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_INVOICE_PEMBELIAN);
         // Base rules
         $rules = PurchaseInvoicing::$rules;
-
-        // Jika UPDATE
-        if (!empty($id)) {
+        if (empty($prefix)) {
             $rules['invoice_no'] = [
                 'required',
                 Rule::unique($table, 'invoice_no')->ignore($id),
             ];
-            return $rules;
+        }
+        elseif (empty($id)) {
+            if (!empty($invoiceNo)) {
+                // kalau user isi manual
+                $rules['invoice_no'] = [
+                    Rule::unique($table, 'invoice_no'),
+                ];
+            } else {
+                // otomatis generate
+                $rules['invoice_no'] = ['nullable'];
+            }
+        }
+
+        // update + prefix tersedia → nomor wajib ada
+        else {
+            $rules['invoice_no'] = [
+                'required',
+                Rule::unique($table, 'invoice_no')->ignore($id),
+            ];
         }
 
         // Jika CREATE
@@ -69,7 +87,7 @@ class CreatePurchaseInvoiceRequest extends FormRequest
     public function messages()
     {
         return ['invoice_date.required' => 'Tanggal Invoice Masih Kosong',
-            'invoice_no.required' => 'Nomor invoice masih kosong.',
+            'invoice_no.required' => 'Nomor invoice belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'vendor_id.required' => 'Supplier masih belum dipilih',
             'orderproduct.required' => 'Daftar transaksi Invoice Pembelian masih kosong.',
             'warehouse_id.required' => 'Gudang masih belum dipilih',

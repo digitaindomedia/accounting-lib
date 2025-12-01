@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -35,26 +37,40 @@ class CreateSalesDpRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $refNo = $this->input('ref_no');
         $table = (new SalesDownpayment())->getTable();
-        $baseRules = empty($id)
-            ? SalesDownpayment::$rules
-            : array_merge(
-                SalesDownpayment::$rules,
-                [
-                    'ref_no' => [
-                        'required',
-                        Rule::unique($table, 'ref_no')->ignore($id),
-                    ],
-                ]
-            );
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_UANG_MUKA_PENJUALAN);
+
+        $rules = SalesDownpayment::$rules;
+        if (empty($prefix)) {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($refNo)) {
+                $rules['ref_no'] = [
+                    Rule::unique($table, 'ref_no'),
+                ];
+            }else {
+                // otomatis generate
+                $rules['ref_no'] = ['nullable'];
+            }
+        }
+        else {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
 
         // Hanya tambahkan validasi unique untuk create jika ref_no tidak kosong
         if (empty($id) && !empty($refNo)) {
-            $baseRules['ref_no'] = [
+            $rules['ref_no'] = [
                 Rule::unique($table, 'ref_no'),
             ];
         }
 
-        return $baseRules;
+        return $rules;
     }
 
     public function messages()

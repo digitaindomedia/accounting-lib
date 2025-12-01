@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -31,32 +33,47 @@ class CreateSalesPaymentRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $paymentNo = $this->input('payment_no');
         $table = (new SalesPayment())->getTable();
-        $baseRules = empty($id)
-            ? SalesPayment::$rules
-            : array_merge(
-                SalesPayment::$rules,
-                [
-                    'payment_no' => [
-                        'required',
-                        Rule::unique($table, 'payment_no')->ignore($id),
-                    ],
-                ]
-            );
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_PELUNASAN_PEMBELIAN);
+        $rules = SalesPayment::$rules;
+
+        if (empty($prefix)) {
+            $rules['payment_no'] = [
+                'required',
+                Rule::unique($table, 'payment_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($paymentNo)) {
+                // kalau user isi manual
+                $rules['invoice_no'] = [
+                    Rule::unique($table, 'payment_no'),
+                ];
+            } else {
+                // otomatis generate
+                $rules['payment_no'] = ['nullable'];
+            }
+        }
+        else {
+            $rules['payment_no'] = [
+                'required',
+                Rule::unique($table, 'payment_no')->ignore($id),
+            ];
+        }
 
         // Hanya tambahkan validasi unique untuk create jika payment_no tidak kosong
         if (empty($id) && !empty($paymentNo)) {
-            $baseRules['payment_no'] = [
+            $rules['payment_no'] = [
                 Rule::unique($table, 'payment_no'),
             ];
         }
 
-        return $baseRules;
+        return $rules;
     }
 
     public function messages()
     {
         return ['payment_date.required' => 'Tanggal Pelunasan Penjualan Masih Kosong',
-            'payment_no.required' => 'Nomor pembayaran masih kosong.',
+            'payment_no.required' => 'Nomor pembayaran belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'payment_no.unique' => 'Nomor pembayaran sudah digunakan.',
             'payment_method_id.required' => 'Metode Pembayaran Masih belum dipilih', 'invoice' => 'Daftar Invoice Yang Akan Dilunasi Masih Kosong'];
     }

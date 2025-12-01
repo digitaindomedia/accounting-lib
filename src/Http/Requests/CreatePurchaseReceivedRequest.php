@@ -75,7 +75,7 @@ class CreatePurchaseReceivedRequest extends FormRequest
     public function messages()
     {
         return ['receive_date.required' => 'Tanggal Penerimaan Pembelian Masih Kosong',
-            'received_no.required' => 'Nomor order belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
+            'received_no.required' => 'Nomor penerimaan belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'received_no.unique' => 'Nomor penerimaan sudah digunakan.',
             'warehouse_id.required' => 'Nama Gudang Masih Belum dipilih',
             'order_id.required' => 'Order Pembelian Belum dipilih', 'receiveproduct.required' => 'Daftar barang yang akan diterima masih kosong', 'receiveproduct.*.qty.required' => 'Kuantitas barang masih kosong',

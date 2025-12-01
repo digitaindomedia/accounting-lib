@@ -2,7 +2,7 @@
 
 namespace Icso\Accounting\Repositories\Penjualan\Downpayment;
 
-
+use Exception;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
@@ -33,13 +33,13 @@ class DpRepo extends ElequentRepository
         $this->model = $model;
     }
 
+    // ... [Keep getAllDataBy and getAllTotalDataBy as they were] ...
     public function getAllDataBy($search, $page, $perpage, array $where = [])
     {
-        // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
+        return $model->when(!empty($search), function ($query) use($search){
+            $query->where('ref_no', 'like', '%' .$search. '%')
+                ->orWhere('note', 'like', '%' .$search. '%');
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
@@ -52,16 +52,14 @@ class DpRepo extends ElequentRepository
                 }
             });
         })->with(['order','coa','order.vendor'])->orderBy('downpayment_date','desc')->offset($page)->limit($perpage)->get();
-        return $dataSet;
     }
 
     public function getAllTotalDataBy($search, array $where = [])
     {
-        // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
+        return $model->when(!empty($search), function ($query) use($search){
+            $query->where('ref_no', 'like', '%' .$search. '%')
+                ->orWhere('note', 'like', '%' .$search. '%');
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
@@ -74,266 +72,263 @@ class DpRepo extends ElequentRepository
                 }
             });
         })->orderBy('downpayment_date','desc')->count();
-        return $dataSet;
     }
 
+    /**
+     * Store method with strict Transaction and Balance Check
+     */
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
         $userId = $request->user_id;
-        $refNo = $request->ref_no;
-        if (empty($refNo)) {
-            $refNo = self::generateCodeTransaction(new SalesDownpayment(), KeyNomor::NO_UANG_MUKA_PENJUALAN, 'ref_no', 'downpayment_date');
-        }
-        $note = $request->note;
-        $orderId = $request->order_id;
-        $coaId = !empty($request->coa_id) ? $request->coa_id : 0;
-        $taxId = !empty($request->tax_id) ? $request->tax_id : 0;
-        $dpType = $request->dp_type;
-        $nominal = Utility::remove_commas($request->nominal);
-        $dpDate = !empty($request->downpayment_date) ? Utility::changeDateFormat($request->downpayment_date) : date("Y-m-d");
-        $arrData = array(
-            'ref_no' => $refNo,
-            'downpayment_date' => $dpDate,
-            'nominal' => $nominal,
-            'note' => $note,
-            'order_id' => $orderId,
-            'coa_id' => $coaId,
-            'tax_id' => $taxId,
-            'tax_percentage' => $request->tax_percentage,
-            'updated_by' => $userId,
-            'updated_at' => date('Y-m-d H:i:s')
-        );
+
+        // Prepare Data
+        $data = $this->gatherInputData($request);
+
         DB::beginTransaction();
         try {
+            // 1. Save Header
             if (empty($id)) {
-                $arrData['downpayment_status'] = StatusEnum::OPEN;
-                $arrData['reason'] = "";
-                $arrData['dp_type'] = $dpType;
-                $arrData['document'] = "";
-                $arrData['created_at'] = date('Y-m-d H:i:s');
-                $arrData['created_by'] = $userId;
-                $res = $this->create($arrData);
+                $data['downpayment_status'] = StatusEnum::OPEN;
+                $data['reason'] = "";
+                $data['document'] = "";
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $data['created_by'] = $userId;
+                $res = $this->create($data);
+                $resId = $res->id;
             } else {
-                $res = $this->update($arrData, $id);
+                $this->update($data, $id);
+                $resId = $id;
+                $this->deleteAdditional($resId);
             }
-            if ($res) {
-                if (!empty($id)) {
-                    $this->deleteAdditional($id);
-                    $resId = $id;
-                } else {
-                    $resId = $res->id;
-                }
-                $this->postingJurnal($resId);
-                $fileUpload = new FileUploadService();
-                $uploadedFiles = $request->file('files');
-                if(!empty($uploadedFiles)) {
-                    if (count($uploadedFiles) > 0) {
-                        foreach ($uploadedFiles as $file) {
-                            // Handle each file as needed
-                            $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
-                            if ($resUpload) {
-                                $arrUpload = array(
-                                    'dp_id' => $resId,
-                                    'meta_key' => 'upload',
-                                    'meta_value' => $resUpload
-                                );
-                                SalesDownPaymentMeta::create($arrUpload);
-                            }
-                        }
-                    }
-                }
-                DB::commit();
-                return true;
-            } else {
-                DB::rollBack();
-                return false;
-            }
-        }catch (\Exception $e) {
-            Log::error($e->getMessage());
+
+            // 2. Posting Jurnal (CRITICAL)
+            // This will THROW Exception if Debits != Credits
+            $this->postingJurnal($resId);
+
+            // 3. File Upload
+            $this->handleFileUploads($request->file('files'), $resId, $userId);
+
+            DB::commit();
+            return true;
+
+        } catch (Exception $e) {
             DB::rollBack();
+            Log::error("Sales DP Store Error: " . $e->getMessage());
             return false;
         }
+    }
+
+    private function gatherInputData(Request $request)
+    {
+        $refNo = $request->ref_no ?: self::generateCodeTransaction(new SalesDownpayment(), KeyNomor::NO_UANG_MUKA_PENJUALAN, 'ref_no', 'downpayment_date');
+
+        return [
+            'ref_no'            => $refNo,
+            'downpayment_date'  => $request->downpayment_date ? Utility::changeDateFormat($request->downpayment_date) : date("Y-m-d"),
+            'nominal'           => Utility::remove_commas($request->nominal),
+            'note'              => $request->note,
+            'order_id'          => $request->order_id,
+            'coa_id'            => $request->coa_id ?? 0,
+            'tax_id'            => $request->tax_id ?? 0,
+            'tax_percentage'    => $request->tax_percentage,
+            'dp_type'           => $request->dp_type,
+            'updated_by'        => $request->user_id,
+            'updated_at'        => date('Y-m-d H:i:s')
+        ];
     }
 
     public function deleteAdditional($id)
     {
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::UANG_MUKA_PENJUALAN, $id);
-        SalesDownPaymentMeta::where(array('dp_id' => $id))->delete();
+        SalesDownPaymentMeta::where('dp_id', $id)->delete();
     }
 
-    public function postingJurnal($idUangMuka){
-        $jurnalTransaksiRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
-        $res = $this->findOne($idUangMuka, array(), ['order', 'order.vendor', 'tax', 'tax.taxgroup','tax.taxgroup.tax']);
-        if(!empty($res)){
-            $nominal = $res->nominal;
-            $dpp = $nominal;
-            $arrTax = array();
-            if($res->tax_id != "0")
-            {
-                $objTax = $res->tax;
-                if(!empty($objTax)) {
-                    if ($objTax->tax_type == VarType::TAX_TYPE_SINGLE) {
-                        $getCalcTax = Helpers::hitungIncludeTax($objTax->tax_percentage,$nominal);
-                        $ppn = $getCalcTax[TypeEnum::PPN];
-                        $posisi = "kredit";
-                        if ($objTax->tax_sign == VarType::TAX_SIGN_PEMOTONG) {
-                            $posisi = "debet";
-                            $dpp = $dpp + $ppn;
-                        } else {
-                            $dpp = $dpp - $ppn;
-                        }
-                        $arrTax[] = array(
-                            'coa_id' => $objTax->sales_coa_id,
-                            'posisi' => $posisi,
-                            'nominal' => $ppn,
-                            'id_item' => $res->id
-                        );
-                    }
-                    else {
-                        $tagGroups = $objTax->taxgroup;
-                        if (!empty($tagGroups)) {
-                            $total = $nominal;
-                            foreach ($tagGroups as $group) {
-                                $findTax = $group->tax;
-                                if (!empty($findTax)) {
-                                    $pembagi = ($findTax->tax_percentage + 100) / 100;
-                                    $subtotal = $total / $pembagi;
-                                    $tax = ($findTax->tax_percentage / 100) * $subtotal;
-                                    $posisi = "kredit";
-                                    if ($findTax->tax_sign == VarType::TAX_SIGN_PEMOTONG) {
-                                        $posisi = "debet";
-                                        $dpp = $dpp + $tax;
-                                    } else {
-                                        $dpp = $dpp - $tax;
-                                    }
-                                    $arrTax[] = array(
-                                        'coa_id' => $findTax->sales_coa_id,
-                                        'posisi' => $posisi,
-                                        'nominal' => $tax,
-                                        'id_item' => $res->id
-                                    );
-                                }
-                            }
-                        }
-                    }
+    /**
+     * Refactored Posting Jurnal with Balance Check
+     */
+    public function postingJurnal($idUangMuka)
+    {
+        // 1. Eager Load
+        $res = $this->model->with(['order.vendor', 'tax.taxgroup.tax'])->find($idUangMuka);
+
+        if (!$res) return;
+
+        // 2. Settings
+        $coaUangMukaPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_UANG_MUKA_PENJUALAN);
+        $coaKasBank = !empty($res->coa_id) ? $res->coa_id : SettingRepo::getOptionValue(SettingEnum::COA_KAS_BANK);
+
+        $journalEntries = [];
+        $nominal = $res->nominal;
+        $dpp = $nominal;
+
+        $customerName = "";
+        if ($res->order && $res->order->vendor) {
+            $customerName = $res->order->vendor->vendor_company_name ?? $res->order->vendor->vendor_name;
+        }
+        $note = !empty($res->note) ? $res->note : 'Uang muka penjualan' . (!empty($customerName) ? " customer " . $customerName : "");
+
+        // 3. Calculate Tax & Adjust DPP
+        $taxes = $this->calculateTaxComponents($res);
+
+        foreach ($taxes as $tax) {
+            // Logic for Sales DP:
+            // If Tax Sign is PEMOTONG (Withholding/PPh) -> Debit. (Reduces Cash received usually, but here Nominal is fixed, so it increases DPP Asset?)
+            // If Tax Sign is Normal (VAT/PPN) -> Credit. (Liability).
+
+            if ($tax['tax_sign'] == VarType::TAX_SIGN_PEMOTONG) {
+                // Posisi DEBET
+                $dpp += $tax['nominal']; // Original Logic: $dpp = $dpp + $ppn
+                $journalEntries[] = [
+                    'coa_id' => $tax['coa_id'],
+                    'posisi' => 'debet',
+                    'nominal'=> $tax['nominal'],
+                    'note'   => $note . ' (Tax)'
+                ];
+            } else {
+                // Posisi KREDIT (Standard VAT)
+                $dpp -= $tax['nominal']; // Original Logic: $dpp = $dpp - $ppn
+                $journalEntries[] = [
+                    'coa_id' => $tax['coa_id'],
+                    'posisi' => 'kredit',
+                    'nominal'=> $tax['nominal'],
+                    'note'   => $note . ' (Tax)'
+                ];
+            }
+        }
+
+        // 4. Entry A: Debit Cash/Bank (Money In)
+        $journalEntries[] = [
+            'coa_id' => $coaKasBank,
+            'posisi' => 'debet',
+            'nominal'=> $nominal,
+            'note'   => $note
+        ];
+
+        // 5. Entry B: Credit Sales Downpayment Liability
+        $journalEntries[] = [
+            'coa_id' => $coaUangMukaPenjualan,
+            'posisi' => 'kredit',
+            'nominal'=> $dpp,
+            'note'   => $note
+        ];
+
+        // 6. Validate & Save
+        $this->validateAndSaveJournal($journalEntries, $res);
+    }
+
+    /**
+     * Helper to Calculate Tax Components
+     */
+    private function calculateTaxComponents($res): array
+    {
+        $results = [];
+        $objTax = $res->tax;
+
+        if (empty($objTax)) return $results;
+
+        $taxList = [];
+        if ($objTax->tax_type == VarType::TAX_TYPE_SINGLE) {
+            $taxList[] = $objTax;
+        } else {
+            foreach ($objTax->taxgroup as $group) {
+                if ($group->tax) $taxList[] = $group->tax;
+            }
+        }
+
+        foreach ($taxList as $taxCfg) {
+            // Calculation
+            $calcFunc = ($res->tax_type == TypeEnum::TAX_TYPE_INCLUDE) ? 'hitungIncludeTax' : 'hitungTaxDpp';
+            // Note: Original code used 'hitungIncludeTax' directly for Single.
+            // Using logic from original code:
+
+            $nominalTax = 0;
+            if ($objTax->tax_type == VarType::TAX_TYPE_SINGLE) {
+                // Original strictly used hitungIncludeTax for single tax in loop
+                // Assuming strictly Include based on original snippet logic:
+                $calc = Helpers::hitungIncludeTax($taxCfg->tax_percentage, $res->nominal);
+                $nominalTax = $calc[TypeEnum::PPN];
+            } else {
+                // Group Logic from original
+                $pembagi = ($taxCfg->tax_percentage + 100) / 100;
+                $subtotal = $res->nominal / $pembagi;
+                $nominalTax = ($taxCfg->tax_percentage / 100) * $subtotal;
+            }
+
+            $results[] = [
+                'coa_id'    => $taxCfg->sales_coa_id, // Note: Use sales_coa_id for Sales
+                'nominal'   => $nominalTax,
+                'tax_sign'  => $taxCfg->tax_sign
+            ];
+        }
+        return $results;
+    }
+
+    private function validateAndSaveJournal(array $entries, $dpModel)
+    {
+        $totalDebit = 0;
+        $totalCredit = 0;
+
+        foreach ($entries as $e) {
+            if ($e['posisi'] == 'debet') $totalDebit += $e['nominal'];
+            else $totalCredit += $e['nominal'];
+        }
+
+        // Tolerance 1 Rupiah
+        if (abs($totalDebit - $totalCredit) > 1) {
+            throw new Exception("Jurnal Sales DP {$dpModel->ref_no} Tidak Balance! Debet: " . number_format($totalDebit) . ", Kredit: " . number_format($totalCredit));
+        }
+
+        $jurnalRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
+
+        foreach ($entries as $e) {
+            if ($e['nominal'] == 0) continue;
+
+            $jurnalRepo->create([
+                'transaction_date'      => $dpModel->downpayment_date,
+                'transaction_datetime'  => $dpModel->downpayment_date . " " . date('H:i:s'),
+                'created_by'            => $dpModel->created_by,
+                'updated_by'            => $dpModel->created_by,
+                'transaction_code'      => TransactionsCode::UANG_MUKA_PENJUALAN,
+                'coa_id'                => $e['coa_id'],
+                'transaction_id'        => $dpModel->id,
+                'transaction_sub_id'    => 0,
+                'transaction_no'        => $dpModel->ref_no,
+                'transaction_status'    => JurnalStatusEnum::OK,
+                'debet'                 => ($e['posisi'] == 'debet') ? $e['nominal'] : 0,
+                'kredit'                => ($e['posisi'] == 'kredit') ? $e['nominal'] : 0,
+                'note'                  => $e['note'],
+                'created_at'            => date("Y-m-d H:i:s"),
+                'updated_at'            => date("Y-m-d H:i:s"),
+            ]);
+        }
+    }
+
+    private function handleFileUploads($uploadedFiles, $resId, $userId)
+    {
+        if (!empty($uploadedFiles)) {
+            $fileUpload = new FileUploadService();
+            foreach ($uploadedFiles as $file) {
+                $resUpload = $fileUpload->upload($file, tenant(), $userId);
+                if ($resUpload) {
+                    SalesDownPaymentMeta::create([
+                        'dp_id' => $resId,
+                        'meta_key' => 'upload',
+                        'meta_value' => $resUpload
+                    ]);
                 }
-
             }
-            $coaUangMukaPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_UANG_MUKA_PENJUALAN);
-            $coaKasBank = SettingRepo::getOptionValue(SettingEnum::COA_KAS_BANK);
-            if(!empty($res->coa_id)){
-                $coaKasBank = $res->coa_id;
-            }
-            $customerName = "";
-            if(!empty($res->order->vendor)){
-                $customerName =   !empty($res->order->vendor->vendor_company_name) ? $res->order->vendor->vendor_company_name : $res->order->vendor->vendor_name;
-            }
-            $noteCustomer = !empty($supplierName) ? " customer dengan nama ".$customerName : "";
-
-            //jurnal debet
-            $arrJurnalDebet = array(
-                'transaction_date' => $res->downpayment_date,
-                'transaction_datetime' => $res->downpayment_date." ".date('H:i:s'),
-                'created_by' => $res->created_by,
-                'updated_by' => $res->created_by,
-                'transaction_code' => TransactionsCode::UANG_MUKA_PENJUALAN,
-                'coa_id' => $coaKasBank,
-                'transaction_id' => $res->id,
-                'transaction_sub_id' => 0,
-                'created_at' => date("Y-m-d H:i:s"),
-                'updated_at' => date("Y-m-d H:i:s"),
-                'transaction_no' => $res->ref_no,
-                'transaction_status' => JurnalStatusEnum::OK,
-                'debet' => $nominal,
-                'kredit' => 0,
-                'note' => !empty($res->note) ? $res->note : 'Uang muka penjualan '.$noteCustomer,
-            );
-            $jurnalTransaksiRepo->create($arrJurnalDebet);
-
-            //jurnal kredit
-            $arrJurnalKredit = array(
-                'transaction_date' => $res->downpayment_date,
-                'transaction_datetime' => $res->downpayment_date." ".date('H:i:s'),
-                'created_by' => $res->created_by,
-                'updated_by' => $res->created_by,
-                'transaction_code' => TransactionsCode::UANG_MUKA_PENJUALAN,
-                'coa_id' => $coaUangMukaPenjualan,
-                'transaction_id' => $res->id,
-                'transaction_sub_id' => 0,
-                'created_at' => date("Y-m-d H:i:s"),
-                'updated_at' => date("Y-m-d H:i:s"),
-                'transaction_no' => $res->ref_no,
-                'transaction_status' => JurnalStatusEnum::OK,
-                'debet' => 0,
-                'kredit' => $dpp,
-                'note' => !empty($res->note) ? $res->note : 'Uang muka penjualan '.$noteCustomer,
-            );
-            $jurnalTransaksiRepo->create($arrJurnalKredit);
-            if(!empty($arrTax)){
-                if(count($arrTax) > 0){
-                    foreach ($arrTax as $val){
-                        if($val['posisi'] == 'debet'){
-                            $arrJurnalDebet = array(
-                                'transaction_date' => $res->downpayment_date,
-                                'transaction_datetime' => $res->downpayment_date." ".date('H:i:s'),
-                                'created_by' => $res->created_by,
-                                'updated_by' => $res->created_by,
-                                'transaction_code' => TransactionsCode::UANG_MUKA_PENJUALAN,
-                                'coa_id' => $val['coa_id'],
-                                'transaction_id' => $res->id,
-                                'transaction_sub_id' => 0,
-                                'created_at' => date("Y-m-d H:i:s"),
-                                'updated_at' => date("Y-m-d H:i:s"),
-                                'transaction_no' => $res->ref_no,
-                                'transaction_status' => JurnalStatusEnum::OK,
-                                'debet' => $val['nominal'],
-                                'kredit' => 0,
-                                'note' => !empty($res->note) ? $res->note : 'Uang muka penjualan '.$noteCustomer,
-                            );
-                            $jurnalTransaksiRepo->create($arrJurnalDebet);
-                        } else
-                        {
-                            $arrJurnalKredit = array(
-                                'transaction_date' => $res->downpayment_date,
-                                'transaction_datetime' => $res->downpayment_date." ".date('H:i:s'),
-                                'created_by' => $res->created_by,
-                                'updated_by' => $res->created_by,
-                                'transaction_code' => TransactionsCode::UANG_MUKA_PENJUALAN,
-                                'coa_id' => $val['coa_id'],
-                                'transaction_id' => $res->id,
-                                'transaction_sub_id' => 0,
-                                'created_at' => date("Y-m-d H:i:s"),
-                                'updated_at' => date("Y-m-d H:i:s"),
-                                'transaction_no' => $res->ref_no,
-                                'transaction_status' => JurnalStatusEnum::OK,
-                                'debet' => 0,
-                                'kredit' => $val['nominal'],
-                                'note' => !empty($res->note) ? $res->note : 'Uang muka penjualan '.$noteCustomer,
-                            );
-                            $jurnalTransaksiRepo->create($arrJurnalKredit);
-                        }
-                    }
-                }
-
-            }
-
         }
     }
 
     public function getTotalUangMukaByOrderId($idOrder)
     {
-        $nominal = SalesDownpayment::where(array('order_id' => $idOrder))->sum('nominal');
-        return $nominal;
+        return SalesDownpayment::where('order_id', $idOrder)->sum('nominal');
     }
 
     public static function changeStatusUangMuka($idUangMuka, $statusUangMuka=StatusEnum::SELESAI)
     {
-        $instance = (new self(new SalesDownpayment()));
-        $arrUpdateStatus = array(
-            'downpayment_status' => $statusUangMuka
-        );
-        $instance->update($arrUpdateStatus, $idUangMuka);
+        $instance = new self(new SalesDownpayment());
+        $instance->update(['downpayment_status' => $statusUangMuka], $idUangMuka);
     }
 }

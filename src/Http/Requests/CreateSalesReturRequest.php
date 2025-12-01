@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -31,32 +33,47 @@ class CreateSalesReturRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $returNo = $this->input('retur_no');
         $table = (new SalesRetur())->getTable();
-        $baseRules = empty($id)
-            ? SalesRetur::$rules
-            : array_merge(
-                SalesRetur::$rules,
-                [
-                    'retur_no' => [
-                        'required',
-                        Rule::unique($table, 'retur_no')->ignore($id),
-                    ],
-                ]
-            );
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_RETUR_PENJUALAN);
+
+        $rules = SalesRetur::$rules;
+        if (empty($prefix)) {
+            $rules['retur_no'] = [
+                'required',
+                Rule::unique($table, 'retur_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($returNo)) {
+                // kalau user isi manual
+                $rules['retur_no'] = [
+                    Rule::unique($table, 'retur_no'),
+                ];
+            } else {
+                // otomatis generate
+                $rules['retur_no'] = ['nullable'];
+            }
+        }
+        else {
+            $rules['retur_no'] = [
+                'required',
+                Rule::unique($table, 'retur_no')->ignore($id),
+            ];
+        }
 
         // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
         if (empty($id) && !empty($returNo)) {
-            $baseRules['retur_no'] = [
+            $rules['retur_no'] = [
                 Rule::unique($table, 'retur_no'),
             ];
         }
 
-        return $baseRules;
+        return $rules;
     }
 
     public function messages()
     {
         return ['retur_date.required' => 'Tanggal Retur Masih Kosong',
-            'retur_no.required' => 'Nomor retur masih kosong.',
+            'retur_no.required' => 'Nomor retur belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'retur_no.unique' => 'Nomor retur sudah digunakan.',
             'returproduct.required' => 'Daftar barang yang akan diretur Masih Kosong'];
     }

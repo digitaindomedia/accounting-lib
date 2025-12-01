@@ -2,7 +2,7 @@
 
 namespace Icso\Accounting\Repositories\Penjualan\Delivery;
 
-
+use Exception;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
@@ -37,11 +37,11 @@ class DeliveryRepo extends ElequentRepository
         $this->model = $model;
     }
 
+    // ... [Keep getAllDataBy, getAllTotalDataBy as original] ...
     public function getAllDataBy($search, $page, $perpage, array $where = [])
     {
-        // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($where), function ($query) use($where){
+        return $model->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
                     $metod = $item['method'];
@@ -53,23 +53,23 @@ class DeliveryRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('delivery_no', 'like', '%' .$search. '%');
-            $query->orWhereHas('vendor', function ($query) use($search) {
-                $query->where('vendor_name', 'like', '%' .$search. '%');
-                $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-            });
-            $query->orWhereHas('order', function ($query) use($search) {
-                $query->where('order_no', 'like', '%' .$search. '%');
-            });
-        })->orderBy('delivery_date','desc')->with(['vendor','order','warehouse','deliveryproduct','deliveryproduct.product','deliveryproduct.unit','deliveryproduct.tax'])->offset($page)->limit($perpage)->get();
-        return $dataSet;
+            $query->where('delivery_no', 'like', '%' .$search. '%')
+                ->orWhereHas('vendor', function ($query) use($search) {
+                    $query->where('vendor_name', 'like', '%' .$search. '%')
+                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                })
+                ->orWhereHas('order', function ($query) use($search) {
+                    $query->where('order_no', 'like', '%' .$search. '%');
+                });
+        })->orderBy('delivery_date','desc')
+            ->with(['vendor','order','warehouse','deliveryproduct.product','deliveryproduct.unit','deliveryproduct.tax'])
+            ->offset($page)->limit($perpage)->get();
     }
 
     public function getAllTotalDataBy($search, array $where = [])
     {
-        // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($where), function ($query) use($where){
+        return $model->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
                     $metod = $item['method'];
@@ -81,270 +81,291 @@ class DeliveryRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('delivery_no', 'like', '%' .$search. '%');
-            $query->orWhereHas('vendor', function ($query) use($search) {
-                $query->where('vendor_name', 'like', '%' .$search. '%');
-                $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-            });
-            $query->orWhereHas('order', function ($query) use($search) {
-                $query->where('order_no', 'like', '%' .$search. '%');
-            });
+            $query->where('delivery_no', 'like', '%' .$search. '%')
+                ->orWhereHas('vendor', function ($query) use($search) {
+                    $query->where('vendor_name', 'like', '%' .$search. '%')
+                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                })
+                ->orWhereHas('order', function ($query) use($search) {
+                    $query->where('order_no', 'like', '%' .$search. '%');
+                });
         })->orderBy('delivery_date','desc')->count();
-        return $dataSet;
     }
 
+    /**
+     * Store method with Strict Transaction
+     */
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
         $userId = $request->user_id;
-        $deliveryNo = $request->delivery_no;
-        if (empty($deliveryNo)) {
-            $deliveryNo = self::generateCodeTransaction(new SalesDelivery(), KeyNomor::NO_DELIVERY_ORDER, 'delivery_no', 'delivery_date');
-        }
-        $deliveryDate = $request->delivery_date;
-        $orderId = $request->order_id;
-        $vendorId = $request->vendor_id;
-        $warehouseId = $request->warehouse_id;
-        $note = $request->note;
 
-        $arrData = array(
-            'delivery_no' => $deliveryNo,
-            'delivery_date' => $deliveryDate,
-            'order_id' => $orderId,
-            'vendor_id' => $vendorId,
-            'warehouse_id' => $warehouseId,
-            'note' => $note,
-            'updated_at' => date('Y-m-d H:i:s'),
-            'updated_by' => $userId,
-        );
+        // Prepare Data
+        $data = $this->gatherHeaderData($request);
+
         DB::beginTransaction();
         try {
+            // 1. Create/Update Header
             if (empty($id)) {
-                $arrData['created_at'] = date('Y-m-d H:i:s');
-                $arrData['created_by'] = $userId;
-                $arrData['delivery_status'] = StatusEnum::OPEN;
-                $res = $this->create($arrData);
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $data['created_by'] = $userId;
+                $data['delivery_status'] = StatusEnum::OPEN;
+                $res = $this->create($data);
+                $deliveryId = $res->id;
             } else {
-                $res = $this->update($arrData, $id);
-            }
-            if ($res) {
-                if (!empty($id)) {
-                    $this->deleteAdditional($id);
-                    $deliveryId = $id;
-                } else {
-                    $deliveryId = $res->id;
-                }
-                $products = json_decode(json_encode($request->deliveryproduct));
-                if (count($products) > 0) {
-                    foreach ($products as $item) {
-                        $findProductOrder = SalesOrderProduct::where(array('id' => $item->order_product_id))->first();
-                        if(!empty($findProductOrder)){
-                            $sellPrice = $findProductOrder->price;
-                            $taxId = $findProductOrder->tax_id;
-                            $taxPercentage = $findProductOrder->tax_percentage;
-                            $subtotal = Helpers::hitungSubtotal($item->qty,$sellPrice,$findProductOrder->discount,$findProductOrder->discount_type);
-                            $arrItem = array(
-                                'delivery_id' => $deliveryId,
-                                'qty' => $item->qty,
-                                'qty_left' => $item->qty,
-                                'product_id' => $item->product_id,
-                                'unit_id' => $item->unit_id,
-                                'order_product_id' => $item->order_product_id,
-                                'multi_unit' => '0',
-                                'hpp_price' => 0,
-                                'sell_price' => $sellPrice,
-                                'tax_id' =>$taxId,
-                                'tax_percentage' => $taxPercentage,
-                                'discount' => $findProductOrder->discount,
-                                'subtotal' => $subtotal,
-                                'tax_type' => $findProductOrder->tax_type,
-                                'discount_type' => $findProductOrder->discount_type,
-                            );
-                            SalesDeliveryProduct::create($arrItem);
-                        }
-
-                    }
-                }
-                $this->postingJurnal($deliveryId);
-                SalesOrderRepo::changeStatusByDelivery($orderId);
-                $fileUpload = new FileUploadService();
-                $uploadedFiles = $request->file('files');
-                if(!empty($uploadedFiles)) {
-                    if (count($uploadedFiles) > 0) {
-                        foreach ($uploadedFiles as $file) {
-                            // Handle each file as needed
-                            $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
-                            if ($resUpload) {
-                                $arrUpload = array(
-                                    'delivery_id' => $deliveryId,
-                                    'meta_key' => 'upload',
-                                    'meta_value' => $resUpload
-                                );
-                                SalesDeliveryMeta::create($arrUpload);
-                            }
-                        }
-                    }
-                }
-                DB::commit();
-                return true;
-            }
-            else {
-                return false;
+                $this->update($data, $id);
+                $deliveryId = $id;
+                $this->deleteAdditional($deliveryId);
             }
 
-        }catch (\Exception $e) {
-            Log::error($e->getMessage());
+            // 2. Process Products
+            $products = is_array($request->deliveryproduct) ? $request->deliveryproduct : json_decode(json_encode($request->deliveryproduct));
+
+            if (!empty($products)) {
+                foreach ($products as $item) {
+                    $item = (object)$item;
+                    $findProductOrder = SalesOrderProduct::find($item->order_product_id);
+
+                    if ($findProductOrder) {
+                        $sellPrice = $findProductOrder->price;
+                        $subtotal = Helpers::hitungSubtotal($item->qty, $sellPrice, $findProductOrder->discount, $findProductOrder->discount_type);
+
+                        // Save Detail
+                        SalesDeliveryProduct::create([
+                            'delivery_id'       => $deliveryId,
+                            'qty'               => $item->qty,
+                            'qty_left'          => $item->qty,
+                            'product_id'        => $item->product_id,
+                            'unit_id'           => $item->unit_id,
+                            'order_product_id'  => $item->order_product_id,
+                            'multi_unit'        => '0',
+                            'hpp_price'         => 0, // HPP is calculated during Posting/Inventory Log
+                            'sell_price'        => $sellPrice,
+                            'tax_id'            => $findProductOrder->tax_id,
+                            'tax_percentage'    => $findProductOrder->tax_percentage,
+                            'discount'          => $findProductOrder->discount,
+                            'subtotal'          => $subtotal,
+                            'tax_type'          => $findProductOrder->tax_type,
+                            'discount_type'     => $findProductOrder->discount_type,
+                        ]);
+                    }
+                }
+            }
+
+            // 3. Posting Jurnal (CRITICAL)
+            // This calculates HPP, logs inventory, and creates Journals.
+            // Throws Exception if unbalanced.
+            $this->postingJurnal($deliveryId);
+
+            // 4. Update Order Status
+            SalesOrderRepo::changeStatusByDelivery($request->order_id);
+
+            // 5. File Upload
+            $this->handleFileUploads($request->file('files'), $deliveryId, $userId);
+
+            DB::commit();
+            return true;
+
+        } catch (Exception $e) {
             DB::rollBack();
+            Log::error("Delivery Store Error: " . $e->getMessage());
             return false;
         }
+    }
+
+    private function gatherHeaderData(Request $request)
+    {
+        $deliveryNo = $request->delivery_no ?: self::generateCodeTransaction(new SalesDelivery(), KeyNomor::NO_DELIVERY_ORDER, 'delivery_no', 'delivery_date');
+
+        return [
+            'delivery_no'   => $deliveryNo,
+            'delivery_date' => $request->delivery_date,
+            'order_id'      => $request->order_id,
+            'vendor_id'     => $request->vendor_id,
+            'warehouse_id'  => $request->warehouse_id,
+            'note'          => $request->note,
+            'updated_at'    => date('Y-m-d H:i:s'),
+            'updated_by'    => $request->user_id,
+        ];
     }
 
     public function deleteAdditional($id)
     {
         InventoryRepo::deleteInventory(TransactionsCode::DELIVERY_ORDER, $id);
-        JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::DELIVERY_ORDER,$id);
-        SalesDeliveryProduct::where(array('delivery_id' => $id))->delete();
-        SalesDeliveryMeta::where(array('delivery_id' => $id))->delete();
+        JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::DELIVERY_ORDER, $id);
+        SalesDeliveryProduct::where('delivery_id', $id)->delete();
+        SalesDeliveryMeta::where('delivery_id', $id)->delete();
     }
 
+    /**
+     * Refactored Posting Jurnal with Balance Check
+     */
     public function postingJurnal($id)
     {
-        $jurnalTransaksiRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
-        $inventoryRepo = new InventoryRepo(new Inventory());
+        // 1. Eager Load
+        $find = $this->model->with(['deliveryproduct.product'])->find($id);
+
+        if (!$find) return;
+
+        // 2. Settings
         $coaSediaanDalamPerjalanan = SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN_DALAM_PERJALANAN);
-        $coaSediaan = SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN);
-        $find = $this->findOne($id,array(),['deliveryproduct','deliveryproduct.product']);
-        if(!empty($find)){
-            $deliveryDate = $find->delivery_date;
-            $deliveryNo = $find->delivery_no;
-            if(!empty($find->deliveryproduct)) {
-                $deliveryProduct = $find->deliveryproduct;
-                $totalAllSediaan = 0;
-                if (count($deliveryProduct) > 0) {
-                    foreach ($deliveryProduct as $item) {
-                        $product = $item->product;
-                        $productName = "";
-                        if(!empty($product)){
-                            if(!empty($product->coa_id)){
-                                $coaSediaan = $product->coa_id;
+        $coaSediaanDefault         = SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN);
 
-                            }
-                            $productName = $product->item_name;
-                        }
-                        $noteProduct = !empty($productName) ? " dengan nama ".$productName : "";
-                        $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $deliveryDate);
-                        $subtotalHpp = $hpp * $item->qty;
-                        $reqInventory = new Request();
-                        $reqInventory->coa_id = $coaSediaan;
-                        $reqInventory->user_id = $find->created_by;
-                        $reqInventory->inventory_date = $deliveryDate;
-                        $reqInventory->transaction_code = TransactionsCode::DELIVERY_ORDER;
-                        $reqInventory->transaction_id = $find->id;
-                        $reqInventory->transaction_sub_id = $item->id;
-                        $reqInventory->qty_out = $item->qty;
-                        $reqInventory->warehouse_id = $find->warehouse_id;
-                        $reqInventory->product_id = $item->product_id;
-                        $reqInventory->price = $hpp;
-                        $reqInventory->note = $find->note;
-                        $reqInventory->unit_id = $item->unit_id;
-                        $inventoryRepo->store($reqInventory);
-                        if(!empty($subtotalHpp)){
-                            $arrJurnalKredit = array(
-                                'transaction_date' => $deliveryDate,
-                                'transaction_datetime' => $deliveryDate." ".date('H:i:s'),
-                                'created_by' => $find->created_by,
-                                'updated_by' => $find->created_by,
-                                'transaction_code' => TransactionsCode::DELIVERY_ORDER,
-                                'coa_id' => $coaSediaan,
-                                'transaction_id' => $find->id,
-                                'transaction_sub_id' => $item->id,
-                                'created_at' => date("Y-m-d H:i:s"),
-                                'updated_at' => date("Y-m-d H:i:s"),
-                                'transaction_no' => $deliveryNo,
-                                'transaction_status' => JurnalStatusEnum::OK,
-                                'debet' => 0,
-                                'kredit' => $subtotalHpp,
-                                'note' => !empty($find->note) ? $find->note : 'Pengiriman Barang'.$noteProduct,
-                            );
-                            $jurnalTransaksiRepo->create($arrJurnalKredit);
-                        }
+        $inventoryRepo = new InventoryRepo(new Inventory());
+        $journalEntries = [];
+        $totalHppAll = 0;
 
-                        $totalAllSediaan = $totalAllSediaan + $subtotalHpp;
-                    }
-                }
-                if(!empty($totalAllSediaan)){
-                    $arrJurnalDebet = array(
-                        'transaction_date' => $deliveryDate,
-                        'transaction_datetime' => $deliveryDate." ".date('H:i:s'),
-                        'created_by' => $find->created_by,
-                        'updated_by' => $find->created_by,
-                        'transaction_code' => TransactionsCode::DELIVERY_ORDER,
-                        'coa_id' => $coaSediaanDalamPerjalanan,
-                        'transaction_id' => $find->id,
-                        'transaction_sub_id' => $item->id,
-                        'created_at' => date("Y-m-d H:i:s"),
-                        'updated_at' => date("Y-m-d H:i:s"),
-                        'transaction_no' => $deliveryNo,
-                        'transaction_status' => JurnalStatusEnum::OK,
-                        'debet' => $totalAllSediaan,
-                        'kredit' => 0,
-                        'note' => !empty($find->note) ? $find->note : 'Pengiriman Barang'.$noteProduct,
-                    );
-                    $jurnalTransaksiRepo->create($arrJurnalDebet);
+        $note = !empty($find->note) ? $find->note : 'Pengiriman Barang';
+
+        // 3. Process Products: Inventory Log + HPP Calculation
+        foreach ($find->deliveryproduct as $item) {
+            // Get Product COA
+            $coaSediaan = $item->product->coa_id ?? $coaSediaanDefault;
+            $productName = $item->product->item_name ?? '';
+
+            // Calculate HPP (Moving Average)
+            // Note: This must handle the logic: Cost of goods LEAVING warehouse
+            $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $find->delivery_date);
+            $subtotalHpp = $hpp * $item->qty;
+            $totalHppAll += $subtotalHpp;
+
+            // A. Log Inventory Transaction (Outgoing)
+            $reqInventory = new Request();
+            $reqInventory->coa_id = $coaSediaan;
+            $reqInventory->user_id = $find->created_by;
+            $reqInventory->inventory_date = $find->delivery_date;
+            $reqInventory->transaction_code = TransactionsCode::DELIVERY_ORDER;
+            $reqInventory->transaction_id = $find->id;
+            $reqInventory->transaction_sub_id = $item->id;
+            $reqInventory->qty_out = $item->qty;
+            $reqInventory->warehouse_id = $find->warehouse_id;
+            $reqInventory->product_id = $item->product_id;
+            $reqInventory->price = $hpp; // Store the HPP used
+            $reqInventory->note = $find->note;
+            $reqInventory->unit_id = $item->unit_id;
+
+            $inventoryRepo->store($reqInventory);
+
+            // B. Prepare Credit Entry (Reduce Inventory Asset)
+            // We credit the specific Product Inventory Account
+            $journalEntries[] = [
+                'coa_id' => $coaSediaan,
+                'posisi' => 'kredit',
+                'nominal'=> $subtotalHpp,
+                'sub_id' => $item->id,
+                'note'   => $note . ' (' . $productName . ')'
+            ];
+        }
+
+        // 4. Prepare Debit Entry (Inventory In Transit / COGS)
+        // Usually Delivery Note moves stock to "In Transit" or directly to COGS depending on Incoterms.
+        // Assuming Logic: Debit Sediaan Dalam Perjalanan
+        if ($totalHppAll > 0) {
+            $journalEntries[] = [
+                'coa_id' => $coaSediaanDalamPerjalanan,
+                'posisi' => 'debet',
+                'nominal'=> $totalHppAll,
+                'sub_id' => 0,
+                'note'   => $note
+            ];
+        }
+
+        // 5. Validate & Save Journal
+        $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    private function validateAndSaveJournal(array $entries, $deliveryModel)
+    {
+        $totalDebit = 0;
+        $totalCredit = 0;
+
+        foreach ($entries as $e) {
+            if ($e['posisi'] == 'debet') $totalDebit += $e['nominal'];
+            else $totalCredit += $e['nominal'];
+        }
+
+        // Tolerance 1 Rupiah
+        if (abs($totalDebit - $totalCredit) > 1) {
+            throw new Exception("Jurnal Delivery {$deliveryModel->delivery_no} Tidak Balance! Debet: " . number_format($totalDebit) . ", Kredit: " . number_format($totalCredit));
+        }
+
+        $jurnalRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
+
+        foreach ($entries as $e) {
+            if ($e['nominal'] == 0) continue;
+
+            $jurnalRepo->create([
+                'transaction_date'      => $deliveryModel->delivery_date,
+                'transaction_datetime'  => $deliveryModel->delivery_date . " " . date('H:i:s'),
+                'created_by'            => $deliveryModel->created_by,
+                'updated_by'            => $deliveryModel->created_by,
+                'transaction_code'      => TransactionsCode::DELIVERY_ORDER,
+                'coa_id'                => $e['coa_id'],
+                'transaction_id'        => $deliveryModel->id,
+                'transaction_sub_id'    => $e['sub_id'],
+                'transaction_no'        => $deliveryModel->delivery_no,
+                'transaction_status'    => JurnalStatusEnum::OK,
+                'debet'                 => ($e['posisi'] == 'debet') ? $e['nominal'] : 0,
+                'kredit'                => ($e['posisi'] == 'kredit') ? $e['nominal'] : 0,
+                'note'                  => $e['note'],
+                'created_at'            => date("Y-m-d H:i:s"),
+                'updated_at'            => date("Y-m-d H:i:s"),
+            ]);
+        }
+    }
+
+    private function handleFileUploads($uploadedFiles, $deliveryId, $userId)
+    {
+        if (!empty($uploadedFiles)) {
+            $fileUpload = new FileUploadService();
+            foreach ($uploadedFiles as $file) {
+                $resUpload = $fileUpload->upload($file, tenant(), $userId);
+                if ($resUpload) {
+                    SalesDeliveryMeta::create([
+                        'delivery_id' => $deliveryId,
+                        'meta_key' => 'upload',
+                        'meta_value' => $resUpload
+                    ]);
                 }
             }
         }
     }
 
+    // ... [Keep getDeliveredProduct, getValueSediaanDalamPerjalan, getTotalDelivery, getQtyRetur, changeStatusDelivery as original] ...
+
     public function getDeliveredProduct($deliveryId,$idProduct,$idUnit)
     {
-        $totalKirim = SalesDeliveryProduct::where(array('product_id' => $idProduct, 'unit_id' => $idUnit, 'delivery_id' => $deliveryId))->sum('qty');
-        return $totalKirim;
+        return SalesDeliveryProduct::where(['product_id' => $idProduct, 'unit_id' => $idUnit, 'delivery_id' => $deliveryId])->sum('qty');
     }
 
     public static function getValueSediaanDalamPerjalan($idDelivery, $coaSediaanDalamPerjalananId)
     {
-        $find = JurnalTransaksi::where(array('transaction_code' => TransactionsCode::DELIVERY_ORDER,'coa_id' => $coaSediaanDalamPerjalananId, 'transaction_id' => $idDelivery))->first();
-        if(!empty($find)){
+        $find = JurnalTransaksi::where(['transaction_code' => TransactionsCode::DELIVERY_ORDER, 'coa_id' => $coaSediaanDalamPerjalananId, 'transaction_id' => $idDelivery])->first();
+        if($find){
             return $find->debet;
         } else {
-            $total = 0;
-            $findInventory = Inventory::where(array('transaction_code' => TransactionsCode::DELIVERY_ORDER, 'transaction_id' => $idDelivery))->get();
-            if(count($findInventory) > 0){
-                foreach ($findInventory as $item){
-                    $total = $total + $item->total_out;
-                }
-            }
-            return  $total;
+            // Fallback to Inventory calculation if journal missing (should generally not happen with new atomic logic)
+            return Inventory::where(['transaction_code' => TransactionsCode::DELIVERY_ORDER, 'transaction_id' => $idDelivery])->sum('total_out');
         }
     }
 
     public function getTotalDelivery($id)
     {
-        $find = $this->findOne($id,array(),['deliveryproduct','deliveryproduct.orderproduct']);
+        $find = $this->findOne($id,array(),['deliveryproduct']);
         $total = 0;
-        if(!empty($find)){
-            $receiveProduct = $find->deliveryproduct;
-            if(!empty($receiveProduct)){
-                foreach ($receiveProduct as $key => $item){
-                    //$orderProduct = $item->orderproduct;
-                    $price = $item->sell_price;
-                    $discount = 0;
-                    $subtotal = $item->qty * $price;
-                    if(!empty($item->discount)){
-                        if(!empty($item->discount_type))
-                        {
-                            if($item->discount_type == TypeEnum::DISCOUNT_TYPE_PERCENT){
-                                $discount = ($item->discount / 100) * $subtotal;
-                            } else {
-                                $discount = $item->discount;
-                            }
-                        }
+        if($find && $find->deliveryproduct){
+            foreach ($find->deliveryproduct as $item){
+                $price = $item->sell_price;
+                $subtotal = $item->qty * $price;
+                $discount = 0;
+                if(!empty($item->discount)){
+                    if($item->discount_type == TypeEnum::DISCOUNT_TYPE_PERCENT){
+                        $discount = ($item->discount / 100) * $subtotal;
+                    } else {
+                        $discount = $item->discount;
                     }
-                    $subtotal = $subtotal - $discount;
-                    $total = $total + $subtotal;
                 }
+                $total += ($subtotal - $discount);
             }
         }
         return $total;
@@ -352,18 +373,12 @@ class DeliveryRepo extends ElequentRepository
 
     public function getQtyRetur($delProductId)
     {
-        $qty = SalesReturProduct::where(array('delivery_product_id' => $delProductId))->sum('qty');
-        return $qty;
+        return SalesReturProduct::where('delivery_product_id', $delProductId)->sum('qty');
     }
 
     public static function changeStatusDelivery($idDelivery, $statusDelivery=StatusEnum::SELESAI)
     {
-        $instance = (new self(new SalesDelivery()));
-        $arrUpdateStatus = array(
-            'delivery_status' => $statusDelivery
-        );
-        $instance->update($arrUpdateStatus, $idDelivery);
+        $instance = new self(new SalesDelivery());
+        $instance->update(['delivery_status' => $statusDelivery], $idDelivery);
     }
-
-
 }

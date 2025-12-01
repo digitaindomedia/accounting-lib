@@ -2,7 +2,7 @@
 
 namespace Icso\Accounting\Repositories\Penjualan\Payment;
 
-
+use Exception;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
@@ -25,7 +25,6 @@ use Illuminate\Support\Facades\Log;
 
 class PaymentRepo extends ElequentRepository
 {
-
     protected $model;
 
     public function __construct(SalesPayment $model)
@@ -34,18 +33,17 @@ class PaymentRepo extends ElequentRepository
         $this->model = $model;
     }
 
+    // ... [Keep getAllDataBy and getAllTotalDataBy as original] ...
     public function getAllDataBy($search, $page, $perpage, array $where = [])
     {
-        // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($where), function ($query) use($where){
+        return $model->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
                     $metod = $item['method'];
                     if($metod == 'whereBetween'){
                         $que->$metod($item['value']['field'],$item['value']['value']);
-                    }
-                    else {
+                    } else {
                         $que->$metod($item['value']);
                     }
                 }
@@ -53,21 +51,18 @@ class PaymentRepo extends ElequentRepository
         })->when(!empty($search), function ($query) use($search){
             $query->where('payment_no', 'like', '%' .$search. '%');
         })->orderBy('payment_date','desc')->with(['vendor','payment_method','invoice','invoice.salesinvoice','invoiceretur','invoiceretur.retur'])->offset($page)->limit($perpage)->get();
-        return $dataSet;
     }
 
     public function getAllTotalDataBy($search, array $where = [])
     {
-        // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
-        $dataSet = $model->when(!empty($where), function ($query) use($where){
+        return $model->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
                     $metod = $item['method'];
                     if($metod == 'whereBetween'){
                         $que->$metod($item['value']['field'],$item['value']['value']);
-                    }
-                    else {
+                    } else {
                         $que->$metod($item['value']);
                     }
                 }
@@ -75,245 +70,288 @@ class PaymentRepo extends ElequentRepository
         })->when(!empty($search), function ($query) use($search){
             $query->where('payment_no', 'like', '%' .$search. '%');
         })->orderBy('payment_date','desc')->count();
-        return $dataSet;
     }
 
+    /**
+     * Store method with Strict Transaction and Balance Check
+     */
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
-        $vendor = !empty($request->vendor_id) ? $request->vendor_id : '';
-        $paymentMethod = $request->payment_method_id;
-        $paymentDate = !empty($request->payment_date) ? Utility::changeDateFormat($request->payment_date) : date('Y-m-d');
-        $paymentNo = $request->payment_no;
-        if(empty($paymentNo)){
-            $paymentNo = self::generateCodeTransaction(new SalesPayment(),KeyNomor::NO_PELUNASAN_PENJUALAN,'payment_no','payment_date');
-        }
-        $userId = $request->user_id;
-        $note = !empty($request->note) ? $request->note : '';
-        $total = $request->total;
         $id = $request->id;
+        $userId = $request->user_id;
 
-        $arrData = array(
-            'payment_date' => $paymentDate,
-            'payment_no' => $paymentNo,
-            'note' => $note,
-            'total' => $total,
-            'vendor_id' => !empty($vendor) ? $vendor : '0',
-            'payment_method_id' => !empty($paymentMethod) ? $paymentMethod : '0',
-            'updated_at' => date('Y-m-d H:i:s'),
-            'updated_by' => $userId
-        );
+        // Prepare Header Data
+        $data = $this->gatherHeaderData($request);
+
         DB::beginTransaction();
         try {
+            // 1. Save Header
             if (empty($id)) {
-                $arrData['created_at'] = date('Y-m-d H:i:s');
-                $arrData['created_by'] = $userId;
-                $arrData['reason'] = '';
-                $arrData['payment_status'] = StatusEnum::SELESAI;
-                $res = $this->create($arrData);
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $data['created_by'] = $userId;
+                $data['reason'] = '';
+                $data['payment_status'] = StatusEnum::SELESAI;
+                $res = $this->create($data);
+                $paymentId = $res->id;
             } else {
-                $res = $this->update($arrData, $id);
+                $this->update($data, $id);
+                $paymentId = $id;
+                $this->deleteAdditional($paymentId);
             }
-            if ($res) {
-                if (!empty($id)) {
-                    $idPayment = $id;
-                    $this->deleteAdditional($id);
-                } else {
-                    $idPayment = $res->id;
+
+            // 2. Process Details (Invoices)
+            $invoices = is_array($request->invoice) ? $request->invoice : json_decode(json_encode($request->invoice));
+            if (!empty($invoices)) {
+                foreach ($invoices as $item) {
+                    $item = (object)$item;
+                    $this->createPaymentDetail($item, $paymentId, $data['payment_no'], $data['payment_date'], 'invoice');
+                    InvoiceRepo::changeStatusInvoice($item->id);
                 }
-                if(!empty($request->invoice)){
-                    $invoices = json_decode(json_encode($request->invoice));
-                    if(!empty($invoices)){
-                        foreach ($invoices as $key => $item){
-                            $arrInvoice = array(
-                                'invoice_no' => $item->invoice_no,
-                                'total_payment' => Utility::remove_commas($item->nominal_paid),
-                                'payment_date' => $paymentDate,
-                                'total_discount' => !empty($item->coa_kurang_bayar) ? Utility::remove_commas($item->total_kurang_bayar) : 0,
-                                'coa_id_discount' => !empty($item->coa_kurang_bayar) ? json_encode($item->coa_kurang_bayar) : "",
-                                'invoice_id' => $item->id,
-                                'payment_id' => $idPayment,
-                                'jurnal_id' => 0,
-                                'vendor_id' => $item->vendor_id,
-                                'retur_id' => 0,
-                                'payment_no' => $paymentNo,
-                                'total_overpayment' => !empty($item->coa_lebih_bayar) ? Utility::remove_commas($item->total_lebih_bayar) : 0,
-                                'coa_id_overpayment' => !empty($item->coa_lebih_bayar) ? json_encode($item->coa_lebih_bayar) : ""
-                            );
-                            SalesPaymentInvoice::create($arrInvoice);
-                            InvoiceRepo::changeStatusInvoice($item->id);
-                        }
-                    }
-                }
-                if(!empty($request->retur)) {
-                    $returs = json_decode(json_encode($request->retur));
-                    if (!empty($returs)) {
-                        foreach ($returs as $item) {
-                            $arrRetur = array(
-                                'invoice_no' => $item->retur_no,
-                                'total_payment' => Utility::remove_commas($item->total),
-                                'payment_date' => $paymentDate,
-                                'total_discount' => 0,
-                                'coa_id_discount' => "",
-                                'invoice_id' => 0,
-                                'payment_id' => $idPayment,
-                                'jurnal_id' => 0,
-                                'vendor_id' => $item->vendor_id,
-                                'retur_id' => $item->id,
-                                'payment_no' => $paymentNo,
-                                'total_overpayment' => 0,
-                                'coa_id_overpayment' => ""
-                            );
-                            SalesPaymentInvoice::create($arrRetur);
-                            SalesRetur::where(array('id' => $item->id))->update(array('retur_status' => StatusEnum::SELESAI));
-                        }
-                    }
-                }
-                $this->postingJurnal($idPayment);
-                $fileUpload = new FileUploadService();
-                $uploadedFiles = $request->file('files');
-                if(!empty($uploadedFiles)) {
-                    if (count($uploadedFiles) > 0) {
-                        foreach ($uploadedFiles as $file) {
-                            // Handle each file as needed
-                            $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
-                            if ($resUpload) {
-                                $arrUpload = array(
-                                    'payment_id' => $idPayment,
-                                    'meta_key' => 'upload',
-                                    'meta_value' => $resUpload
-                                );
-                                SalesPaymentMeta::create($arrUpload);
-                            }
-                        }
-                    }
-                }
-                DB::commit();
-                return true;
             }
-        }
-        catch (\Exception $e) {
-            Log::error($e->getMessage());
+
+            // 3. Process Details (Returns)
+            $returs = is_array($request->retur) ? $request->retur : json_decode(json_encode($request->retur));
+            if (!empty($returs)) {
+                foreach ($returs as $item) {
+                    $item = (object)$item;
+                    $this->createPaymentDetail($item, $paymentId, $data['payment_no'], $data['payment_date'], 'retur');
+                    SalesRetur::where('id', $item->id)->update(['retur_status' => StatusEnum::SELESAI]);
+                }
+            }
+
+            // 4. Posting Jurnal (CRITICAL)
+            // Throws Exception if Unbalanced
+            $this->postingJurnal($paymentId);
+
+            // 5. File Upload
+            $this->handleFileUploads($request->file('files'), $paymentId, $userId);
+
+            DB::commit();
+            return true;
+
+        } catch (Exception $e) {
             DB::rollBack();
+            Log::error("Sales Payment Store Error: " . $e->getMessage());
             return false;
         }
     }
 
-    public function deleteAdditional($idPayment){
-        SalesPaymentInvoice::where('payment_id','=',$idPayment)->delete();
-        SalesPaymentMeta::where('payment_id','=',$idPayment)->delete();
+    private function gatherHeaderData(Request $request)
+    {
+        $paymentNo = $request->payment_no ?: self::generateCodeTransaction(new SalesPayment(), KeyNomor::NO_PELUNASAN_PENJUALAN, 'payment_no', 'payment_date');
+
+        return [
+            'payment_date'      => $request->payment_date ? Utility::changeDateFormat($request->payment_date) : date('Y-m-d'),
+            'payment_no'        => $paymentNo,
+            'note'              => $request->note ?? '',
+            'total'             => Utility::remove_commas($request->total),
+            'vendor_id'         => $request->vendor_id ?? 0,
+            'payment_method_id' => $request->payment_method_id ?? 0,
+            'updated_at'        => date('Y-m-d H:i:s'),
+            'updated_by'        => $request->user_id
+        ];
+    }
+
+    private function createPaymentDetail($item, $paymentId, $paymentNo, $paymentDate, $type)
+    {
+        $isInvoice = ($type === 'invoice');
+
+        // Prepare safe values
+        $totalDiscount = 0;
+        $coaDiscount = "";
+        $totalOver = 0;
+        $coaOver = "";
+
+        if ($isInvoice) {
+            if (!empty($item->coa_kurang_bayar)) {
+                $totalDiscount = Utility::remove_commas($item->total_kurang_bayar);
+                $coaDiscount = json_encode($item->coa_kurang_bayar);
+            }
+            if (!empty($item->coa_lebih_bayar)) {
+                $totalOver = Utility::remove_commas($item->total_lebih_bayar);
+                $coaOver = json_encode($item->coa_lebih_bayar);
+            }
+        }
+
+        $arrDetail = [
+            'invoice_no'        => $isInvoice ? $item->invoice_no : $item->retur_no,
+            'total_payment'     => Utility::remove_commas($isInvoice ? $item->nominal_paid : $item->total),
+            'payment_date'      => $paymentDate,
+            'total_discount'    => $totalDiscount,
+            'coa_id_discount'   => $coaDiscount,
+            'total_overpayment' => $totalOver,
+            'coa_id_overpayment'=> $coaOver,
+            'invoice_id'        => $isInvoice ? $item->id : 0,
+            'retur_id'          => $isInvoice ? 0 : $item->id,
+            'payment_id'        => $paymentId,
+            'jurnal_id'         => 0,
+            'vendor_id'         => $item->vendor_id,
+            'payment_no'        => $paymentNo,
+        ];
+
+        SalesPaymentInvoice::create($arrDetail);
+    }
+
+    public function deleteAdditional($idPayment)
+    {
+        SalesPaymentInvoice::where('payment_id', $idPayment)->delete();
+        SalesPaymentMeta::where('payment_id', $idPayment)->delete();
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PELUNASAN_PENJUALAN, $idPayment);
     }
 
+    /**
+     * Refactored Posting Jurnal with Balance Check
+     */
     public function postingJurnal($idPayment)
     {
-        $jurnalTransaksiRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
-        $find = $this->findOne($idPayment, array(), ['payment_method','payment_method.coa','invoice','vendor']);
-        if(!empty($find)){
-            $coaPiutangUsaha = SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
-            $coaKasBank = SettingRepo::getOptionValue(SettingEnum::COA_KAS_BANK);
-            if(!empty($find->payment_method)){
-                $coaKasBank = $find->payment_method->coa_id;
-            }
+        // 1. Eager Load
+        $find = $this->model->with(['payment_method.coa', 'invoice', 'vendor'])->find($idPayment);
 
-            $totalPiutangUsaha = SalesPaymentInvoice::where([['payment_id','=',$idPayment],['invoice_id','!=','0']])->sum('total_payment');
-            $totalRetur = SalesPaymentInvoice::where([['payment_id','=',$idPayment],['retur_id','!=','0']])->sum('total_payment');
-            $totalDiskon = SalesPaymentInvoice::where([['payment_id', '=', $idPayment], ['coa_id_discount', '!=', '']])->sum('total_discount');
-            $totalLebih = SalesPaymentInvoice::where([['payment_id', '=', $idPayment], ['coa_id_overpayment', '!=', '']])->sum('total_overpayment');
-            $totalPiutangUsaha = (($totalPiutangUsaha-$totalRetur) + $totalDiskon) - $totalLebih;
-            $arrJurnalDebet = array(
-                'transaction_date' => $find->payment_date,
-                'transaction_datetime' => $find->payment_date." ".date('H:i:s'),
-                'created_by' => $find->created_by,
-                'updated_by' => $find->created_by,
-                'transaction_code' => TransactionsCode::PELUNASAN_PENJUALAN,
-                'coa_id' => $coaKasBank,
-                'transaction_id' => $find->id,
-                'transaction_sub_id' => 0,
-                'created_at' => date("Y-m-d H:i:s"),
-                'updated_at' => date("Y-m-d H:i:s"),
-                'transaction_no' => $find->payment_no,
-                'transaction_status' => JurnalStatusEnum::OK,
-                'debet' =>  $find->total,
-                'kredit' => 0,
-                'note' => !empty($find->note) ? $find->note : 'Pelunasan penjualan dengan nama customer '.$find->vendor->vendor_name,
-            );
-            $jurnalTransaksiRepo->create($arrJurnalDebet);
+        if (!$find) return;
 
-            $findInvoice = $find->invoice;
-            if(!empty($findInvoice)){
-                foreach ($findInvoice as $val){
-                    if(!empty($val->coa_id_discount)){
-                        $decCoaDiscount = json_decode($val->coa_id_discount);
-                        if(count($decCoaDiscount) > 0){
-                            foreach ($decCoaDiscount as $item){
-                                $arrJurnalDebet = array(
-                                    'transaction_date' => $find->payment_date,
-                                    'transaction_datetime' => $find->payment_date." ".date('H:i:s'),
-                                    'created_by' => $find->created_by,
-                                    'updated_by' => $find->created_by,
-                                    'transaction_code' => TransactionsCode::PELUNASAN_PENJUALAN,
-                                    'coa_id' => $item->coa_id,
-                                    'transaction_id' => $find->id,
-                                    'transaction_sub_id' => 0,
-                                    'created_at' => date("Y-m-d H:i:s"),
-                                    'updated_at' => date("Y-m-d H:i:s"),
-                                    'transaction_no' => $find->payment_no,
-                                    'transaction_status' => JurnalStatusEnum::OK,
-                                    'debet' => Utility::remove_commas($item->nominal),
-                                    'kredit' => 0,
-                                    'note' => !empty($find->note) ? $find->note : 'Pelunasan penjualan dengan nama customer '.$find->vendor->vendor_name,
-                                );
-                                $jurnalTransaksiRepo->create($arrJurnalDebet);
-                            }
-                        }
-                    }
-                    if(!empty($val->coa_id_overpayment)){
-                        $decCoaLebih = json_decode($val->coa_id_overpayment);
-                        if(count($decCoaLebih) > 0){
-                            foreach ($decCoaLebih as $item){
-                                $arrJurnalKredit = array(
-                                    'transaction_date' => $find->payment_date,
-                                    'transaction_datetime' => $find->payment_date." ".date('H:i:s'),
-                                    'created_by' => $find->created_by,
-                                    'updated_by' => $find->created_by,
-                                    'transaction_code' => TransactionsCode::PELUNASAN_PENJUALAN,
-                                    'coa_id' => $item->coa_id,
-                                    'transaction_id' => $find->id,
-                                    'transaction_sub_id' => 0,
-                                    'created_at' => date("Y-m-d H:i:s"),
-                                    'updated_at' => date("Y-m-d H:i:s"),
-                                    'transaction_no' => $find->payment_no,
-                                    'transaction_status' => JurnalStatusEnum::OK,
-                                    'debet' => 0,
-                                    'kredit' => Utility::remove_commas($item->nominal),
-                                    'note' => !empty($find->note) ? $find->note : 'Pelunasan Pembelian dengan nama supplier '.$find->vendor->vendor_name,
-                                );
-                                $jurnalTransaksiRepo->create($arrJurnalKredit);
-                            }
-                        }
+        // 2. Settings
+        $coaPiutangUsaha = SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
+        $coaKasBank = $find->payment_method->coa_id ?? SettingRepo::getOptionValue(SettingEnum::COA_KAS_BANK);
+
+        $journalEntries = [];
+        $note = !empty($find->note) ? $find->note : 'Pelunasan penjualan customer ' . ($find->vendor->vendor_name ?? '');
+
+        // 3. Calculate Totals from Allocation Details
+        // We re-query the details to ensure we use exactly what was saved.
+        $details = SalesPaymentInvoice::where('payment_id', $idPayment)->get();
+
+        // Sums
+        $totalAllocatedToInvoices = $details->where('invoice_id', '!=', 0)->sum('total_payment');
+        $totalAllocatedToRetur    = $details->where('retur_id', '!=', 0)->sum('total_payment');
+        $totalDiskon              = $details->sum('total_discount');
+        $totalLebihBayar          = $details->sum('total_overpayment');
+
+        // 4. Calculate Credit to Piutang Usaha
+        // Logic:
+        // Cash Received (Header Total) = (Invoices Paid - Returns Applied) - Discounts + Overpayments?
+        // Let's use the Standard Accounting Equation for Receipt:
+        // Dr Cash (Money In)
+        // Dr Discount (Expense)
+        // Dr Return (If return is reducing cash? No, Return reduces Piutang separately usually).
+        // Cr Piutang (Total Invoice Amount Settled)
+        // Cr Overpayment (Liability)
+
+        // From original code logic:
+        // $totalPiutangUsaha = (($totalPiutangUsaha - $totalRetur) + $totalDiskon) - $totalLebih;
+        // This calculates the Net Credit to Piutang.
+
+        $creditPiutang = ($totalAllocatedToInvoices - $totalAllocatedToRetur) + $totalDiskon - $totalLebihBayar;
+
+        // Entry A: Debit Cash/Bank (Total Header)
+        $journalEntries[] = [
+            'coa_id' => $coaKasBank,
+            'posisi' => 'debet',
+            'nominal'=> $find->total,
+            'note'   => $note
+        ];
+
+        // Entry B: Debit Discounts
+        foreach ($find->invoice as $invDetail) {
+            if (!empty($invDetail->coa_id_discount)) {
+                $discItems = json_decode($invDetail->coa_id_discount);
+                if (is_array($discItems)) {
+                    foreach ($discItems as $item) {
+                        $item = (object)$item;
+                        $journalEntries[] = [
+                            'coa_id' => $item->coa_id,
+                            'posisi' => 'debet',
+                            'nominal'=> Utility::remove_commas($item->nominal),
+                            'note'   => $note . ' (Diskon)'
+                        ];
                     }
                 }
             }
-            $arrJurnalKredit = array(
-                'transaction_date' => $find->payment_date,
-                'transaction_datetime' => $find->payment_date." ".date('H:i:s'),
-                'created_by' => $find->created_by,
-                'updated_by' => $find->created_by,
-                'transaction_code' => TransactionsCode::PELUNASAN_PENJUALAN,
-                'coa_id' => $coaPiutangUsaha,
-                'transaction_id' => $find->id,
-                'transaction_sub_id' => 0,
-                'created_at' => date("Y-m-d H:i:s"),
-                'updated_at' => date("Y-m-d H:i:s"),
-                'transaction_no' => $find->payment_no,
-                'transaction_status' => JurnalStatusEnum::OK,
-                'debet' => 0,
-                'kredit' => $totalPiutangUsaha,
-                'note' => !empty($find->note) ? $find->note : 'Pelunasan penjualan dengan nama customer '.$find->vendor->vendor_name,
-            );
-            $jurnalTransaksiRepo->create($arrJurnalKredit);
 
+            // Entry C: Credit Overpayment (Lebih Bayar)
+            if (!empty($invDetail->coa_id_overpayment)) {
+                $overItems = json_decode($invDetail->coa_id_overpayment);
+                if (is_array($overItems)) {
+                    foreach ($overItems as $item) {
+                        $item = (object)$item;
+                        $journalEntries[] = [
+                            'coa_id' => $item->coa_id,
+                            'posisi' => 'kredit',
+                            'nominal'=> Utility::remove_commas($item->nominal),
+                            'note'   => $note . ' (Lebih Bayar)'
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Entry D: Credit Piutang Usaha
+        if ($creditPiutang != 0) {
+            $journalEntries[] = [
+                'coa_id' => $coaPiutangUsaha,
+                'posisi' => 'kredit',
+                'nominal'=> $creditPiutang,
+                'note'   => $note
+            ];
+        }
+
+        // 5. Validate & Save
+        $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    private function validateAndSaveJournal(array $entries, $paymentModel)
+    {
+        $totalDebit = 0;
+        $totalCredit = 0;
+
+        foreach ($entries as $e) {
+            if ($e['posisi'] == 'debet') $totalDebit += $e['nominal'];
+            else $totalCredit += $e['nominal'];
+        }
+
+        // Tolerance 1 Rupiah
+        if (abs($totalDebit - $totalCredit) > 1) {
+            throw new Exception("Jurnal Sales Payment {$paymentModel->payment_no} Tidak Balance! Debet: " . number_format($totalDebit) . ", Kredit: " . number_format($totalCredit));
+        }
+
+        $jurnalRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
+
+        foreach ($entries as $e) {
+            if ($e['nominal'] == 0) continue;
+
+            $jurnalRepo->create([
+                'transaction_date'      => $paymentModel->payment_date,
+                'transaction_datetime'  => $paymentModel->payment_date . " " . date('H:i:s'),
+                'created_by'            => $paymentModel->created_by,
+                'updated_by'            => $paymentModel->created_by,
+                'transaction_code'      => TransactionsCode::PELUNASAN_PENJUALAN,
+                'coa_id'                => $e['coa_id'],
+                'transaction_id'        => $paymentModel->id,
+                'transaction_sub_id'    => 0,
+                'transaction_no'        => $paymentModel->payment_no,
+                'transaction_status'    => JurnalStatusEnum::OK,
+                'debet'                 => ($e['posisi'] == 'debet') ? $e['nominal'] : 0,
+                'kredit'                => ($e['posisi'] == 'kredit') ? $e['nominal'] : 0,
+                'note'                  => $e['note'],
+                'created_at'            => date("Y-m-d H:i:s"),
+                'updated_at'            => date("Y-m-d H:i:s"),
+            ]);
+        }
+    }
+
+    private function handleFileUploads($uploadedFiles, $paymentId, $userId)
+    {
+        if (!empty($uploadedFiles)) {
+            $fileUpload = new FileUploadService();
+            foreach ($uploadedFiles as $file) {
+                $resUpload = $fileUpload->upload($file, tenant(), $userId);
+                if ($resUpload) {
+                    SalesPaymentMeta::create([
+                        'payment_id' => $paymentId,
+                        'meta_key' => 'upload',
+                        'meta_value' => $resUpload
+                    ]);
+                }
+            }
         }
     }
 }

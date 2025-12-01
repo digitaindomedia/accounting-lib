@@ -31,32 +31,48 @@ class CreateSalesDeliveryRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $deliveryNo = $this->input('delivery_no');
         $table = (new SalesDelivery())->getTable();
-        $baseRules = empty($id)
-            ? SalesDelivery::$rules
-            : array_merge(
-                SalesDelivery::$rules,
-                [
-                    'delivery_no' => [
-                        'required',
-                        Rule::unique($table, 'delivery_no')->ignore($id),
-                    ],
-                ]
-            );
+        $rules = SalesDelivery::$rules;
 
+        if (empty($prefix)) {
+            $rules['delivery_no'] = [
+                'required',
+                Rule::unique($table, 'delivery_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($deliveryNo)) {
+                // kalau user isi manual
+                $rules['delivery_no'] = [
+                    Rule::unique($table, 'delivery_no'),
+                ];
+            } else {
+                // otomatis generate
+                $rules['delivery_no'] = ['nullable'];
+            }
+        }
+
+        // update + prefix tersedia → nomor wajib ada
+        else {
+            $rules['delivery_no'] = [
+                'required',
+                Rule::unique($table, 'delivery_no')->ignore($id),
+            ];
+        }
         // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
         if (empty($id) && !empty($deliveryNo)) {
-            $baseRules['delivery_no'] = [
+            $rules['delivery_no'] = [
                 Rule::unique($table, 'delivery_no'),
             ];
         }
-        $baseRules['deliveryproduct.*.qty'] = ['required', 'numeric', 'min:0'];
-        return $baseRules;
+        $rules['deliveryproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        return $rules;
     }
 
     public function messages()
     {
         return ['delivery_date.required' => 'Tanggal Delivery Masih Kosong',
             'order_id.required' => 'Order Pembelian Masih Kosong',
+            'delivery_no.required' => 'Nomor pengiriman belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'vendor_id.required' => 'Nama Customer Masih Kosong',
             'warehouse_id.required' => 'Nama Gudang Masih Kosong' ,
             'deliveryproduct.required' => 'Daftar barang yang akan dikirim Masih Kosong',

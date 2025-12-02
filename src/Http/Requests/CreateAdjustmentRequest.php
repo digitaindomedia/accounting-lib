@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Persediaan\Adjustment;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -31,27 +33,41 @@ class CreateAdjustmentRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $refNo = $this->input('ref_no');
         $table = (new Adjustment())->getTable();
-        $baseRules = empty($id)
-            ? Adjustment::$rules
-            : array_merge(
-                Adjustment::$rules,
-                [
-                    'ref_no' => [
-                        'required',
-                        Rule::unique($table, 'ref_no')->ignore($id),
-                    ],
-                ]
-            );
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_ADJUSTMENT_STOCK);
+        $rules = Adjustment::$rules;
+
+        if (empty($prefix)) {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($refNo)) {
+                $rules['ref_no'] = [
+                    Rule::unique($table, 'ref_no'),
+                ];
+            }else {
+                // otomatis generate
+                $rules['ref_no'] = ['nullable'];
+            }
+        }
+        else {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
 
         // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
         if (empty($id) && !empty($refNo)) {
-            $baseRules['ref_no'] = [
+            $rules['ref_no'] = [
                 Rule::unique($table, 'ref_no'),
             ];
         }
-        $baseRules['adjustmentproduct.*.qty_actual'] = ['required', 'numeric'];
-        $baseRules['adjustmentproduct.*.product_id'] = 'required';
-        return $baseRules;
+        $rules['adjustmentproduct.*.qty_actual'] = ['required', 'numeric'];
+        $rules['adjustmentproduct.*.product_id'] = 'required';
+        return $rules;
     }
 
     public function messages()

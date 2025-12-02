@@ -3,6 +3,8 @@
 namespace Icso\Accounting\Http\Requests;
 
 use Icso\Accounting\Models\Persediaan\StockUsage;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -29,27 +31,41 @@ class CreatePemakaianRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $refNo = $this->input('ref_no');
         $table = (new StockUsage())->getTable();
-        $baseRules = empty($id)
-            ? StockUsage::$rules
-            : array_merge(
-                StockUsage::$rules,
-                [
-                    'ref_no' => [
-                        'required',
-                        Rule::unique($table, 'ref_no')->ignore($id),
-                    ],
-                ]
-            );
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_PEMAKAIAN_STOCK);
+        $rules = StockUsage::$rules;
+
+        if (empty($prefix)) {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($refNo)) {
+                $rules['ref_no'] = [
+                    Rule::unique($table, 'ref_no'),
+                ];
+            }else {
+                // otomatis generate
+                $rules['ref_no'] = ['nullable'];
+            }
+        }
+        else {
+            $rules['ref_no'] = [
+                'required',
+                Rule::unique($table, 'ref_no')->ignore($id),
+            ];
+        }
 
         // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
         if (empty($id) && !empty($refNo)) {
-            $baseRules['ref_no'] = [
+            $rules['ref_no'] = [
                 Rule::unique($table, 'ref_no'),
             ];
         }
-        $baseRules['stockusageproduct.*.qty'] = ['required', 'numeric', 'min:0'];
-        $baseRules['stockusageproduct.*.product_id'] = 'required';
-        return $baseRules;
+        $rules['stockusageproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        $rules['stockusageproduct.*.product_id'] = 'required';
+        return $rules;
     }
 
     public function messages()

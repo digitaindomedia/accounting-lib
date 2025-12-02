@@ -3,6 +3,8 @@
 namespace Icso\Accounting\Http\Requests;
 
 use Icso\Accounting\Models\Pembelian\Bast\PurchaseBast;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -30,34 +32,51 @@ class CreatePurchaseBastRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $bastNo = $this->input('bast_no');
         $table = (new PurchaseBast())->getTable();
-        $baseRules = empty($id)
-            ? PurchaseBast::$rules
-            : array_merge(
-                PurchaseBast::$rules,
-                [
-                    'bast_no' => [
-                        'required',
-                        Rule::unique($table, 'bast_no')->ignore($id),
-                    ],
-                ]
-            );
-
-        // Hanya tambahkan validasi unique untuk create jika bast_no tidak kosong
-        if (empty($id) && !empty($bastNo)) {
-            $baseRules['bast_no'] = [
-                Rule::unique($table, 'bast_no'),
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_BAST);
+        $rules = PurchaseBast::$rules;
+        if (empty($prefix)) {
+            $rules['bast_no'] = [
+                'required',
+                Rule::unique($table, 'bast_no')->ignore($id),
+            ];
+        }
+        elseif (empty($id)) {
+            if (!empty($bastNo)) {
+                $rules['bast_no'] = [
+                    Rule::unique($table, 'bast_no'),
+                ];
+            }else {
+                // otomatis generate
+                $rules['bast_no'] = ['nullable'];
+            }
+        }
+        else {
+            $rules['bast_no'] = [
+                'required',
+                Rule::unique($table, 'bast_no')->ignore($id),
             ];
         }
 
-        return $baseRules;
+        // Hanya tambahkan validasi unique untuk create jika bast_no tidak kosong
+        if (empty($id) && !empty($bastNo)) {
+            $rules['bast_no'] = [
+                Rule::unique($table, 'bast_no'),
+            ];
+        }
+        $rules['bastproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        return $rules;
     }
 
     public function messages()
     {
         return ['bast_date.required' => 'Tanggal BAST Masih Kosong',
-            'bast_no.required' => 'Nomor BAST masih kosong.',
+            'bast_no.required' => 'Nomor BAST belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'bast_no.unique' => 'Nomor BAST sudah digunakan.',
-            'order_id.required' => 'Order pembelian masih belum dipilih', 'vendor_id' => 'Supplier masih belum dipilih', 'bastproduct' => 'Produk jasa Bast masih kosong'];
+            'order_id.required' => 'Order pembelian masih belum dipilih',
+            'vendor_id' => 'Supplier masih belum dipilih',
+            'bastproduct.*.qty.numeric' => 'Kuantitas jasa harus berupa angka',
+            'bastproduct.*.qty.min' => 'Kuantitas jasa tidak boleh kurang dari 0',
+            'bastproduct' => 'Produk jasa Bast masih kosong'];
     }
 
     public function failedValidation(Validator $validator)

@@ -65,7 +65,7 @@ class CreateSalesSpkRequest extends FormRequest
                 Rule::unique($table, 'spk_no'),
             ];
         }
-
+        $rules['spkproduct.*.qty'] = ['required', 'numeric', 'min:0'];
         return $rules;
     }
 
@@ -77,6 +77,8 @@ class CreateSalesSpkRequest extends FormRequest
             'spk_no.unique' => 'Nomor SPK sudah digunakan.',
             'order_id.required' => 'Order Penjualan Masih Belum diPilih',
             'vendor_id.required' => 'Customer Masih Kosong',
+            'spkproduct.*.qty.numeric' => 'Kuantitas jasa harus berupa angka',
+            'spkproduct.*.qty.min' => 'Kuantitas jasa tidak boleh kurang dari 0',
             'spkproduct' => 'Produk jasa masih kosong'
         ];
     }

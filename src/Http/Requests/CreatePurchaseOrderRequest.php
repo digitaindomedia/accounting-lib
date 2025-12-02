@@ -59,7 +59,7 @@ class CreatePurchaseOrderRequest extends FormRequest
         else {
             $rules['order_no'] = [
                 'required',
-                Rule::unique($table, 'request_no')->ignore($id),
+                Rule::unique($table, 'order_no')->ignore($id),
             ];
         }
 
@@ -77,7 +77,7 @@ class CreatePurchaseOrderRequest extends FormRequest
         if( $orderType == ProductType::ITEM){
             $rules['orderproduct.*.product_id'] = 'required|string';
         }
-        $rules['orderproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        $rules['orderproduct.*.qty'] = ['required', 'numeric', 'gt:0'];
         return $rules;
     }
 
@@ -91,7 +91,7 @@ class CreatePurchaseOrderRequest extends FormRequest
             'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.',
             'orderproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
-            'orderproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
+            'orderproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 0',
             'orderproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'orderproduct.*.service_name.required' => 'Nama jasa pada salah satu item masih kosong.',
             'orderproduct.*.service_name.string' => 'Nama jasa harus berupa teks.',

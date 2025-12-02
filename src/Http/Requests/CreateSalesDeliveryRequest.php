@@ -4,6 +4,8 @@ namespace Icso\Accounting\Http\Requests;
 
 
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -32,7 +34,7 @@ class CreateSalesDeliveryRequest extends FormRequest
         $deliveryNo = $this->input('delivery_no');
         $table = (new SalesDelivery())->getTable();
         $rules = SalesDelivery::$rules;
-
+        $prefix = SettingRepo::getOptionValue(KeyNomor::NO_DELIVERY_ORDER);
         if (empty($prefix)) {
             $rules['delivery_no'] = [
                 'required',

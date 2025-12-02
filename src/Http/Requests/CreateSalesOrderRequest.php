@@ -58,7 +58,7 @@ class CreateSalesOrderRequest extends FormRequest
         else {
             $rules['order_no'] = [
                 'required',
-                Rule::unique($table, 'request_no')->ignore($id),
+                Rule::unique($table, 'order_no')->ignore($id),
             ];
         }
 
@@ -72,7 +72,7 @@ class CreateSalesOrderRequest extends FormRequest
         // Tambahkan validasi service_name jika order_type SERVICE
 
         $rules['orderproduct.*.product_id'] = 'required|string';
-        $rules['orderproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        $rules['orderproduct.*.qty'] = ['required', 'numeric', 'gt:0'];
         return $rules;
     }
 
@@ -84,7 +84,7 @@ class CreateSalesOrderRequest extends FormRequest
             'orderproduct.required' => 'Daftar Transaksi Order Penjualan Masih Kosong',
             'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'orderproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
-            'orderproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
+            'orderproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari sama dengan 0',
             'orderproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.'];
     }

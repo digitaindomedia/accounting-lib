@@ -17,6 +17,7 @@ use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
@@ -409,7 +410,7 @@ class InvoiceRepo extends ElequentRepository
                     // Assuming Delivery Product has the necessary price info or we map it.
                     // Refactoring: Use the item data directly.
 
-                    $coaRevenue = $item->product->coa_id ?? $settings['coa_penjualan'];
+                    $coaRevenue = $settings['coa_penjualan'];
                     $dpp = $item->subtotal;
 
                     $taxes = $this->calculateTaxComponents($item, $item->subtotal);
@@ -531,7 +532,9 @@ class InvoiceRepo extends ElequentRepository
         // Gross Calculation based on items:
         $grossSalesAndTax = 0;
         // Easier way: GrandTotal + DiscountTotal + DpTotal.
-        $totalDpUsed = SalesInvoicingDp::where('invoice_id', $find->id)->join('als_sales_down_payment', 'als_sales_down_payment.id', '=', 'als_sales_invoicing_dp.dp_id')->sum('nominal');
+        $tableDp = (new SalesDownpayment())->getTable();
+        $tableInvoiceDp = (new SalesInvoicingDp())->getTable();
+        $totalDpUsed = SalesInvoicingDp::where('invoice_id', $find->id)->join($tableDp, $tableDp.'.id', '=', $tableInvoiceDp.'.dp_id')->sum('nominal');
 
         $grossAR = $find->grandtotal + $find->discount_total + $totalDpUsed;
 
@@ -763,6 +766,31 @@ class InvoiceRepo extends ElequentRepository
                     ]);
                 }
             }
+        }
+    }
+
+    public function getPaymentList($idInvoice){
+        $findPayment = SalesPaymentInvoice::where(array('invoice_id' => $idInvoice))->orderBy('payment_date','DESC')->with(['salespayment','retur','jurnal'])->get();
+        return $findPayment;
+    }
+
+    public function getDpListBy($idInvoice){
+        $findDp = SalesInvoicingDp::where(array('invoice_id' => $idInvoice))->with(['downpayment'])->get();
+        $arrDp = array();
+        if(!empty($findDp)){
+            foreach ($findDp as $dp){
+                $arrDp[] = $dp->downpayment;
+            }
+        }
+        return $arrDp;
+    }
+
+    public static function getStatusInvoice($idInvoice){
+        $find = (new self(new SalesInvoicing()))->findOne($idInvoice);
+        if(!empty($find)) {
+            return $find->invoice_status;
+        } else {
+            return "";
         }
     }
 

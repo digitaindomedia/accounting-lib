@@ -33,6 +33,8 @@ class PaymentController extends Controller
         $perpage = $request->perpage;
         $vendorId = $request->vendor_id;
         $paymentMethodId = $request->payment_method_id;
+        $fromDate = $request->from_date;
+        $untilDate = $request->until_date;
         $where=array();
         if(!empty($vendorId)){
             $where[] = array(
@@ -45,7 +47,12 @@ class PaymentController extends Controller
                 'value' => [['payment_method_id','=',$paymentMethodId]]);
 
         }
-        return compact('search', 'page', 'perpage', 'where');
+        if(!empty($fromDate) && !empty($untilDate)){
+            $where[] = array(
+                'method' => 'whereBetween',
+                'value' => array('field' => 'payment_date', 'value' => [$fromDate,$untilDate]));
+        }
+        return compact('search', 'page', 'perpage', 'where','paymentMethodId','vendorId','fromDate','untilDate');
     }
 
     public function getAllData(Request $request):JsonResponse

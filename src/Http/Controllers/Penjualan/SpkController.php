@@ -41,7 +41,7 @@ class SpkController extends Controller
         if(!empty($vendorId)){
             $where[] = ['vendor_id', '=', $vendorId];
         }
-        return compact('search', 'page', 'perpage', 'where');
+        return compact('search', 'page', 'perpage', 'where', 'fromDate','untilDate','vendorId');
     }
 
     public function getAllData(Request $request): \Illuminate\Http\JsonResponse

@@ -406,6 +406,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'exportPdf']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'exportReportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'exportReportExcel']);
     });
 
     Route::prefix('sales-spk')->group(function () {
@@ -417,6 +419,8 @@ Route::group([
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\SpkController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\SpkController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\SpkController::class, 'exportPdf']);
+        Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\Penjualan\SpkController::class, 'exportReportPdf']);
+        Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\SpkController::class, 'exportReportExcel']);
     });
 
     Route::prefix('sales-retur')->group(function () {

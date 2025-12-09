@@ -3,6 +3,7 @@
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
 use Icso\Accounting\Exports\SalesPaymentExport;
+use Icso\Accounting\Exports\SalesPaymentReportDetailExport;
 use Icso\Accounting\Http\Requests\CreateSalesPaymentRequest;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentRepo;
@@ -227,5 +228,48 @@ class PaymentController extends Controller
         $export = new SalesPaymentExport($data);
         $pdf = PDF::loadView('accounting::sales.sales_payment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pembayaran-penjualan.pdf');
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-pembayaran-penjualan.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pembayaran-penjualan.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-pembayaran-penjualan.pdf', 'pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->paymentRepo->getAllDataBy($search, $page, $perpage, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new SalesPaymentReportDetailExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_payment_detail_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'portrait');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
     }
 }

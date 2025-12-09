@@ -56,7 +56,7 @@
         @foreach($post->spkproduct as $item)
             <tr>
                 <td>{{ $item->product->item_name."(".$item->product->item_code.")" }}</td>
-                <td>{{ $item->qty." ".$item->unit->unit_code }}</td>
+                <td>{{ $item->qty }}</td>
             </tr>
         @endforeach
     @endforeach

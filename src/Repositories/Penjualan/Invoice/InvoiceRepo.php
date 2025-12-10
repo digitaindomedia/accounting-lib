@@ -111,7 +111,7 @@ class InvoiceRepo extends ElequentRepository
 
         // Prepare Data
         $arrData = $this->gatherInputData($request);
-
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
         DB::beginTransaction();
         try {
             // 1. Create or Update Header
@@ -135,7 +135,7 @@ class InvoiceRepo extends ElequentRepository
 
             // 3. Handle POS specific logic or Regular Posting
             if ($request->input_type == InputType::POS) {
-                $this->processPOSInvoice($request, $invoiceId);
+                $this->processPOSInvoice($request, $invoiceId, $arrData['invoice_no']);
             } else {
                 // Regular Posting (Journal & Inventory)
                 // This will THROW Exception if Unbalanced
@@ -146,10 +146,12 @@ class InvoiceRepo extends ElequentRepository
             $this->handleFileUploads($request, $invoiceId);
 
             DB::commit();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
             Log::error("Sales Invoice Store Error: " . $e->getMessage());
             return false;
         }
@@ -159,6 +161,7 @@ class InvoiceRepo extends ElequentRepository
     {
         $invoiceNo = $request->invoice_no ?: self::generateCodeTransaction(new SalesInvoicing(), KeyNomor::NO_INVOICE_PENJUALAN, 'invoice_no', 'invoice_date');
         $vendorId = !empty($request->vendor_id) ? $request->vendor_id : SettingRepo::getDefaultCustomer();
+        $warehouseId = !empty($request->warehouse_id) ? $request->warehouse_id : SettingRepo::getDefaultWarehouse();
 
         return [
             'invoice_date'  => $request->invoice_date ? Utility::changeDateFormat($request->invoice_date) : date('Y-m-d'),
@@ -172,7 +175,7 @@ class InvoiceRepo extends ElequentRepository
             'discount_type' => $request->discount_type ?? '',
             'invoice_type'  => $request->invoice_type,
             'input_type'    => $request->input_type,
-            'order_id'      => !empty($request->order_id) ? $request->order_id : null,
+            'order_id'      => !empty($request->order_id) ? $request->order_id : 0,
             'dp_nominal'    => $request->dp_nominal ? Utility::remove_commas($request->dp_nominal) : 0,
             'subtotal'      => Utility::remove_commas($request->subtotal),
             'dpp_total'     => Utility::remove_commas($request->dpp_total ?? 0),
@@ -181,7 +184,7 @@ class InvoiceRepo extends ElequentRepository
             'tax_total'     => Utility::remove_commas($request->tax_total ?? 0),
             'grandtotal'    => Utility::remove_commas($request->grandtotal),
             'coa_id'        => $request->coa_id ?? 0,
-            'warehouse_id'  => $request->warehouse_id ?? 0,
+            'warehouse_id'  => $warehouseId,
             'jurnal_id'     => $request->jurnal_id ?? 0
         ];
     }
@@ -242,14 +245,14 @@ class InvoiceRepo extends ElequentRepository
     }
 
     // ... [processPOSInvoice, insertPayment, deleteAdditional - kept similar but optimized] ...
-    private function processPOSInvoice(Request $request, $idInvoice)
+    private function processPOSInvoice(Request $request, $idInvoice, $noInvoice)
     {
         SalesInvoicingMeta::create([
             'invoice_id' => $idInvoice,
             'meta_key' => 'payment',
             'meta_value' => Utility::remove_commas($request->total_payment)
         ]);
-        $this->insertPayment($request, $idInvoice, $request->invoice_no); // Passed header no directly
+        $this->insertPayment($request, $idInvoice, $noInvoice); // Passed header no directly
         $this->postingJurnalPOS($idInvoice, $request);
     }
 
@@ -335,7 +338,7 @@ class InvoiceRepo extends ElequentRepository
 
             foreach ($find->orderproduct as $item) {
                 // 1. Revenue (Credit)
-                $coaRevenue = $item->product->coa_id ?? $settings['coa_penjualan'];
+                $coaRevenue = $settings['coa_penjualan'];
                 $dpp = $item->subtotal; // Will be adjusted if Tax Include
 
                 // Calculate Tax
@@ -384,7 +387,7 @@ class InvoiceRepo extends ElequentRepository
                     ];
 
                     // Credit Inventory
-                    $coaSediaan = $item->product->coa_id ?? $settings['coa_sediaan'];
+                    $coaSediaan = !empty($item->product->coa_id) ? $item->product->coa_id : $settings['coa_sediaan'];
                     $journalEntries[] = [
                         'coa_id' => $coaSediaan,
                         'posisi' => 'kredit',
@@ -536,7 +539,7 @@ class InvoiceRepo extends ElequentRepository
         $tableInvoiceDp = (new SalesInvoicingDp())->getTable();
         $totalDpUsed = SalesInvoicingDp::where('invoice_id', $find->id)->join($tableDp, $tableDp.'.id', '=', $tableInvoiceDp.'.dp_id')->sum('nominal');
 
-        $grossAR = $find->grandtotal + $find->discount_total + $totalDpUsed;
+        $grossAR = $find->grandtotal;
 
         $journalEntries[] = [
             'coa_id' => $settings['coa_piutang'],
@@ -550,6 +553,7 @@ class InvoiceRepo extends ElequentRepository
         $this->update(['coa_id' => $settings['coa_piutang']], $find->id);
 
         // 8. Validate & Save
+        Log::info($journalEntries);
         $this->validateAndSaveJournal($journalEntries, $find);
     }
 
@@ -717,7 +721,7 @@ class InvoiceRepo extends ElequentRepository
     {
         // Simple POS Journal: Debit Cash/Bank, Credit Sales
         $jurnalRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
-        $find = $this->model->find($idInvoice);
+        $find = SalesInvoicing::find($idInvoice);
         $paymentMethod = PaymentMethod::find($request->payment_method);
 
         if ($find && $paymentMethod) {
@@ -728,11 +732,16 @@ class InvoiceRepo extends ElequentRepository
             $jurnalRepo->create([
                 'transaction_date' => $find->invoice_date,
                 'transaction_code' => TransactionsCode::INVOICE_PENJUALAN,
+                'transaction_datetime'  => $find->invoice_date . " " . date('H:i:s'),
                 'coa_id' => $paymentMethod->coa_id,
                 'transaction_id' => $find->id,
                 'transaction_no' => $find->invoice_no,
+                'transaction_status'    => JurnalStatusEnum::OK,
+                'transaction_sub_id'    => 0,
                 'debet' => $find->grandtotal,
                 'kredit' => 0,
+                'created_by'            => $find->created_by,
+                'updated_by'            => $find->created_by,
                 'note' => 'POS Payment'
             ]);
 
@@ -741,11 +750,16 @@ class InvoiceRepo extends ElequentRepository
             $jurnalRepo->create([
                 'transaction_date' => $find->invoice_date,
                 'transaction_code' => TransactionsCode::INVOICE_PENJUALAN,
+                'transaction_datetime'  => $find->invoice_date . " " . date('H:i:s'),
                 'coa_id' => $coaPiutang,
                 'transaction_id' => $find->id,
                 'transaction_no' => $find->invoice_no,
+                'transaction_status'    => JurnalStatusEnum::OK,
+                'transaction_sub_id'    => 0,
                 'debet' => 0,
                 'kredit' => $find->grandtotal,
+                'created_by'            => $find->created_by,
+                'updated_by'            => $find->created_by,
                 'note' => 'POS Payment Settlement'
             ]);
         }

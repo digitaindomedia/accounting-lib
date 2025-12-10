@@ -6,6 +6,7 @@ namespace Icso\Accounting\Http\Requests;
 use Icso\Accounting\Enums\InvoiceTypeEnum;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\KeyNomor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,6 +34,7 @@ class CreateSalesInvoiceRequest extends FormRequest
     {
         $id = $this->input('id') ?? $this->route('id');
         $invoiceType = $this->input('invoice_type');
+        $inputType = $this->input('input_type');
         $invoiceNo = $this->input('invoice_no');
         $orderId = $this->input('order_id');
         $table = (new SalesInvoicing())->getTable();
@@ -66,7 +68,10 @@ class CreateSalesInvoiceRequest extends FormRequest
         // Jika CREATE
         // Tambahkan validasi warehouse_id jika tipe invoice ITEM dan tidak ada order_id
         if ($invoiceType === InvoiceTypeEnum::ITEM->toString() && empty($orderId)) {
-            $rules['warehouse_id'] = ['required'];
+            if($inputType == InputType::SALES){
+                $rules['warehouse_id'] = ['required'];
+            }
+
             $rules['orderproduct'] = 'required';
             $rules['orderproduct.*.product_id'] = 'required';
         }

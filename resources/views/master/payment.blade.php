@@ -31,7 +31,7 @@
     @foreach ($arrData as $data)
         <tr>
             <td>{{ $data['payment_name'] }}</td>
-            <td>{{ $data['coa'] }}</td>
+            <td>{{ !empty($data['coa']) ? $data['coa']->coa_name: "" }}</td>
             <td>{{ $data['description'] }}</td>
         </tr>
     @endforeach

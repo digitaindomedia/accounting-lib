@@ -45,16 +45,16 @@
         <tr>
             <td>{{ $data['item_name'] }}</td>
             <td>{{ $data['item_code'] }}</td>
-            <td>{{ \Icso\Accounting\Repositories\Master\Product\ProductRepo::getAllCategoriesById($item->id) }}</td>
-            <td>{{ !empty(\Icso\Accounting\Repositories\Master\Product\ProductRepo::getSatuanById($item->id)) ? \Icso\Accounting\Repositories\Master\Product\ProductRepo::getSatuanById($item->id)->unit_name: "" }}</td>
+            <td>{{ \Icso\Accounting\Repositories\Master\Product\ProductRepo::getAllCategoriesById($data['id']) }}</td>
+            <td>{{ !empty(\Icso\Accounting\Repositories\Master\Product\ProductRepo::getSatuanById($data['id'])) ? \Icso\Accounting\Repositories\Master\Product\ProductRepo::getSatuanById($item->id)->unit_name: "" }}</td>
             <td>{{ $data['selling_price'] }}</td>
             <td>{{ $data['descriptions'] }}</td>
             <td>{{ $data['has_tax'] == 'yes' ? "YA" : "TIDAK" }}</td>
             @if($productType == \Icso\Accounting\Utils\ProductType::ITEM)
                 @php
                     $coaSediaan = "";
-                    if(!empty($item->coa_id)){
-                        $findCoaSediaan = Coa::where('id', $item->coa_id)->first();
+                    if(!empty($data['coa_id'])){
+                        $findCoaSediaan = Coa::where('id', $data['coa_id'])->first();
                         if(!empty($findCoaSediaan)){
                             $coaSediaan = $findCoaSediaan->coa_name;
                         }
@@ -65,14 +65,14 @@
                 @php
                     $coaPendapatan = "";
                     $coaBiaya = "";
-                    if(!empty($item->coa_id)){
-                        $findCoaPendapatan = Coa::where('id', $item->coa_id)->first();
+                    if(!empty($data['coa_id'])){
+                        $findCoaPendapatan = Coa::where('id', $data['coa_id'])->first();
                         if(!empty($findCoaPendapatan)){
                             $coaPendapatan = $findCoaPendapatan->coa_name;
                         }
                     }
-                    if(!empty($item->coa_biaya_id)){
-                        $findCoaBiaya = Coa::where('id', $item->coa_biaya_id)->first();
+                    if(!empty($data['coa_biaya_id'])){
+                        $findCoaBiaya = Coa::where('id', $data['coa_biaya_id'])->first();
                         if(!empty($findCoaBiaya)){
                             $coaBiaya = $findCoaBiaya->coa_name;
                         }

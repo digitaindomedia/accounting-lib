@@ -28,7 +28,7 @@ class SalesInvoiceExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'order' => !empty($item->order) ? $item->order->order_no : "",
                 'vendor' => !empty($item->vendor) ? $item->vendor->vendor_company_name : "",
                 'due_date' => $item->due_date,
-                'grandtotal' => number_format($item->grandtotal, SettingRepo::getSeparatorFormat()),
+                'grandtotal' => $item->grandtotal,
                 'invoice_status' => $item->invoice_status,
             ];
         });

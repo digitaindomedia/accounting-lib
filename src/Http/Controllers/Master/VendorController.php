@@ -229,7 +229,7 @@ class VendorController extends Controller
     {
         $vendorType = $request->vendor_type;
         $fileName = "customer.csv";
-        if($vendorType == ProductType::SERVICE){
+        if($vendorType == VendorType::SUPPLIER){
             $fileName = "supplier.csv";
         }
         return $this->exportAsFormat($request, $fileName);
@@ -250,7 +250,7 @@ class VendorController extends Controller
         }
         $data = $this->getVendorData($request);
 
-        $pdf = Pdf::loadView('accounting::master.vendor', ['arrData' => $data, 'vendorType' => $vendorType]);
+        $pdf = Pdf::loadView('accounting::master.vendor', ['arrData' => $data, 'vendorType' => $vendorType])->setPaper('A4', 'landscape');;
         return $pdf->download($fileName);
     }
 

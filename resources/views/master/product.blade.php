@@ -1,5 +1,5 @@
-@php use App\Models\Tenant\Master\Coa; @endphp
-<!DOCTYPE html>
+@php use Icso\Accounting\Models\Master\Coa; @endphp
+        <!DOCTYPE html>
 <html>
 <head>
     <title>{{$productType === \Icso\Accounting\Utils\ProductType::ITEM ? "Barang" : "Jasa"}}</title>
@@ -8,11 +8,13 @@
             width: 100%;
             border-collapse: collapse;
         }
+
         th, td {
             border: 1px solid black;
             padding: 8px;
             text-align: left;
         }
+
         th {
             background-color: #f2f2f2;
         }
@@ -30,7 +32,7 @@
         <th>Harga</th>
         <th>Deskripsi</th>
         <th>Kena Pajak</th>
-        @if($productType == \App\Utils\ProductType::ITEM)
+        @if($productType == \Icso\Accounting\Utils\ProductType::ITEM)
             <th>Akun Sediaan</th>
         @else
             <th>Akun Pendapatan</th>
@@ -43,12 +45,12 @@
         <tr>
             <td>{{ $data['item_name'] }}</td>
             <td>{{ $data['item_code'] }}</td>
-            <td>{{ \App\Repositories\Tenant\Master\Product\ProductRepo::getAllCategoriesById($item->id) }}</td>
-            <td>{{ !empty(\App\Repositories\Tenant\Master\Product\ProductRepo::getSatuanById($item->id)) ? \App\Repositories\Tenant\Master\Product\ProductRepo::getSatuanById($item->id)->unit_name: "" }}</td>
+            <td>{{ \Icso\Accounting\Repositories\Master\Product\ProductRepo::getAllCategoriesById($item->id) }}</td>
+            <td>{{ !empty(\Icso\Accounting\Repositories\Master\Product\ProductRepo::getSatuanById($item->id)) ? \Icso\Accounting\Repositories\Master\Product\ProductRepo::getSatuanById($item->id)->unit_name: "" }}</td>
             <td>{{ $data['selling_price'] }}</td>
             <td>{{ $data['descriptions'] }}</td>
             <td>{{ $data['has_tax'] == 'yes' ? "YA" : "TIDAK" }}</td>
-            @if($productType == \App\Utils\ProductType::ITEM)
+            @if($productType == \Icso\Accounting\Utils\ProductType::ITEM)
                 @php
                     $coaSediaan = "";
                     if(!empty($item->coa_id)){

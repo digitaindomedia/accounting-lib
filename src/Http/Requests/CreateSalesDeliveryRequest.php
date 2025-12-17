@@ -66,7 +66,7 @@ class CreateSalesDeliveryRequest extends FormRequest
                 Rule::unique($table, 'delivery_no'),
             ];
         }
-        $rules['deliveryproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        $rules['deliveryproduct.*.qty'] = ['required', 'numeric', 'gt:0'];
         return $rules;
     }
 
@@ -80,7 +80,7 @@ class CreateSalesDeliveryRequest extends FormRequest
             'deliveryproduct.required' => 'Daftar barang yang akan dikirim Masih Kosong',
             'deliveryproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
             'deliveryproduct.*.qty.required' => 'Kuantitas barang masih kosong',
-            'deliveryproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0'];
+            'deliveryproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 0'];
     }
 
     public function failedValidation(Validator $validator)

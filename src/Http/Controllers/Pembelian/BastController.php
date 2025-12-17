@@ -201,7 +201,7 @@ class BastController extends Controller
         return Excel::download(new PurchaseBastReportExport($data,$params), $filename);
     }
 
-    private function exportReportPdf(Request $request)
+    public function exportReportPdf(Request $request)
     {
         $params = $this->setQueryParameters($request);
         extract($params);

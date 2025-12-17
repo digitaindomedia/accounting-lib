@@ -116,6 +116,7 @@ class DpRepo extends ElequentRepository
             if (empty($id)) {
                 $data['created_at'] = date('Y-m-d H:i:s');
                 $data['created_by'] = $userId;
+                $data['dp_type'] = $request->dp_type;
                 $data['downpayment_status'] = StatusEnum::OPEN;
                 $res = $this->create($data);
                 $resId = $res->id;
@@ -163,7 +164,6 @@ class DpRepo extends ElequentRepository
             'order_id' => $request->order_id,
             'coa_id' => $request->coa_id ?? 0,
             'tax_id' => $request->tax_id ?? 0,
-            'dp_type' => $request->dp_type,
             'updated_by' => $request->user_id,
             'updated_at' => date('Y-m-d H:i:s'),
             'reason' => "",

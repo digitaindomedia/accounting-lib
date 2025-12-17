@@ -68,7 +68,7 @@ class CreatePurchaseReceivedRequest extends FormRequest
                 Rule::unique($table, 'received_no'),
             ];
         }
-        $rules['receiveproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        $rules['receiveproduct.*.qty'] = ['required', 'numeric', 'gt:0'];
         return $rules;
     }
 
@@ -80,7 +80,7 @@ class CreatePurchaseReceivedRequest extends FormRequest
             'warehouse_id.required' => 'Nama Gudang Masih Belum dipilih',
             'order_id.required' => 'Order Pembelian Belum dipilih', 'receiveproduct.required' => 'Daftar barang yang akan diterima masih kosong', 'receiveproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'receiveproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
-            'receiveproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0'];
+            'receiveproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 1'];
     }
 
     public function failedValidation(Validator $validator)

@@ -624,7 +624,9 @@ class InvoiceController extends Controller
             'fromDate' => $fromDate,
             'untilDate' => $untilDate
         ])->setPaper('A4', 'portrait');
-
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream('kartu_hutang_rekap.pdf');
+        }
         return $pdf->download('kartu_hutang_rekap.pdf');
     }
 

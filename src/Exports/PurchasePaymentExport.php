@@ -28,7 +28,7 @@ class PurchasePaymentExport implements FromCollection, WithHeadings, ShouldAutoS
                 'payment_date' => $item->payment_date,
                 'payment_no' => $item->payment_no,
                 'vendor' => !empty($item->vendor) ? $item->vendor->vendor_name : "" ,
-                'total' => number_format($item->total, SettingRepo::getSeparatorFormat()),
+                'total' => $item->total,
                 'method' => !empty($item->payment_method) ? $item->payment_method->payment_name : "",
             ];
         });

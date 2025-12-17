@@ -2,8 +2,10 @@
 
 namespace Icso\Accounting\Repositories\Pembelian\Order;
 
+use Icso\Accounting\Enums\OrderTypeEnum;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Enums\TransactionType;
+use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Pembelian\Bast\PurchaseBastProduct;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderMeta;
@@ -140,13 +142,16 @@ class OrderRepo extends ElequentRepository
         DB::beginTransaction();
         try {
             if (empty($id)) {
-               $res = $this->handleNewOrder($arrData, $userId);
+               $res = $this->handleNewOrder($arrData, $userId,$orderType);
             } else {
                 $this->handleExistingOrder($arrData, $id, $requestId);
             }
 
             $this->processProducts( json_decode(json_encode($request->orderproduct)), $id ?? $res->id);
             $this->handleFileUploads($request->file('files'), $userId, $id ?? $res->id);
+            if(!empty($request->request_id)){
+                RequestRepo::changeStatusRequest($request->request_id);
+            }
             DB::commit();
             return true;
         } catch (\Exception $e) {
@@ -174,7 +179,6 @@ class OrderRepo extends ElequentRepository
             'tax_type' => $taxType,
             'total_dpp' => $totalDpp,
             'grandtotal' => $grandtotal,
-            'order_type' => $orderType,
             'updated_by' => $userId,
             'updated_at' => date('Y-m-d H:i:s')
         ];
@@ -182,9 +186,10 @@ class OrderRepo extends ElequentRepository
         return $arrData;
     }
 
-    public function handleNewOrder(array $arrData, $userId)
+    public function handleNewOrder(array $arrData, $userId, $orderType= ProductType::ITEM)
     {
         $arrData['order_status'] = StatusEnum::OPEN;
+        $arrData['order_type'] = $orderType;
         $arrData['reason'] = "";
         $arrData['created_at'] = date('Y-m-d H:i:s');
         $arrData['created_by'] = $userId;

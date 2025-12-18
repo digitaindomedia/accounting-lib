@@ -2,7 +2,6 @@
 
 namespace Icso\Accounting\Imports;
 
-use App\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Models\Master\Product;
@@ -13,6 +12,7 @@ use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Master\TaxRepo;
 use Icso\Accounting\Repositories\Master\Vendor\VendorRepo;
+use Icso\Accounting\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -231,7 +231,7 @@ class PurchaseInvoiceImport implements ToCollection
 
         $product1->discount_type = !empty($diskonItemType) ? $diskonItemType : "fix";
         $product1->request_product_id = 0;
-        $res = $this->invoiceRepo->saveOrderProduct($product1,$invoiceId,$taxType,$invoiceDate,$note,$this->userId,$warehouseId, new InventoryRepo(new Inventory()));
+        $res = $this->invoiceRepo->saveOrderProduct($product1,$invoiceId,$taxType,$invoiceDate,$note,$this->userId,$warehouseId, $this->orderType, new InventoryRepo(new Inventory()));
 
     }
 

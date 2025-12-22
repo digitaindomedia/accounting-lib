@@ -12,6 +12,7 @@ use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Repositories\Persediaan\Adjustment\AdjustmentRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Utils\Helpers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -59,6 +60,9 @@ class AdjustmentImport implements ToCollection
             $productId = ProductRepo::getProductId($KodeBarang);
             if ($this->hasValidationErrors($index, $row)) {
                 continue;
+            }
+            if(!empty($tanggalPenyesuaian)){
+                $tanggalPenyesuaian = Helpers::formatDateExcel($tanggalPenyesuaian);
             }
 
             if ($index > 1 && $statIns) {

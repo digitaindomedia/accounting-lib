@@ -15,7 +15,7 @@ class Mutation extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['created_by_name'];
+    protected $appends = ['created_by_name','attachments'];
 
     public static $rules = [
         'mutation_date' => 'required',
@@ -41,5 +41,17 @@ class Mutation extends Model
     public function towarehouse(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Warehouse::class,'to_warehouse_id');
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = MutationMeta::where('mutation_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

@@ -12,7 +12,7 @@ class PurchaseReceive extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['created_by_name'];
+    protected $appends = ['created_by_name','attachments'];
 
     public static $rules = [
         'order_id' => 'required',
@@ -27,5 +27,17 @@ class PurchaseReceive extends Model
     public function depression(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Depression::class,'receive_id');
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = PurchaseReceiveMeta::where('receive_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

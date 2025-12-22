@@ -99,7 +99,7 @@ class Product extends Model
 
     public function getImagesAttribute()
     {
-        $baseUrl = url('storage/'.tenant()->id.'/');
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
         $res = ProductMeta::where('product_id', $this->id)->where('meta_key','upload')->get();
         // Modify each meta_value to include the base URL
         $res->each(function ($item) use ($baseUrl) {

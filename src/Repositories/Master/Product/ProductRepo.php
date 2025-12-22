@@ -143,6 +143,7 @@ class ProductRepo extends ElequentRepository
                                 }
                                 $statusUpload = true;
                             } catch (\Exception $e) {
+                                Log::error($e->getMessage());
                                 $statusUpload = false;
                                 break;
                             }

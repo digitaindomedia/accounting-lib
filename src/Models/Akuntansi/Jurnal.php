@@ -11,7 +11,7 @@ class Jurnal extends Model
     protected $table = 'als_jurnal';
     protected $guarded = [];
     public $timestamps = false;
-    protected $appends = ['can_delete','income','outcome','total_debet', 'total_kredit'];
+    protected $appends = ['can_delete','income','outcome','total_debet', 'total_kredit','attachments'];
     public static $rules = [
         'jurnal_date' => 'date|required',
         'jurnal_akun' => 'required',
@@ -71,5 +71,17 @@ class Jurnal extends Model
     public function getTotalKreditAttribute()
     {
         return $this->jurnal_akun()->sum('kredit');
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = JurnalMeta::where('jurnal_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

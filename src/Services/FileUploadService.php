@@ -22,17 +22,14 @@ class FileUploadService
         }
 
         // Create directory for the user if it doesn't exist
-        $userDirectory = 'uploads/';
         $year = now()->format('Y');
         $month = now()->format('m');
-        $userDirectory = $userDirectory. '/' . $year . '/' . $month;
-        if (!Storage::exists($userDirectory)) {
-            Storage::makeDirectory($userDirectory);
-           // File::chmod(storage_path($userDirectory), 0777);
-        }
 
-        // Store the file in the user's directory
-        $filePath = $file->store($userDirectory);
+        // ✅ tenant-aware directory
+        $directory = "{$tenant->code}/uploads/{$year}/{$month}";
+
+        // ✅ STORE KE DISK PUBLIC
+        $filePath = $file->store($directory, 'public');
 
         $arrData = array(
             'user_id' => $userId,

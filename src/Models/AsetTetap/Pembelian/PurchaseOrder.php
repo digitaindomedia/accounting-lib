@@ -15,7 +15,7 @@ class PurchaseOrder extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['total_akumulasi_penyusutan', 'created_by_name'];
+    protected $appends = ['total_akumulasi_penyusutan', 'created_by_name','attachments'];
 
     public static $rules = [
         'nama_aset' => 'required',
@@ -57,5 +57,17 @@ class PurchaseOrder extends Model
     public function downpayment(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(PurchaseDownPayment::class, 'order_id');
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = PurchaseOrderMeta::where('order_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

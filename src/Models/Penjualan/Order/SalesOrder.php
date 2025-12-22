@@ -16,7 +16,7 @@ class SalesOrder extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['created_by_name', 'has_dp','total_dp','available_delivery'];
+    protected $appends = ['created_by_name', 'has_dp','total_dp','available_delivery','attachments'];
 
     public static $rules = [
         'order_date' => 'required',
@@ -72,5 +72,17 @@ class SalesOrder extends Model
         $salesOrderRepo = new SalesOrderRepo(new SalesOrder());
         $resDelivery = $salesOrderRepo->findInUseInDeliveryOrSpkById($this->id);
         return $resDelivery['order_product'];
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = SalesOrderMeta::where('order_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

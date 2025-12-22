@@ -18,7 +18,7 @@ class SalesInvoice extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['coa_piutang_lain','total_payment','created_by_name'];
+    protected $appends = ['coa_piutang_lain','total_payment','created_by_name','attachments'];
 
     public static $rules = [
         'sales_date' => 'required',
@@ -46,5 +46,17 @@ class SalesInvoice extends Model
     public function asettetap(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(PurchaseOrder::class, 'aset_tetap_id');
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = SalesInvoiceMeta::where('sales_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

@@ -6,7 +6,6 @@ namespace Icso\Accounting\Models\Penjualan\UangMuka;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
-use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryMeta;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Database\Eloquent\Model;
 
@@ -16,7 +15,7 @@ class SalesDownpayment extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['created_by_name'];
+    protected $appends = ['created_by_name','attachments'];
 
     public static $rules = [
         'downpayment_date' => 'required',
@@ -52,6 +51,18 @@ class SalesDownpayment extends Model
 
     public function downpaymentmeta(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->hasMany(SalesDeliveryMeta::class, 'dp_id');
+        return $this->hasMany(SalesDownPaymentMeta::class, 'dp_id');
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = SalesDownPaymentMeta::where('dp_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

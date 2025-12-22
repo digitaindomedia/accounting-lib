@@ -15,7 +15,7 @@ class SalesInvoicing extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['created_by_name'];
+    protected $appends = ['created_by_name','attachments'];
 
     public static $rules = [
         'invoice_date' => 'required'
@@ -54,6 +54,18 @@ class SalesInvoicing extends Model
     public function order(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(SalesOrder::class, 'order_id');
+    }
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = SalesInvoicingMeta::where('invoice_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 
 }

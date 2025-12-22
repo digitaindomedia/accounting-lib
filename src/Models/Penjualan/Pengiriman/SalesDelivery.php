@@ -13,7 +13,7 @@ class SalesDelivery extends Model
     protected $table = 'als_sales_delivery';
     protected $guarded = [];
     public $timestamps = false;
-    protected $appends = ['created_by_name'];
+    protected $appends = ['created_by_name','attachments'];
 
     public static $rules = [
         'delivery_date' => 'required',
@@ -51,5 +51,18 @@ class SalesDelivery extends Model
     public function deliveryproduct(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(SalesDeliveryProduct::class, 'delivery_id');
+    }
+
+
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = SalesDeliveryMeta::where('delivery_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
     }
 }

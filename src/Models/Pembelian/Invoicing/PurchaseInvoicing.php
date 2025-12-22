@@ -17,7 +17,7 @@ class PurchaseInvoicing extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['created_by_name'];
+    protected $appends = ['created_by_name','attachments'];
 
     public static $rules = [
         'invoice_date' => 'required',
@@ -59,5 +59,16 @@ class PurchaseInvoicing extends Model
         return $this->hasMany(PurchaseInvoicingReceived::class, 'invoice_id');
     }
 
+    public function getAttachmentsAttribute()
+    {
+        $baseUrl = url('storage/'.tenant()->id.'/app/public/');
+        $res = PurchaseInvoicingMeta::where('invoice_id', $this->id)->where('meta_key','upload')->get();
+        // Modify each meta_value to include the base URL
+        $res->each(function ($item) use ($baseUrl) {
+            $item->meta_value = $baseUrl . '/' . $item->meta_value;
+        });
+
+        return $res;
+    }
 
 }

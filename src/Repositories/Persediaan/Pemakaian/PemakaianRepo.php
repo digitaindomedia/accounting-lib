@@ -79,7 +79,7 @@ class PemakaianRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
-        $arrData = $this->prepareData($request);
+        $arrData = $this->prepareData($request,$userId);
 
         DB::beginTransaction();
         try {
@@ -104,7 +104,7 @@ class PemakaianRepo extends ElequentRepository
         }
     }
 
-    public function prepareData($request)
+    public function prepareData($request,$userId)
     {
         $refNo = !empty($request->ref_no) ? $request->ref_no : self::generateCodeTransaction(new StockUsage(), KeyNomor::NO_PEMAKAIAN_STOCK, 'ref_no', 'usage_date');
         $usageDate = !empty($request->usage_date) ? Utility::changeDateFormat($request->usage_date) : date('Y-m-d');
@@ -116,7 +116,7 @@ class PemakaianRepo extends ElequentRepository
             'warehouse_id' => !empty($request->warehouse_id) ? $request->warehouse_id : '0',
             'document' => !empty($request->document) ? $request->document : '',
             'coa_id' => !empty($request->coa_id) ? $request->coa_id : '0',
-            'updated_by' => $request->user_id,
+            'updated_by' => $userId,
             'updated_at' => date('Y-m-d H:i:s')
         ];
     }

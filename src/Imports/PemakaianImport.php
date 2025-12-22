@@ -103,7 +103,7 @@ class PemakaianImport implements ToCollection
         $request->usage_date = $tanggalPemakaian;
         $request->note = $note;
         $request->warehouse_id = $gudangId;
-        $arrData = $this->pemakaianRepo->prepareData($request);
+        $arrData = $this->pemakaianRepo->prepareData($request, $this->userId);
         $res = $this->pemakaianRepo->saveData($arrData,"",$this->userId);
         if($res){
             $this->insertPemakaianProduct($res->id,$produkId,$qty,$coaId,$noteItem);

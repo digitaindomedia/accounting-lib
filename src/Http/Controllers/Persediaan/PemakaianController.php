@@ -172,7 +172,7 @@ class PemakaianController extends Controller
             return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
         }
 
-        return response()->json(['status' => true, 'message' => 'Import file berhasil', 'data' => $import->getSuccess()], 200);
+        return response()->json(['status' => true,'success' => $import->getSuccessCount(),'errors' => count($import->getErrors()), 'message' => 'Import file berhasil', 'imported' => $import->getTotalRows()], 200);
     }
 
     private function prepareExportData(Request $request)

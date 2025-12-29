@@ -62,7 +62,7 @@ class PurchaseOrder extends Model
     public function getAttachmentsAttribute()
     {
         $baseUrl = url('storage/'.tenant()->id.'/app/public/');
-        $res = PurchaseOrderMeta::where('order_id', $this->id)->where('meta_key','upload')->get();
+        $res = PurchaseOrderMeta::where('aset_tetap_id', $this->id)->where('meta_key','upload')->get();
         // Modify each meta_value to include the base URL
         $res->each(function ($item) use ($baseUrl) {
             $item->meta_value = $baseUrl . '/' . $item->meta_value;

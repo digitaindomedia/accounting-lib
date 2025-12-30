@@ -83,10 +83,10 @@
             </tr>
         @endforeach
         <tr>
-            <td colspan="6"></td>
+            <td colspan="5"></td>
         </tr>
         <tr>
-            <td colspan="6"></td>
+            <td colspan="5"></td>
         </tr>
     @endforeach
     </tbody>

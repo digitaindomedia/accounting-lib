@@ -362,8 +362,8 @@ class InventoryController extends Controller
             $saldoAkhir = $saldoAwal + ($qtyIn - $qtyOut);
 
             $summary[] = [
-                'product_name' => $product->product_name,
-                'product_code' => $product->product_code,
+                'product_name' => $product->item_name,
+                'product_code' => $product->item_code,
                 'saldo_awal'   => $saldoAwal,
                 'qty_in'       => $qtyIn,
                 'qty_out'      => $qtyOut,

@@ -194,9 +194,17 @@ class PaymentRepo extends ElequentRepository
 
     public function deleteAdditional($idPayment)
     {
+        $paymentInvoices = SalesPaymentInvoice::where('payment_id', $idPayment)->get();
+        
         SalesPaymentInvoice::where('payment_id', $idPayment)->delete();
         SalesPaymentMeta::where('payment_id', $idPayment)->delete();
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PELUNASAN_PENJUALAN, $idPayment);
+
+        foreach ($paymentInvoices as $paymentInvoice) {
+            if ($paymentInvoice->invoice_id) {
+                InvoiceRepo::changeStatusInvoice($paymentInvoice->invoice_id);
+            }
+        }
     }
 
     /**

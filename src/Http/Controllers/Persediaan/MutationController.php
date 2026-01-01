@@ -2,12 +2,16 @@
 
 namespace Icso\Accounting\Http\Controllers\Persediaan;
 
+use Icso\Accounting\Exports\MutationStockExport;
+use Icso\Accounting\Exports\MutationStockReportExport;
 use Icso\Accounting\Http\Requests\CreateMutationRequest;
 use Icso\Accounting\Repositories\Persediaan\Mutation\MutationRepo;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Routing\Controller;
+use Maatwebsite\Excel\Facades\Excel;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class MutationController extends Controller
 {
@@ -27,6 +31,7 @@ class MutationController extends Controller
         $untilDate = $request->until_date;
         $warehouseId = $request->warehouse_id;
         $mutationType = $request->mutation_type;
+        $excludeStatusMutation = $request->exclude_status_mutation;
 
         $where=array();
         if(!empty($warehouseId)){
@@ -44,7 +49,12 @@ class MutationController extends Controller
                 'method' => 'where',
                 'value' => [['mutation_type','=',$mutationType]]);
         }
-        return compact('search', 'page', 'perpage', 'where');
+        if(!empty($excludeStatusMutation)){
+            $where[] = array(
+                'method' => 'where',
+                'value' => [['status_mutation','!=',$excludeStatusMutation]]);
+        }
+        return compact('search', 'page', 'perpage', 'where', 'fromDate', 'untilDate');
     }
 
     public function getAllData(Request $request): \Illuminate\Http\JsonResponse
@@ -152,5 +162,79 @@ class MutationController extends Controller
             $this->data['data'] = array();
         }
         return response()->json($this->data);
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $data = $this->mutationRepo->getAllDataBy($search, 0, 10000, $where);
+        if($type == 'excel'){
+            return $this->downloadExcel($data, $params, $filename);
+        } else {
+            return $this->downloadPdf($request, $data, $params, $filename);
+        }
+    }
+
+    private function downloadExcel($data, $params, $filename){
+        return Excel::download(new MutationStockReportExport($data,$params), $filename);
+    }
+
+    private function downloadPdf(Request $request, $data, $params, $filename){
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::stock.mutation_stock_report_pdf', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'landscape');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportReportExcel(Request $request)
+    {
+        return $this->exportReportAsFormat($request,'laporan-mutasi-stok.xlsx');
+    }
+
+    public function exportReportCsv(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-mutasi-stok.csv');
+    }
+
+    public function exportReportPdf(Request $request){
+        return $this->exportReportAsFormat($request,'laporan-mutasi-stok.pdf', 'pdf');
+    }
+
+    public function export(Request $request)
+    {
+        return $this->exportAsExport($request, 'mutasi-stok.xlsx');
+    }
+
+    public function exportCsv(Request $request)
+    {
+        return $this->exportAsExport($request, 'mutasi-stok.csv');
+    }
+
+    private function exportAsExport(Request $request, string $filename)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+        $data = $this->mutationRepo->getAllDataBy($search,$page,$perpage,$where);
+        return Excel::download(new MutationStockExport($data,$params), $filename);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+        $data = $this->mutationRepo->getAllDataBy($search,$page,$perpage,$where);
+        //$export = new MutationStockReportExport($data,$params);
+        $pdf = PDF::loadView('accounting::stock.mutation_stock_report', [
+            'data' => $data,
+            'params' => $params,
+        ]);
+        return $pdf->download('mutasi-stok.pdf');
     }
 }

@@ -813,9 +813,14 @@ class InvoiceRepo extends ElequentRepository
         $invoiceRepo = new self(new SalesInvoicing());
         $paymentInvoiceRepo = new PaymentInvoiceRepo(new SalesPaymentInvoice());
         $findInvoice = $invoiceRepo->findOne($idInvoice);
+        
+        if (!$findInvoice) return;
+
         $paid = $paymentInvoiceRepo->getAllPaymentByInvoiceId($idInvoice);
         if ($paid >= $findInvoice->grandtotal) {
             $invoiceRepo->update(['invoice_status' => StatusEnum::LUNAS], $idInvoice);
+        } else {
+            $invoiceRepo->update(['invoice_status' => StatusEnum::BELUM_LUNAS], $idInvoice);
         }
     }
 }

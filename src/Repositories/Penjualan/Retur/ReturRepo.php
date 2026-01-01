@@ -157,7 +157,10 @@ class ReturRepo extends ElequentRepository
             }
 
             // 3. Link to Payment (As Reduction)
-            InvoiceRepo::insertIntoPaymentFromRetur($request->invoice_id, $idRetur, $arrData['retur_date'], $arrData['total']);
+            /*if(!empty($request->invoice_id)){
+                InvoiceRepo::insertIntoPaymentFromRetur($request->invoice_id, $idRetur, $arrData['retur_date'], $arrData['total']);
+            }*/
+
 
             // 4. Posting Jurnal (CRITICAL)
             // Throws Exception if Unbalanced
@@ -181,9 +184,9 @@ class ReturRepo extends ElequentRepository
         $returNo = $request->retur_no ?: self::generateCodeTransaction(new SalesRetur(), KeyNomor::NO_RETUR_PENJUALAN, 'retur_no', 'retur_date');
 
         // Fix: Use NULL for optional Foreign Keys
-        $vendorId = !empty($request->vendor_id) ? Utility::remove_commas($request->vendor_id) : null;
-        $deliveryId = !empty($request->delivery_id) ? Utility::remove_commas($request->delivery_id) : null;
-        $invoiceId = !empty($request->invoice_id) ? Utility::remove_commas($request->invoice_id) : null;
+        $vendorId = !empty($request->vendor_id) ? Utility::remove_commas($request->vendor_id) : 0;
+        $deliveryId = !empty($request->delivery_id) ? Utility::remove_commas($request->delivery_id) : 0;
+        $invoiceId = !empty($request->invoice_id) ? Utility::remove_commas($request->invoice_id) : 0;
 
         return [
             'retur_no'      => $returNo,

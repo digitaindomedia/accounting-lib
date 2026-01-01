@@ -146,12 +146,12 @@ class ReturRepo extends ElequentRepository
                         'unit_id'           => $item->unit_id,
                         'tax_id'            => $item->tax_id ?? 0,
                         'tax_percentage'    => $item->tax_percentage ?? 0,
-                        'hpp_price'         => Utility::remove_commas($item->hpp_price ?? 0),
-                        'buy_price'         => Utility::remove_commas($item->buy_price ?? 0),
+                        'hpp_price'         => (float) Utility::remove_commas($item->hpp_price ?? 0),
+                        'buy_price'         => (float) Utility::remove_commas($item->buy_price ?? 0),
                         'tax_type'          => $item->tax_type ?? '',
                         'discount_type'     => $item->discount_type ?? '',
-                        'discount'          => Utility::remove_commas($item->discount ?? 0),
-                        'subtotal'          => Utility::remove_commas($item->subtotal ?? 0),
+                        'discount'          => (float) Utility::remove_commas($item->discount ?? 0),
+                        'subtotal'          => (float) Utility::remove_commas($item->subtotal ?? 0),
                         'receive_product_id'=> $item->receive_product_id ?? 0,
                         'order_product_id'  => $item->order_product_id ?? 0,
                         'multi_unit'        => 0,
@@ -167,7 +167,7 @@ class ReturRepo extends ElequentRepository
                     $reqInv->qty_out = $item->qty;
                     $reqInv->warehouse_id = $request->warehouse_id;
                     $reqInv->product_id = $item->product_id;
-                    $reqInv->price = Utility::remove_commas($item->hpp_price ?? 0);
+                    $reqInv->price = (float) Utility::remove_commas($item->hpp_price ?? 0);
                     $reqInv->note = $data['note'];
                     $reqInv->unit_id = $item->unit_id;
                     $reqInv->transaction_id = $returId;
@@ -208,9 +208,9 @@ class ReturRepo extends ElequentRepository
             'retur_no'   => $returNo,
             'retur_date' => $request->retur_date ? Utility::changeDateFormat($request->retur_date) : date('Y-m-d'),
             'note'       => $request->note,
-            'subtotal'   => Utility::remove_commas($request->subtotal),
-            'total_tax'  => $request->total_tax ? Utility::remove_commas($request->total_tax) : 0,
-            'total'      => $request->total ? Utility::remove_commas($request->total) : 0,
+            'subtotal'   => (float) Utility::remove_commas($request->subtotal),
+            'total_tax'  => $request->total_tax ? (float) Utility::remove_commas($request->total_tax) : 0,
+            'total'      => $request->total ? (float) Utility::remove_commas($request->total) : 0,
             'vendor_id'  => $request->vendor_id ?? 0,
             'receive_id' => $request->receive_id ?? 0,
             'invoice_id' => $request->invoice_id ?? 0,
@@ -241,7 +241,7 @@ class ReturRepo extends ElequentRepository
         $journalEntries[] = [
             'coa_id' => $coaUtangUsaha,
             'posisi' => 'debet',
-            'nominal'=> $find->total,
+            'nominal'=> (float) $find->total,
             'sub_id' => 0,
             'note'   => $note
         ];
@@ -251,7 +251,7 @@ class ReturRepo extends ElequentRepository
             // A. Credit Inventory (Reduce Asset)
             // Value = Qty * HPP
             $coaInventory = $item->product->coa_id ?? $coaSediaan;
-            $subtotalHpp = $item->qty * $item->hpp_price;
+            $subtotalHpp = $item->qty * (float) $item->hpp_price;
 
             $journalEntries[] = [
                 'coa_id' => $coaInventory,

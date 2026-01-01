@@ -62,13 +62,13 @@ class InventoryRepo extends ElequentRepository
         $userId = $request->user_id;
         $transactionId = !empty($request->transaction_id) ? $request->transaction_id : 0;
         $transactionSubId = !empty($request->transaction_sub_id) ? $request->transaction_sub_id : 0;
-        $qtyIn = !empty($request->qty_in) ? $request->qty_in : 0;
-        $qtyOut = !empty($request->qty_out) ? $request->qty_out : 0;
+        $qtyIn = !empty($request->qty_in) ? (float) $request->qty_in : 0;
+        $qtyOut = !empty($request->qty_out) ? (float) $request->qty_out : 0;
         $coaId = !empty($request->coa_id) ? $request->coa_id : 0;
         $warehouseId = !empty($request->warehouse_id) ? $request->warehouse_id : '0';
         $productId = !empty($request->product_id) ? $request->product_id : '0';
         $note = !empty($request->note) ? $request->note : '';
-        $price =Utility::remove_commas($request->price);
+        $price = (float) Utility::remove_commas($request->price);
         $unitId = !empty($request->unit_id) ? $request->unit_id : 0;
 
 
@@ -78,7 +78,7 @@ class InventoryRepo extends ElequentRepository
                 if($findProduct->unit_id != $unitId){
                     $findConvertion = ProductConvertion::where(array('product_id' => $productId, 'unit_id' => $unitId))->first();
                     if(!empty($findConvertion)){
-                        $nilai = $findConvertion->nilai_terkecil;
+                        $nilai = (float) $findConvertion->nilai_terkecil;
                         $qtyIn = $qtyIn * $nilai;
                         $price = $price / $nilai;
                     }
@@ -92,7 +92,7 @@ class InventoryRepo extends ElequentRepository
                 if($findProduct->unit_id != $unitId){
                     $findConvertion = ProductConvertion::where(array('product_id' => $productId, 'unit_id' => $unitId))->first();
                     if(!empty($findConvertion)){
-                        $nilai = $findConvertion->nilai_terkecil;
+                        $nilai = (float) $findConvertion->nilai_terkecil;
                         $qtyOut = $qtyOut * $nilai;
                         $price = $price / $nilai;
                     }

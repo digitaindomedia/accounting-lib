@@ -699,7 +699,7 @@ class InvoiceRepo extends ElequentRepository
             if(!empty($findInvoice) && $findInvoice->invoice_status == StatusEnum::BELUM_LUNAS){
                 PurchasePaymentInvoice::create([
                     'invoice_no' => $findInvoice->invoice_no,
-                    'total_payment' => Utility::remove_commas($total),
+                    'total_payment' => (float) Utility::remove_commas($total),
                     'payment_date' => $returDate,
                     'total_discount' => '0',
                     'coa_id_discount' => "",

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Laporan Penyesuaian Stok</title>
+    <title>Laporan Mutasi Stok</title>
     <style>
         table {
             width: 100%;
@@ -18,23 +18,27 @@
     </style>
 </head>
 <body>
-<h1 style="text-align: center;">Laporan Penyesuaian Stok</h1>
+<h1 style="text-align: center;">Laporan Mutasi Stok</h1>
 <table>
     <thead>
     <tr>
         <th>Tanggal</th>
-        <th>Nomor Penyesuaian</th>
-        <th>Nama Gudang</th>
-        <th>Akun Penyesuaian</th>
+        <th>Nomor Referensi</th>
+        <th>Tipe Mutasi</th>
+        <th>Dari Gudang</th>
+        <th>Ke Gudang</th>
+        <th>Catatan</th>
     </tr>
     </thead>
     <tbody>
     @foreach ($data as $item)
         <tr>
-            <td>{{ $item['adjustment_date'] }}</td>
+            <td>{{ $item['mutation_date'] }}</td>
             <td>{{ $item['ref_no'] }}</td>
-            <td>{{ $item['warehouse']['warehouse_name'] ?? '' }}</td>
-            <td>{{ $item['coa_adjustment']['coa_name'] ?? '' }}</td>
+            <td>{{ $item['mutation_type'] == 'mutation_in' ? 'Masuk' : 'Keluar' }}</td>
+            <td>{{ $item['fromwarehouse']['warehouse_name'] ?? '-' }}</td>
+            <td>{{ $item['towarehouse']['warehouse_name'] ?? '-' }}</td>
+            <td>{{ $item['note'] }}</td>
         </tr>
     @endforeach
     </tbody>

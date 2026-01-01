@@ -9,6 +9,8 @@ class StatusEnum
     public const BATAL = 'batal';
 
     public const OPEN = "open";
+    public const CLOSE = "close";
+    public const PARSIAL = "parsial";
     public const BAYAR_SEBAGIAN = "bayar sebagian";
     public const DRAFT = "selesai";
 

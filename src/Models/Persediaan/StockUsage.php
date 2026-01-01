@@ -49,7 +49,7 @@ class StockUsage extends Model
     public function getAttachmentsAttribute()
     {
         $baseUrl = url('storage/'.tenant()->id.'/app/public/');
-        $res = StockUsageMeta::where('bast_id', $this->id)->where('meta_key','upload')->get();
+        $res = StockUsageMeta::where('usage_stock_id', $this->id)->where('meta_key','upload')->get();
         // Modify each meta_value to include the base URL
         $res->each(function ($item) use ($baseUrl) {
             $item->meta_value = $baseUrl . '/' . $item->meta_value;

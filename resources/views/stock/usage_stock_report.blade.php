@@ -32,7 +32,7 @@
         <tr>
             <td>{{ $item['usage_date'] }}</td>
             <td>{{ $item['ref_no'] }}</td>
-            <td>{{ $item['warehouse'] }}</td>
+            <td>{{ $item['warehouse']['warehouse_name'] ?? '' }}</td>
         </tr>
     @endforeach
     </tbody>

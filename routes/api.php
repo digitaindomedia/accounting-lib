@@ -550,5 +550,10 @@ Route::group([
         Route::post('save-data',[MutationController::class, 'store']);
         Route::delete('delete', [MutationController::class, 'destroy']);
         Route::delete('delete-all', [MutationController::class, 'deleteAll']);
+        Route::get('export-excel', [MutationController::class, 'export']);
+        Route::get('export-csv', [MutationController::class, 'exportCsv']);
+        Route::get('export-pdf', [MutationController::class, 'exportPdf']);
+        Route::get('export-excel-report', [MutationController::class, 'exportReportExcel']);
+        Route::get('export-pdf-report', [MutationController::class, 'exportReportPdf']);
     });
 });

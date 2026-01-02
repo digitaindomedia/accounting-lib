@@ -414,8 +414,14 @@ class InvoiceRepo extends ElequentRepository
                 $receive = $recInv->receive;
                 if(!$receive) continue;
 
+                $totalTaxRec = 0;
+
                 // Loop items to calculate Taxes (VAT In)
                 foreach($receive->receiveproduct as $itemRec) {
+                    if (empty($itemRec->tax_type)) {
+                        $itemRec->tax_type = $find->tax_type;
+                    }
+
                     $taxes = $this->calculateTaxComponents($itemRec, $itemRec->subtotal);
                     foreach($taxes as $tax) {
                         $journalEntries[] = [
@@ -425,11 +431,20 @@ class InvoiceRepo extends ElequentRepository
                             'sub_id' => $itemRec->id,
                             'note'   => 'PPN Received'
                         ];
+
+                        if ($itemRec->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $tax['posisi'] == 'debet') {
+                            $totalTaxRec += $tax['nominal'];
+                        }
                     }
                 }
 
                 // Debit "Utang Belum Realisasi" (Reversing the Credit from Receive)
                 $totalHppRec = ReceiveRepo::getTotalReceivedByHpp($recInv->receive_id);
+
+                if ($totalTaxRec > 0) {
+                    $totalHppRec -= $totalTaxRec;
+                }
+
                 $journalEntries[] = [
                     'coa_id' => $settings['coa_utang_belum'],
                     'posisi' => 'debet',

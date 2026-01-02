@@ -40,8 +40,6 @@ class ReceiveRepo extends ElequentRepository
         $this->model = $model;
     }
 
-    // ... [Keep getAllDataBy, getAllTotalDataBy, getAllDataBetweenBy, getAllTotalDataBetweenBy unchanged] ...
-
     public function getAllDataBy($search, $page, $perpage, array $where = [])
     {
         $model = new $this->model;
@@ -252,6 +250,16 @@ class ReceiveRepo extends ElequentRepository
                 $note = !empty($find->note) ? $find->note : 'Penerimaan Barang ' . $productName;
                 $subtotalHpp = $item->hpp_price * $item->qty;
 
+                if($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE){
+                    $calc = Helpers::hitungTaxDpp($item->subtotal, $item->tax_id, $item->tax_type, $item->tax_percentage, $item->tax_group);
+                    if(is_array($calc) && isset($calc[TypeEnum::DPP])){
+                        $subtotalHpp = $calc[TypeEnum::DPP];
+                    } elseif ($item->tax_percentage > 0) {
+                        $calc = Helpers::hitungIncludeTax($item->tax_percentage, $item->subtotal);
+                        $subtotalHpp = $calc[TypeEnum::DPP];
+                    }
+                }
+
                 // Create Debit Entry
                 $journalEntries[] = [
                     'coa_id' => $coaId,
@@ -356,14 +364,21 @@ class ReceiveRepo extends ElequentRepository
         $subtotalDpp = $netTotal;
 
         // Calculate DPP if Tax exists
-        if (!empty($op->tax_id)) {
-            // Usually for Receiving, we record the Asset Value.
-            // If Tax is Non-Refundable (Capitalized), it increases Asset Value.
-            // If Tax is Recoverable (VAT), it does not.
-            // Assuming standard VAT is recoverable, DPP is the base.
-            $taxCalc = Helpers::hitungTaxDpp($netTotal, $op->tax_id, $op->tax_type, $op->tax_percentage);
-            if (!empty($taxCalc)) {
+        if (!empty($op->tax_id) || ($op->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $op->tax_percentage > 0)) {
+            $taxCalc = null;
+            
+            // Try using the helper which handles groups and signs, if tax_id is present
+            if (!empty($op->tax_id)) {
+                $taxCalc = Helpers::hitungTaxDpp($netTotal, $op->tax_id, $op->tax_type, $op->tax_percentage, $op->tax_group);
+            }
+
+            if (is_array($taxCalc) && isset($taxCalc[TypeEnum::DPP])) {
                 $subtotalDpp = $taxCalc[TypeEnum::DPP];
+            } elseif ($op->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $op->tax_percentage > 0) {
+                // Fallback for include tax if helper failed (e.g. tax_id missing or tax deleted)
+                // Assumes additive tax (standard VAT)
+                $calc = Helpers::hitungIncludeTax($op->tax_percentage, $netTotal);
+                $subtotalDpp = $calc[TypeEnum::DPP];
             }
         }
 

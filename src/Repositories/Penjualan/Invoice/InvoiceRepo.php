@@ -823,4 +823,19 @@ class InvoiceRepo extends ElequentRepository
             $invoiceRepo->update(['invoice_status' => StatusEnum::BELUM_LUNAS], $idInvoice);
         }
     }
+
+    public static function getTotalInvoiceBySaldoAwalCoaId($coaId)
+    {
+        $getTotal = SalesInvoicing::where(array('coa_id' => $coaId, 'input_type' => InputType::SALDO_AWAL))->sum('grandtotal');
+        return $getTotal;
+    }
+
+    public static function sumGrandTotalByVendor($vendorId, $dari, $sampai='', $sign='between'){
+        if($sign == 'between') {
+            $total = SalesInvoicing::where([['vendor_id', '=', $vendorId]])->whereBetween('invoice_date',[$dari,$sampai])->sum('grandtotal');
+        } else{
+            $total = SalesInvoicing::where([['invoice_date', $sign, $dari], ['vendor_id', '=', $vendorId]])->sum('grandtotal');
+        }
+        return $total;
+    }
 }

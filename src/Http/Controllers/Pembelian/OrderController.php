@@ -202,6 +202,13 @@ class OrderController extends Controller
     }
 
     public function delete(Request $request){
+        $countDp = PurchaseDownPayment::where('order_id', $request->id)->count();
+        if($countDp > 0){
+            $this->data['status'] = false;
+            $this->data['message'] = "Data gagal dihapus, sudah ada uang muka";
+            return response()->json($this->data);
+        }
+
         $res = $this->purchaseOrderRepo->delete($request->id);
         if($res){
             $this->data['status'] = true;
@@ -220,6 +227,12 @@ class OrderController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
+                $countDp = PurchaseDownPayment::where('order_id', $id)->count();
+                if($countDp > 0){
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+
                 $res = $this->purchaseOrderRepo->delete($id);
                 if($res){
                     $successDelete = $successDelete + 1;

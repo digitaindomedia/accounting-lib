@@ -81,7 +81,6 @@ class ReceiveRepo extends ElequentRepository
         $model = new $this->model;
         return $model->when(!empty($search), function ($query) use($search){
             $query->where('receive_no', 'like', '%' .$search. '%');
-            // ... same search logic ...
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
@@ -89,21 +88,16 @@ class ReceiveRepo extends ElequentRepository
         })->orderBy('receive_date','desc')->count();
     }
 
-    /**
-     * Store with strict Atomic Transaction
-     */
     public function store(Request $request, array $other = [])
     {
         $inventoryRepo = new InventoryRepo(new Inventory());
         $id = $request->id;
         $userId = $request->user_id;
 
-        // Prepare Header Data
         $dataHeader = $this->gatherHeaderData($request);
 
         DB::beginTransaction();
         try {
-            // 1. Create/Update Header
             if (empty($id)) {
                 $dataHeader['created_at'] = date('Y-m-d H:i:s');
                 $dataHeader['created_by'] = $userId;
@@ -113,24 +107,19 @@ class ReceiveRepo extends ElequentRepository
             } else {
                 $this->update($dataHeader, $id);
                 $recId = $id;
-                // Cleanup existing details if updating
                 $this->deleteAdditional($recId);
             }
 
-            // 2. Process Products
             $products = is_array($request->receiveproduct) ? $request->receiveproduct : json_decode(json_encode($request->receiveproduct));
 
             if (!empty($products)) {
                 foreach ($products as $item) {
-                    $item = (object)$item; // Ensure object access
+                    $item = (object)$item;
 
-                    // A. Validation
                     $this->validateOrderQty($item->order_product_id, $item->qty);
 
-                    // B. Calculation (HPP)
                     $detailHpp = $this->calculateHppAndTax($item->order_product_id, $item->qty);
 
-                    // C. Save Detail
                     $subtotal = Helpers::hitungSubtotal($item->qty, $item->buy_price, $item->discount, $item->discount_type);
 
                     $resItem = PurchaseReceivedProduct::create([
@@ -152,7 +141,6 @@ class ReceiveRepo extends ElequentRepository
                         'discount_type'     => $detailHpp['discount_type'],
                     ]);
 
-                    // D. Update Inventory (Log)
                     $reqInv = new Request();
                     $reqInv->coa_id = $detailHpp['coa_id'] ?: 0;
                     $reqInv->user_id = $userId;
@@ -171,14 +159,10 @@ class ReceiveRepo extends ElequentRepository
                 }
             }
 
-            // 3. Posting Jurnal (CRITICAL)
-            // Will Throw Exception if Unbalanced
             $this->postingJurnal($recId);
 
-            // 4. Update Order Status
             OrderRepo::changeStatusPenerimaan($request->order_id);
 
-            // 5. File Upload
             $this->handleFileUploads($request->file('files'), $recId, $userId);
 
             DB::commit();
@@ -187,19 +171,15 @@ class ReceiveRepo extends ElequentRepository
         } catch (Exception $e) {
             DB::rollBack();
             Log::error("Receive Store Error: " . $e->getMessage());
-            // Return false or rethrow based on controller needs
             return false;
         }
     }
 
-    /**
-     * Helper to gather header data
-     */
     private function gatherHeaderData(Request $request)
     {
         $receivedNo = $request->received_no ?: self::generateCodeTransaction(new PurchaseReceived(), KeyNomor::NO_PENERIMAAN_PEMBELIAN, 'receive_no', 'receive_date');
         $order = json_decode(json_encode($request->order));
-        $vendorId = $order->vendor->id ?? $request->vendor_id; // Robust handling
+        $vendorId = $order->vendor->id ?? $request->vendor_id;
 
         return [
             'receive_date'   => $request->received_date ? Utility::changeDateFormat($request->received_date) : date("Y-m-d"),
@@ -215,12 +195,9 @@ class ReceiveRepo extends ElequentRepository
         ];
     }
 
-    /**
-     * Refactored Posting Jurnal with Balance Check
-     */
     public function postingJurnal($id)
     {
-        $find = $this->model->with(['receiveproduct.product'])->find($id);
+        $find = $this->model->with(['receiveproduct.product', 'order'])->find($id);
 
         if (!$find) return;
 
@@ -233,10 +210,8 @@ class ReceiveRepo extends ElequentRepository
         $totalDebit = 0;
         $totalCredit = 0;
 
-        // 1. Calculate Inventory/Asset Debits
         if ($find->receiveproduct) {
             foreach ($find->receiveproduct as $item) {
-                // Determine COA
                 $coaId = $settings['coa_sediaan'];
                 $productName = "";
 
@@ -250,17 +225,6 @@ class ReceiveRepo extends ElequentRepository
                 $note = !empty($find->note) ? $find->note : 'Penerimaan Barang ' . $productName;
                 $subtotalHpp = $item->hpp_price * $item->qty;
 
-                if($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE){
-                    $calc = Helpers::hitungTaxDpp($item->subtotal, $item->tax_id, $item->tax_type, $item->tax_percentage, $item->tax_group);
-                    if(is_array($calc) && isset($calc[TypeEnum::DPP])){
-                        $subtotalHpp = $calc[TypeEnum::DPP];
-                    } elseif ($item->tax_percentage > 0) {
-                        $calc = Helpers::hitungIncludeTax($item->tax_percentage, $item->subtotal);
-                        $subtotalHpp = $calc[TypeEnum::DPP];
-                    }
-                }
-
-                // Create Debit Entry
                 $journalEntries[] = [
                     'coa_id' => $coaId,
                     'posisi' => 'debet',
@@ -271,8 +235,6 @@ class ReceiveRepo extends ElequentRepository
             }
         }
 
-        // 2. Calculate Unbilled Payable Credit (Total of all HPPs)
-        // Summing up all HPP values from the loop above for the Credit side
         $totalHpp = 0;
         foreach ($journalEntries as $entry) {
             $totalHpp += $entry['nominal'];
@@ -288,7 +250,6 @@ class ReceiveRepo extends ElequentRepository
             ];
         }
 
-        // 3. Balance Check
         foreach ($journalEntries as $entry) {
             if ($entry['posisi'] == 'debet') $totalDebit += $entry['nominal'];
             else $totalCredit += $entry['nominal'];
@@ -298,7 +259,6 @@ class ReceiveRepo extends ElequentRepository
             throw new Exception("Jurnal Penerimaan {$find->receive_no} Tidak Balance! Debet: " . number_format($totalDebit) . ", Kredit: " . number_format($totalCredit));
         }
 
-        // 4. Save to DB
         $jurnalRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
         foreach ($journalEntries as $entry) {
             $jurnalRepo->create([
@@ -321,15 +281,11 @@ class ReceiveRepo extends ElequentRepository
         }
     }
 
-    /**
-     * Helper: Validate if Receiving more than Ordered
-     */
     private function validateOrderQty($orderProductId, $newQty)
     {
         $orderProduct = PurchaseOrderProduct::with('product')->find($orderProductId);
         if (!$orderProduct) throw new Exception("Order Product ID {$orderProductId} tidak ditemukan");
 
-        // Total previously received (excluding current receive if strictly insert, but handled by deleteAdditional on update)
         $totalReceived = PurchaseReceivedProduct::where('order_product_id', $orderProductId)->sum('qty');
 
         if (($totalReceived + $newQty) > $orderProduct->qty) {
@@ -338,9 +294,6 @@ class ReceiveRepo extends ElequentRepository
         }
     }
 
-    /**
-     * Refactored Logic for HPP Calculation
-     */
     private function calculateHppAndTax($orderProductId, $qty)
     {
         $op = PurchaseOrderProduct::with('product')->find($orderProductId);
@@ -349,12 +302,10 @@ class ReceiveRepo extends ElequentRepository
         $totalPrice = $qty * $op->price;
         $discountAmount = 0;
 
-        // Calculate Discount
         if ($op->discount > 0) {
             if ($op->discount_type == TypeEnum::DISCOUNT_TYPE_PERCENT) {
                 $discountAmount = ($op->discount / 100) * $totalPrice;
             } else {
-                // Prorate fixed discount
                 $totalOrderVal = $op->qty * $op->price;
                 $discountAmount = Helpers::hitungProporsi($totalPrice, $totalOrderVal, $op->discount);
             }
@@ -363,26 +314,31 @@ class ReceiveRepo extends ElequentRepository
         $netTotal = $totalPrice - $discountAmount;
         $subtotalDpp = $netTotal;
 
-        // Calculate DPP if Tax exists
-        if (!empty($op->tax_id) || ($op->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $op->tax_percentage > 0)) {
+        $taxType = $op->tax_type;
+        $order = DB::table('als_purchase_order')->where('id', $op->order_id)->first();
+        if ($order) {
+            $taxType = $order->tax_type;
+        }
+
+        if ($taxType == TypeEnum::TAX_TYPE_INCLUDE) {
             $taxCalc = null;
-            
-            // Try using the helper which handles groups and signs, if tax_id is present
             if (!empty($op->tax_id)) {
-                $taxCalc = Helpers::hitungTaxDpp($netTotal, $op->tax_id, $op->tax_type, $op->tax_percentage, $op->tax_group);
+                $taxCalc = Helpers::hitungTaxDpp($netTotal, $op->tax_id, $taxType, $op->tax_percentage, $op->tax_group);
             }
 
             if (is_array($taxCalc) && isset($taxCalc[TypeEnum::DPP])) {
                 $subtotalDpp = $taxCalc[TypeEnum::DPP];
-            } elseif ($op->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $op->tax_percentage > 0) {
-                // Fallback for include tax if helper failed (e.g. tax_id missing or tax deleted)
-                // Assumes additive tax (standard VAT)
+            } elseif ($op->tax_percentage > 0) {
                 $calc = Helpers::hitungIncludeTax($op->tax_percentage, $netTotal);
                 $subtotalDpp = $calc[TypeEnum::DPP];
             }
+        } elseif (!empty($op->tax_id)) {
+            $taxCalc = Helpers::hitungTaxDpp($netTotal, $op->tax_id, $taxType, $op->tax_percentage, $op->tax_group);
+            if (is_array($taxCalc) && isset($taxCalc[TypeEnum::DPP])) {
+                $subtotalDpp = $taxCalc[TypeEnum::DPP];
+            }
         }
 
-        // HPP is DPP / Qty
         $hpp = ($qty > 0) ? $subtotalDpp / $qty : 0;
 
         $coaId = SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN);
@@ -398,7 +354,7 @@ class ReceiveRepo extends ElequentRepository
             'tax_percentage' => $op->tax_percentage,
             'tax_group'      => $op->tax_group,
             'discount'       => $discountAmount,
-            'tax_type'       => $op->tax_type,
+            'tax_type'       => $taxType,
             'coa_id'         => $coaId,
             'discount_type'  => $op->discount_type
         ];
@@ -434,8 +390,6 @@ class ReceiveRepo extends ElequentRepository
         }
     }
 
-    // ... [Keep getTotalReceived, getTotalReceivedByHpp, getQtyRetur, getReceivedProduct, getTransaksi, changeStatusPenerimaanById unchanged] ...
-
     public function getTotalReceived($id){
         $find = $this->findOne($id,array(),['receiveproduct']);
         $total = 0;
@@ -447,7 +401,7 @@ class ReceiveRepo extends ElequentRepository
                     if($item->discount_type == TypeEnum::DISCOUNT_TYPE_PERCENT){
                         $discount = ($item->discount / 100) * $subtotal;
                     } else {
-                        $discount = $item->discount; // Note: Ensure this logic matches pro-ration if needed
+                        $discount = $item->discount;
                     }
                 }
                 $total += ($subtotal - $discount);

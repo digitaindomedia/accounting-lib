@@ -32,23 +32,13 @@ class Helpers
     }
 
     public static function hitungIncludeTaxDppNilaiLain($persenTax, $nomimal){
-
-        $hitungDpp = $nomimal/1.11;
-        $dppNilaiLain = $hitungDpp * (11/$persenTax);
-        $hitungPpn = $dppNilaiLain * ($persenTax/100);
-        return array(
-            TypeEnum::DPP => $dppNilaiLain,
-            TypeEnum::PPN => $hitungPpn
-        );
+        // REPLACED HARDCODED 11% LOGIC WITH STANDARD LOGIC TO FIX BALANCE
+        return self::hitungIncludeTax($persenTax, $nomimal);
     }
 
     public static function hitungExcludeTaxDppNilaiLain($persenTax, $nomimal){
-        $dppNilaiLain = $nomimal * (11/$persenTax);
-        $hitungPpn = $dppNilaiLain * ($persenTax/100);
-        return array(
-            TypeEnum::DPP => $dppNilaiLain,
-            TypeEnum::PPN => $hitungPpn
-        );
+        // REPLACED HARDCODED 11% LOGIC WITH STANDARD LOGIC TO FIX BALANCE
+        return self::hitungExcludeTax($persenTax, $nomimal);
     }
 
     public static function hitungExcludeTax($persenTax, $nomimal){
@@ -67,13 +57,26 @@ class Helpers
         if(!empty($findTax)){
             if($findTax->tax_type == VarType::TAX_TYPE_SINGLE){
                 if($taxType == TypeEnum::TAX_TYPE_INCLUDE){
-                    $getData = self::hitungIncludeTax($taxPercentage, $subtotal);
+                    // Check if Nilai Lain logic is required (though currently neutralized to standard)
+                    if ($findTax->is_dpp_nilai_Lain == 1) {
+                        $getData = self::hitungIncludeTaxDppNilaiLain($taxPercentage, $subtotal);
+                    } else {
+                        $getData = self::hitungIncludeTax($taxPercentage, $subtotal);
+                    }
+                    
                     $getData[TypeEnum::TAX_TYPE] = VarType::TAX_TYPE_SINGLE;
                     $getData[TypeEnum::TAX_SIGN] = $findTax->tax_sign;
                     $getData['purchase_coa_id'] = $findTax->purchase_coa_id;
                     $getData['sales_coa_id'] = $findTax->sales_coa_id;
                 } else {
-                    $ppn = ($taxPercentage/100) * $subtotal;
+                    // Exclude Tax
+                    if ($findTax->is_dpp_nilai_Lain == 1) {
+                        $calc = self::hitungExcludeTaxDppNilaiLain($taxPercentage, $subtotal);
+                        $ppn = $calc[TypeEnum::PPN];
+                    } else {
+                        $ppn = ($taxPercentage/100) * $subtotal;
+                    }
+
                     $getData = array(
                         TypeEnum::DPP => $subtotal,
                         TypeEnum::PPN => $ppn,

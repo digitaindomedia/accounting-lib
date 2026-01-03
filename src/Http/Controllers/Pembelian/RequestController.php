@@ -216,7 +216,7 @@ class RequestController extends Controller
             $filters['whereBetween']
         );
         $export = new PurchaseRequestExport($data);
-        $pdf = PDF::loadView('purchase/purchase_request_pdf', ['arrData' => $export->getData()]);
+        $pdf = PDF::loadView('accounting::purchase.purchase_request_pdf', ['arrData' => $export->getData()]);
 
         return $pdf->download('permintaan-pembelian.pdf');
     }

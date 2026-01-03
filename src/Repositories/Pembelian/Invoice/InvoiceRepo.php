@@ -50,7 +50,6 @@ class InvoiceRepo extends ElequentRepository
         $this->model = $model;
     }
 
-    // ... [Keep getAllDataBy and getAllTotalDataBy as they were in original] ...
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
     {
         $model = new $this->model;
@@ -90,9 +89,6 @@ class InvoiceRepo extends ElequentRepository
         })->count();
     }
 
-    /**
-     * Store method with strict Transaction Handling
-     */
     public function store(Request $request, array $other = []): bool
     {
         $inventoryRepo = new InventoryRepo(new Inventory());
@@ -103,24 +99,19 @@ class InvoiceRepo extends ElequentRepository
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
 
         try {
-            // 1. Create Invoice Header
             $invoice = $this->saveInvoice($data, $request->id, $userId);
 
             if ($invoice) {
                 $idInvoice = $request->id ?? $invoice->id;
 
-                // Cleanup existing data if updating
                 if(!empty($request->id)){
                     $this->deleteAdditional($request->id);
                 }
 
-                // 2. Handle Details
                 $this->handleOrderProducts($request->orderproduct, $idInvoice, $data['tax_type'], $data['invoice_date'], $data['note'], $userId, $data['warehouse_id'], $request->input_type, $inventoryRepo);
                 $this->handleDownPayments($request->dp, $idInvoice);
                 $this->handleReceivedProducts($request->receive, $idInvoice);
 
-                // 3. Posting Jurnal (CRITICAL STEP)
-                // This will now THROW an exception if Debits != Credits
                 if ($data['input_type'] != InputType::JURNAL) {
                     $this->postingJurnal($idInvoice);
                 }
@@ -137,15 +128,9 @@ class InvoiceRepo extends ElequentRepository
             DB::rollBack();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
             Log::error("Invoice Store Error: " . $e->getMessage() . " - Trace: " . $e->getTraceAsString());
-            // Rethrow or return false based on controller needs. Returning false usually safer for UI.
             return false;
         }
     }
-
-    // ... [gatherInputData, saveInvoice, handleOrderProducts, saveOrderProduct, addInventory, handleDownPayments, handleReceivedProducts, handleFileUploads, deleteAdditional - KEEP AS IS] ...
-
-    // (Note: For brevity in this response, I assume the standard helper methods above
-    // are unchanged from your original code. I will focus on the refactored postingJurnal below.)
 
     public function gatherInputData(Request $request): array
     {
@@ -162,7 +147,7 @@ class InvoiceRepo extends ElequentRepository
             'input_type' => $request->input_type,
             'order_id' => $request->order_id ?? '0',
             'dp_nominal' => $request->dp_nominal ?? '0',
-            'coa_id' => $request->coa_id ?? '0', // This is default COA for invoice
+            'coa_id' => $request->coa_id ?? '0',
             'jurnal_id' => $request->jurnal_id ?? '0',
             'warehouse_id' => $request->warehouse_id ?? '0',
             'subtotal' => Utility::remove_commas($request->subtotal),
@@ -174,7 +159,6 @@ class InvoiceRepo extends ElequentRepository
         ];
     }
 
-    // ... [Include other existing helper methods here like saveInvoice, etc.] ...
     public function saveInvoice(array $data, ?string $id, string $userId)
     {
         $data['updated_by'] = $userId;
@@ -186,7 +170,7 @@ class InvoiceRepo extends ElequentRepository
             return $this->create($data);
         } else {
             $this->update($data, $id);
-            return $this->find($id); // Ensure we return object
+            return $this->findOne($id);
         }
     }
 
@@ -236,7 +220,6 @@ class InvoiceRepo extends ElequentRepository
         if($resItem){
             if($inputType == ProductType::ITEM && $findProduct) {
                 if ($findProduct->product_type == ProductType::ITEM) {
-                    // Recalculate HPP for Inventory if Tax Included
                     if (!empty($item->tax_id) && $taxType == TypeEnum::TAX_TYPE_INCLUDE) {
                         $pembagi = ($item->tax_percentage + 100) / 100;
                         $subtotalHpp = $total / $pembagi;
@@ -339,26 +322,20 @@ class InvoiceRepo extends ElequentRepository
         Inventory::where('transaction_code','=',TransactionsCode::INVOICE_PEMBELIAN)->where('transaction_id','=',$id)->delete();
     }
 
-
-    /**
-     * ==========================================
-     * REFACTORED POSTING JURNAL
-     * ==========================================
-     */
     public function postingJurnal($idInvoice): void
     {
-        // 1. Eager Load to prevent N+1 Queries
         $find = $this->model->with([
             'vendor',
             'orderproduct.product',
+            'orderproduct.tax',
             'orderproduct.tax.taxgroup.tax',
             'invoicereceived.receive.receiveproduct.product',
+            'invoicereceived.receive.receiveproduct.tax',
             'invoicereceived.receive.receiveproduct.tax.taxgroup.tax'
         ])->find($idInvoice);
 
         if(!$find) return;
 
-        // 2. Fetch Settings Once
         $settings = [
             'coa_sediaan'       => SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN),
             'coa_utang_belum'   => SettingRepo::getOptionValue(SettingEnum::COA_UTANG_USAHA_BELUM_REALISASI),
@@ -369,24 +346,18 @@ class InvoiceRepo extends ElequentRepository
 
         $journalEntries = [];
 
-        // 3. Process Product/Service Items (Direct or Received)
-        // Scenario A: Direct Purchase (via OrderProduct)
         if ($find->invoicereceived->isEmpty()) {
-            // Fallback for empty order_id or Service type
             $items = $find->orderproduct;
-            // If empty, try fetching via order_id (legacy support from your code)
             if ($items->isEmpty() && !empty($find->order_id)) {
                 $items = PurchaseOrderProduct::where('order_id', $find->order_id)->with(['product','tax.taxgroup.tax'])->get();
             }
 
             foreach ($items as $item) {
-                // Determine COA for Debit (Inventory or Cost)
-                $coaDebit = $find->coa_id; // Default invoice COA
+                $coaDebit = $find->coa_id;
                 if ($item->product) {
                     $coaDebit = $item->product->coa_id ?: $settings['coa_sediaan'];
                 }
 
-                // Inventory/Expense Debit
                 $journalEntries[] = [
                     'coa_id' => $coaDebit,
                     'posisi' => 'debet',
@@ -395,7 +366,6 @@ class InvoiceRepo extends ElequentRepository
                     'note'   => $item->product ? $item->product->item_name : $item->service_name
                 ];
 
-                // Tax Calculation
                 $taxes = $this->calculateTaxComponents($item, $item->subtotal);
                 foreach($taxes as $tax) {
                     $journalEntries[] = [
@@ -408,15 +378,11 @@ class InvoiceRepo extends ElequentRepository
                 }
             }
         }
-        // Scenario B: Via Receive (Unbilled Payable Reversal)
         else {
             foreach ($find->invoicereceived as $recInv) {
                 $receive = $recInv->receive;
                 if(!$receive) continue;
 
-                $totalTaxRec = 0;
-
-                // Loop items to calculate Taxes (VAT In)
                 foreach($receive->receiveproduct as $itemRec) {
                     if (empty($itemRec->tax_type)) {
                         $itemRec->tax_type = $find->tax_type;
@@ -426,24 +392,15 @@ class InvoiceRepo extends ElequentRepository
                     foreach($taxes as $tax) {
                         $journalEntries[] = [
                             'coa_id' => $tax['coa_id'],
-                            'posisi' => $tax['posisi'], // Usually debit for Input VAT
+                            'posisi' => $tax['posisi'],
                             'nominal'=> $tax['nominal'],
                             'sub_id' => $itemRec->id,
                             'note'   => 'PPN Received'
                         ];
-
-                        if ($itemRec->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $tax['posisi'] == 'debet') {
-                            $totalTaxRec += $tax['nominal'];
-                        }
                     }
                 }
 
-                // Debit "Utang Belum Realisasi" (Reversing the Credit from Receive)
                 $totalHppRec = ReceiveRepo::getTotalReceivedByHpp($recInv->receive_id);
-
-                if ($totalTaxRec > 0) {
-                    $totalHppRec -= $totalTaxRec;
-                }
 
                 $journalEntries[] = [
                     'coa_id' => $settings['coa_utang_belum'],
@@ -453,15 +410,11 @@ class InvoiceRepo extends ElequentRepository
                     'note'   => 'Reversal Utang Belum Realisasi'
                 ];
 
-                // Update Receive Status
                 ReceiveRepo::changeStatusPenerimaanById($recInv->receive_id);
             }
         }
 
-        // 4. Handle Discount (Credit)
         if ($find->discount_total > 0) {
-            // Debit Accounts Payable (Technically reducing the AP amount)
-            // But per your requirement: Debit Utang, Credit Potongan
             $journalEntries[] = [
                 'coa_id' => $settings['coa_utang'],
                 'posisi' => 'debet',
@@ -478,12 +431,10 @@ class InvoiceRepo extends ElequentRepository
             ];
         }
 
-        // 5. Handle Down Payments (Reversal)
         $dpResult = $this->getDownPaymentEntries($find->id, $settings['coa_utang'], $settings['coa_uang_muka']);
         $journalEntries = array_merge($journalEntries, $dpResult['entries']);
         $totalDpNominal = $dpResult['total_nominal'];
 
-        // 6. Handle Final Accounts Payable (Credit - Utang Usaha)
         $totalUtang = $find->grandtotal + $totalDpNominal + $find->discount_total;
 
         $journalEntries[] = [
@@ -494,21 +445,20 @@ class InvoiceRepo extends ElequentRepository
             'note'   => 'Utang Usaha'
         ];
 
-        // 7. Update Invoice COA
         $this->update(['coa_id' => $settings['coa_utang']], $find->id);
 
-        // 8. VALIDATION & SAVE
         $this->validateAndSaveJournal($journalEntries, $find);
     }
 
-    /**
-     * Helper to Calculate Tax Components
-     * Handles Include/Exclude, Single/Group, and DppNilaiLain
-     */
     private function calculateTaxComponents($item, $amount): array
     {
         $results = [];
         $objTax = $item->tax;
+        
+        if (empty($objTax) && !empty($item->tax_id)) {
+            $objTax = Tax::with(['taxgroup.tax'])->find($item->tax_id);
+        }
+
         if (empty($objTax)) return $results;
 
         $taxList = [];
@@ -521,33 +471,23 @@ class InvoiceRepo extends ElequentRepository
         }
 
         foreach ($taxList as $taxCfg) {
-            $taxNominal = 0;
+            $calc = Helpers::hitungTaxDpp($amount, $taxCfg->id, $item->tax_type, $taxCfg->tax_percentage);
+            
+            if (is_array($calc)) {
+                $taxNominal = $calc[TypeEnum::PPN];
+                $sign = $calc[TypeEnum::TAX_SIGN] ?? $taxCfg->tax_sign;
+                $posisi = ($sign == VarType::TAX_SIGN_PEMOTONG) ? 'kredit' : 'debet';
 
-            // Calculation Logic using Helpers
-            if ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE) {
-                $func = ($taxCfg->is_dpp_nilai_Lain == 1) ? 'hitungIncludeTaxDppNilaiLain' : 'hitungIncludeTax';
-                $calc = Helpers::$func($taxCfg->tax_percentage, $amount);
-                $taxNominal = $calc[TypeEnum::PPN];
-            } else {
-                $func = ($taxCfg->is_dpp_nilai_Lain == 1) ? 'hitungExcludeTaxDppNilaiLain' : 'hitungExcludeTax';
-                $calc = Helpers::$func($taxCfg->tax_percentage, $amount);
-                $taxNominal = $calc[TypeEnum::PPN];
+                $results[] = [
+                    'coa_id'  => $taxCfg->purchase_coa_id,
+                    'posisi'  => $posisi,
+                    'nominal' => $taxNominal
+                ];
             }
-
-            $posisi = ($taxCfg->tax_sign == VarType::TAX_SIGN_PEMOTONG) ? 'kredit' : 'debet';
-
-            $results[] = [
-                'coa_id'  => $taxCfg->purchase_coa_id,
-                'posisi'  => $posisi,
-                'nominal' => $taxNominal
-            ];
         }
         return $results;
     }
 
-    /**
-     * Helper for Down Payment Reversal
-     */
     private function getDownPaymentEntries($invoiceId, $coaUtang, $coaUangMuka): array
     {
         $entries = [];
@@ -562,7 +502,6 @@ class InvoiceRepo extends ElequentRepository
             $totalNominal += $nominal;
             $dpp = $nominal;
 
-            // 1. Debit Utang (Reversing AP created by invoice for the amount covered by DP)
             $entries[] = [
                 'coa_id' => $coaUtang,
                 'posisi' => 'debet',
@@ -571,30 +510,11 @@ class InvoiceRepo extends ElequentRepository
                 'note'   => 'Reversal DP'
             ];
 
-            // 2. Tax Handling on DP (If DP had VAT)
             if ($dp->faktur_accepted == TypeEnum::FAKTUR_ACCEPTED && $dp->tax) {
-                // Reuse standard tax calc logic to reverse tax on DP
-                // Note: Logic simplified here, assuming tax reduces the Uang Muka Account credit
-                $taxes = $this->calculateTaxComponents($dp, $nominal); // $dp has tax_id, tax_percentage etc.
+                $taxes = $this->calculateTaxComponents($dp, $nominal);
                 foreach($taxes as $tax){
-                    // If Tax was Single/Exclude, it affects how much we Credit Uang Muka vs Tax COA
-                    // For simplicity in this refactor, we stick to the main flow:
-                    // Determine amount to adjust from DPP based on tax sign
                     if($tax['posisi'] == 'debet') {
-                        // In DP context, if tax was 'debet', here we credit it?
-                        // Using logic from original:
-                        // if tax_sign == PEMOTONG (Kredit), DPP = DPP + PPN
-                        // else DPP = DPP - PPN
-                        // The original code handled tax entries for DP separately.
-
-                        // Let's replicate original logic exactly:
                         $ppn = $tax['nominal'];
-                        $posisiJurnal = ($tax['posisi'] == 'kredit') ? 'debet' : 'kredit'; // Reversal? No, original uses specific logic
-
-                        // Original Logic:
-                        // If Sign Pemotong -> Posisi Debet (DPP += PPN)
-                        // Else -> Posisi Kredit (DPP -= PPN)
-
                         $isPemotong = ($tax['posisi'] == 'kredit');
                         $posisiRec = $isPemotong ? 'debet' : 'kredit';
 
@@ -612,7 +532,6 @@ class InvoiceRepo extends ElequentRepository
                 }
             }
 
-            // 3. Credit Uang Muka (Asset Reduction)
             $entries[] = [
                 'coa_id' => $coaUangMuka,
                 'posisi' => 'kredit',
@@ -627,9 +546,6 @@ class InvoiceRepo extends ElequentRepository
         return ['entries' => $entries, 'total_nominal' => $totalNominal];
     }
 
-    /**
-     * Check Balance and Save to DB
-     */
     private function validateAndSaveJournal(array $entries, $invoice)
     {
         $totalDebit = 0;
@@ -640,9 +556,7 @@ class InvoiceRepo extends ElequentRepository
             else $totalCredit += $e['nominal'];
         }
 
-        // Allow small floating point difference (1 Rupiah)
         if (abs($totalDebit - $totalCredit) > 1) {
-            // Throwing Exception triggers DB::rollBack in store()
             throw new Exception("Jurnal Invoice {$invoice->invoice_no} Tidak Balance! Debet: " . number_format($totalDebit) . ", Kredit: " . number_format($totalCredit));
         }
 
@@ -671,7 +585,6 @@ class InvoiceRepo extends ElequentRepository
         }
     }
 
-    // ... [Rest of the getters/helpers (getTransaksi, getPaymentList, etc.) keep unchanged] ...
     public function getTransaksi($idInvoice): array
     {
         $arrTransaksi = array();

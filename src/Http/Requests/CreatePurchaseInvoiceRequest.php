@@ -74,11 +74,6 @@ class CreatePurchaseInvoiceRequest extends FormRequest
         }
 
         // Tambahkan validasi unique jika invoice_no tidak kosong (manual input)
-        if (!empty($invoiceNo)) {
-            $rules['invoice_no'] = [
-                Rule::unique($table, 'invoice_no'),
-            ];
-        }
 
         return $rules;
 

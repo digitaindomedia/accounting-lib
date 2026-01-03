@@ -33,7 +33,7 @@ class PurchaseOrderExport implements FromCollection, WithHeadings, ShouldAutoSiz
                 'order_no' => $item->order_no,
                 'request_no' => $noPermintaan,
                 'vendor' => !empty($item->vendor) ? $item->vendor->vendor_name : "-",
-                'grandtotal' => number_format($item->grandtotal, SettingRepo::getSeparatorFormat()),
+                'grandtotal' => $item->grandtotal, SettingRepo::getSeparatorFormat(),
                 'order_status' => $item->order_status,
             ];
         });

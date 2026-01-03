@@ -29,17 +29,29 @@ class CreateCoaRequest extends FormRequest
     public function rules()
     {
         $id = $this->input('id') ?? $this->route('id');
+        $coaLevel = $this->input('coa_level');
         $table = (new Coa)->getTable();
 
         if (empty($id)) {
+            if($coaLevel != 0)
+            {
+                return array_merge(
+                    Coa::$rules,
+                    [
+                        'coa_code' => 'required|unique:als_coa,coa_code',
+                        'coa_name' => 'required|unique:als_coa,coa_name',
+                    ]
+                );
+            } else {
+                return array_merge(
+                    Coa::$rules,
+                    [
+                        'coa_name' => 'required|unique:als_coa,coa_name',
+                    ]
+                );
+            }
             // ===== CREATE =====
-            return array_merge(
-                Coa::$rules,
-                [
-                    'coa_code' => 'required|unique:als_coa,coa_code',
-                    'coa_name' => 'required|unique:als_coa,coa_name',
-                ]
-            );
+
         }
 
         // ===== UPDATE =====

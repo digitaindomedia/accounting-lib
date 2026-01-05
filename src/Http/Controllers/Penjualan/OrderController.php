@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\SalesOrderExport;
 use Icso\Accounting\Exports\SalesOrderReportDetail;
@@ -16,9 +17,8 @@ use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\TransactionsCode;
-use Illuminate\Routing\Controller;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
 use Maatwebsite\Excel\Facades\Excel;
 
 class OrderController extends Controller
@@ -26,6 +26,7 @@ class OrderController extends Controller
     protected $salesOrderRepo;
     protected $salesDpRepo;
     protected $deliveryRepo;
+    protected $data = [];
 
     public function __construct(SalesOrderRepo $salesOrderRepo, DpRepo $salesDpRepo, DeliveryRepo $deliveryRepo)
     {
@@ -247,7 +248,7 @@ class OrderController extends Controller
     {
         $data = $this->prepareExportData($request);
         $export = new SalesOrderExport($data);
-        $pdf = PDF::loadView('accounting::sales.sales_order_pdf', ['arrData' => $export->collection()]);
+        $pdf = Pdf::loadView('accounting::sales.sales_order_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('order-penjualan.pdf');
     }
 
@@ -282,7 +283,7 @@ class OrderController extends Controller
     }
 
     private function downloadPdf(Request $request, $data, $params, $filename){
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_order_report_detail', [
+        $pdf = Pdf::loadView('accounting::sales.sales_order_report_detail', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');

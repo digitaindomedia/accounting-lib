@@ -17,6 +17,7 @@ use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -127,12 +128,20 @@ class InvoiceRepo extends ElequentRepository
                 $this->deleteAdditional($invoiceId);
             }
 
-            // 2. Process Linked Data (Products, DP, Delivery)
-            $this->processOrderProducts($request, $invoiceId);
+            // 2. Process Invoice Items
+            // If creating from delivery and no invoice items are provided, create them from the delivery items.
+            if (!empty($request->delivery) && empty($request->orderproduct)) {
+                $this->createInvoiceItemsFromDelivery($request, $invoiceId);
+            } else {
+                // Original logic for direct sales or POS
+                $this->processOrderProducts($request, $invoiceId);
+            }
+
+            // 3. Process Other Linked Data
             $this->processDp($request, $invoiceId);
             $this->processDelivery($request, $invoiceId);
 
-            // 3. Handle POS specific logic or Regular Posting
+            // 4. Handle POS specific logic or Regular Posting
             if ($request->input_type == InputType::POS) {
                 $this->processPOSInvoice($request, $invoiceId, $arrData['invoice_no']);
             } else {
@@ -141,7 +150,7 @@ class InvoiceRepo extends ElequentRepository
                 $this->postingJurnal($invoiceId);
             }
 
-            // 4. File Upload
+            // 5. File Upload
             $this->handleFileUploads($request, $invoiceId);
 
             DB::commit();
@@ -186,6 +195,46 @@ class InvoiceRepo extends ElequentRepository
             'warehouse_id'  => $warehouseId,
             'jurnal_id'     => $request->jurnal_id ?? 0
         ];
+    }
+
+    private function createInvoiceItemsFromDelivery(Request $request, $invoiceId)
+    {
+        $deliveryIds = collect(is_array($request->delivery) ? $request->delivery : json_decode(json_encode($request->delivery)))->pluck('id');
+        // Eager load relations needed for creating the new item
+        $deliveries = SalesDelivery::with(['deliveryproduct.orderproduct'])->find($deliveryIds);
+
+        foreach ($deliveries as $delivery) {
+            foreach ($delivery->deliveryproduct as $deliveryProduct) {
+                $orderProduct = $deliveryProduct->orderproduct;
+                if (!$orderProduct) {
+                    Log::warning("Could not find original SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id}. Skipping item creation for invoice.");
+                    continue;
+                }
+
+                // Prorate subtotal from original order item based on delivered quantity
+                $pricePerUnit = ($orderProduct->qty > 0) ? ($orderProduct->subtotal / $orderProduct->qty) : 0;
+                $newSubtotal = $pricePerUnit * $deliveryProduct->qty;
+
+                // Create a new SalesOrderProduct for the invoice, copying details
+                // from the original order product, but using the quantity from the delivery.
+                SalesOrderProduct::create([
+                    'qty'               => $deliveryProduct->qty, // Qty from what was delivered
+                    'qty_left'          => $deliveryProduct->qty,
+                    'product_id'        => $orderProduct->product_id,
+                    'unit_id'           => $orderProduct->unit_id,
+                    'tax_id'            => $orderProduct->tax_id,
+                    'tax_percentage'    => $orderProduct->tax_percentage,
+                    'price'             => $orderProduct->price,
+                    'tax_type'          => $orderProduct->tax_type,
+                    'discount_type'     => $orderProduct->discount_type,
+                    'discount'          => $orderProduct->discount, // This might need prorating if it's a fixed amount
+                    'subtotal'          => $newSubtotal,
+                    'multi_unit'        => $orderProduct->multi_unit,
+                    'order_id'          => 0, // It's not an order item anymore
+                    'invoice_id'        => $invoiceId // Link to the new invoice
+                ]);
+            }
+        }
     }
 
     private function processOrderProducts(Request $request, $idInvoice)

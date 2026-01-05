@@ -129,8 +129,8 @@ class InvoiceRepo extends ElequentRepository
             }
 
             // 2. Process Invoice Items
-            // If creating from delivery and no invoice items are provided, create them from the delivery items.
-            if (!empty($request->delivery) && empty($request->orderproduct)) {
+            // If deliveries are present, always rebuild the items from the delivery to ensure data integrity.
+            if (!empty($request->delivery)) {
                 $this->createInvoiceItemsFromDelivery($request, $invoiceId);
             } else {
                 // Original logic for direct sales or POS
@@ -199,50 +199,55 @@ class InvoiceRepo extends ElequentRepository
 
     private function createInvoiceItemsFromDelivery(Request $request, $invoiceId)
     {
-        Log::info("Attempting to create invoice items from delivery for Invoice ID: $invoiceId");
-        $deliveryIds = collect(is_array($request->delivery) ? $request->delivery : json_decode(json_encode($request->delivery)))->pluck('id');
-        $deliveries = SalesDelivery::with(['deliveryproduct.orderproduct'])->find($deliveryIds);
+        try {
+            Log::info("Attempting to create invoice items from delivery for Invoice ID: $invoiceId");
+            $deliveryIds = collect(is_array($request->delivery) ? $request->delivery : json_decode(json_encode($request->delivery)))->pluck('id');
+            $deliveries = SalesDelivery::with(['deliveryproduct.orderproduct'])->find($deliveryIds);
 
-        if ($deliveries->isEmpty()) {
-            Log::warning("In createInvoiceItemsFromDelivery: No valid deliveries found for the provided IDs.");
-            return;
-        }
-
-        foreach ($deliveries as $delivery) {
-            Log::info("In createInvoiceItemsFromDelivery: Processing Delivery ID: {$delivery->id}");
-            if ($delivery->deliveryproduct->isEmpty()) {
-                Log::warning("In createInvoiceItemsFromDelivery: Delivery ID: {$delivery->id} has no delivery products.");
-                continue;
+            if ($deliveries->isEmpty()) {
+                Log::warning("In createInvoiceItemsFromDelivery: No valid deliveries found for the provided IDs.");
+                return;
             }
-            foreach ($delivery->deliveryproduct as $deliveryProduct) {
-                $orderProduct = $deliveryProduct->orderproduct;
-                if (!$orderProduct) {
-                    Log::warning("In createInvoiceItemsFromDelivery: Could not find related SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id} (order_product_id: {$deliveryProduct->order_product_id}). Skipping item creation for invoice.");
+
+            foreach ($deliveries as $delivery) {
+                Log::info("In createInvoiceItemsFromDelivery: Processing Delivery ID: {$delivery->id}");
+                if ($delivery->deliveryproduct->isEmpty()) {
+                    Log::warning("In createInvoiceItemsFromDelivery: Delivery ID: {$delivery->id} has no delivery products.");
                     continue;
                 }
+                foreach ($delivery->deliveryproduct as $deliveryProduct) {
+                    $orderProduct = $deliveryProduct->orderproduct;
+                    if (!$orderProduct) {
+                        Log::warning("In createInvoiceItemsFromDelivery: Could not find related SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id} (order_product_id: {$deliveryProduct->order_product_id}). Skipping item creation for invoice.");
+                        continue;
+                    }
 
-                Log::info("In createInvoiceItemsFromDelivery: Found OrderProduct ID: {$orderProduct->id} for DeliveryProduct ID: {$deliveryProduct->id}. Creating invoice item.");
+                    Log::info("In createInvoiceItemsFromDelivery: Found OrderProduct ID: {$orderProduct->id} for DeliveryProduct ID: {$deliveryProduct->id}. Creating invoice item.");
 
-                $pricePerUnit = ($orderProduct->qty > 0) ? ($orderProduct->subtotal / $orderProduct->qty) : 0;
-                $newSubtotal = $pricePerUnit * $deliveryProduct->qty;
+                    $pricePerUnit = ($orderProduct->qty > 0) ? ($orderProduct->subtotal / $orderProduct->qty) : 0;
+                    $newSubtotal = $pricePerUnit * $deliveryProduct->qty;
 
-                SalesOrderProduct::create([
-                    'qty'               => $deliveryProduct->qty,
-                    'qty_left'          => $deliveryProduct->qty,
-                    'product_id'        => $orderProduct->product_id,
-                    'unit_id'           => $orderProduct->unit_id,
-                    'tax_id'            => $orderProduct->tax_id,
-                    'tax_percentage'    => $orderProduct->tax_percentage,
-                    'price'             => $orderProduct->price,
-                    'tax_type'          => $orderProduct->tax_type,
-                    'discount_type'     => $orderProduct->discount_type,
-                    'discount'          => $orderProduct->discount,
-                    'subtotal'          => $newSubtotal,
-                    'multi_unit'        => $orderProduct->multi_unit,
-                    'order_id'          => 0,
-                    'invoice_id'        => $invoiceId
-                ]);
+                    SalesOrderProduct::create([
+                        'qty'               => $deliveryProduct->qty,
+                        'qty_left'          => $deliveryProduct->qty,
+                        'product_id'        => $orderProduct->product_id,
+                        'unit_id'           => $orderProduct->unit_id,
+                        'tax_id'            => $orderProduct->tax_id,
+                        'tax_percentage'    => $orderProduct->tax_percentage,
+                        'price'             => $orderProduct->price,
+                        'tax_type'          => $orderProduct->tax_type,
+                        'discount_type'     => $orderProduct->discount_type,
+                        'discount'          => $orderProduct->discount,
+                        'subtotal'          => $newSubtotal,
+                        'multi_unit'        => $orderProduct->multi_unit,
+                        'order_id'          => 0,
+                        'invoice_id'        => $invoiceId
+                    ]);
+                }
             }
+        } catch (Exception $e) {
+            Log::error("Error in createInvoiceItemsFromDelivery: " . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+            throw $e;
         }
     }
 

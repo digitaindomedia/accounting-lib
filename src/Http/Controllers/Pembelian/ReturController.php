@@ -89,20 +89,45 @@ class ReturController extends Controller
         $res = $this->returRepo->findOne($id,array(),['vendor','receive','returproduct','invoice','returproduct.receiveproduct','returproduct.orderproduct', 'returproduct.product','returproduct.tax','returproduct.tax.taxgroup','returproduct.tax.taxgroup.tax','returproduct.unit']);
         if($res){
             if(!empty($res->returproduct)){
-                $purchaseReceivedRepo = new ReceiveRepo(new PurchaseReceived());
+                // Optimization: Pre-fetch summed quantities to avoid N+1 queries
+                $receiveProductIds = $res->returproduct->pluck('receive_product_id')->filter()->unique()->toArray();
+                $orderProductIds = $res->returproduct->pluck('order_product_id')->filter()->unique()->toArray();
+
+                $qtyReturByReceive = [];
+                if (!empty($receiveProductIds)) {
+                    $qtyReturByReceive = PurchaseReturProduct::whereIn('receive_product_id', $receiveProductIds)
+                        ->groupBy('receive_product_id')
+                        ->selectRaw('receive_product_id, sum(qty) as total_qty')
+                        ->pluck('total_qty', 'receive_product_id')
+                        ->toArray();
+                }
+
+                $qtyReturByOrder = [];
+                if (!empty($orderProductIds)) {
+                    $qtyReturByOrder = PurchaseReturProduct::whereIn('order_product_id', $orderProductIds)
+                        ->groupBy('order_product_id')
+                        ->selectRaw('order_product_id, sum(qty) as total_qty')
+                        ->pluck('total_qty', 'order_product_id')
+                        ->toArray();
+                }
+
                 foreach ($res->returproduct as $item){
                     $recProduct = $item->receiveproduct;
                     if(!empty($recProduct)){
-                        $qtyRetur = $purchaseReceivedRepo->getQtyRetur($recProduct->id);
+                        $qtyRetur = $qtyReturByReceive[$recProduct->id] ?? 0;
                         $item->qty_bs_retur = ($recProduct->qty - $qtyRetur) + $item->qty;
                         $item->qty_received = $recProduct->qty;
                     } else {
                         $orderProduct = $item->orderproduct;
-                        $qtyRetur = PurchaseReturProduct::where('order_product_id', $orderProduct->id)->sum('qty');
-                        $item->qty_received = $orderProduct->qty;
-                        $item->qty_bs_retur = ($orderProduct->qty - $qtyRetur) + $item->qty;
+                        if ($orderProduct) {
+                            $qtyRetur = $qtyReturByOrder[$orderProduct->id] ?? 0;
+                            $item->qty_received = $orderProduct->qty;
+                            $item->qty_bs_retur = ($orderProduct->qty - $qtyRetur) + $item->qty;
+                        } else {
+                            $item->qty_received = 0;
+                            $item->qty_bs_retur = 0;
+                        }
                     }
-
                 }
             }
             $this->data['status'] = true;

@@ -217,9 +217,16 @@ class InvoiceRepo extends ElequentRepository
                 }
                 foreach ($delivery->deliveryproduct as $deliveryProduct) {
                     $orderProduct = $deliveryProduct->orderproduct;
+                    
+                    // If the direct relationship fails, try to find it manually.
+                    if (!$orderProduct && $deliveryProduct->order_product_id) {
+                        Log::warning("Direct relation 'orderproduct' failed for SalesDeliveryProduct ID: {$deliveryProduct->id}. Attempting manual lookup via order_product_id: {$deliveryProduct->order_product_id}.");
+                        $orderProduct = SalesOrderProduct::find($deliveryProduct->order_product_id);
+                    }
+
                     if (!$orderProduct) {
-                        Log::warning("In createInvoiceItemsFromDelivery: Could not find related SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id} (order_product_id: {$deliveryProduct->order_product_id}). Skipping item creation for invoice.");
-                        continue;
+                        Log::error("Could not find any matching SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id}. Cannot create invoice item.");
+                        continue; // Skip this item
                     }
 
                     Log::info("In createInvoiceItemsFromDelivery: Found OrderProduct ID: {$orderProduct->id} for DeliveryProduct ID: {$deliveryProduct->id}. Creating invoice item.");

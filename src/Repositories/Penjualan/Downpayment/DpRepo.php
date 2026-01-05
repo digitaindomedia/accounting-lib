@@ -92,6 +92,7 @@ class DpRepo extends ElequentRepository
                 $data['downpayment_status'] = StatusEnum::OPEN;
                 $data['reason'] = "";
                 $data['document'] = "";
+                $data['dp_type'] = $request->dp_type;
                 $data['created_at'] = date('Y-m-d H:i:s');
                 $data['created_by'] = $userId;
                 $res = $this->create($data);
@@ -132,7 +133,6 @@ class DpRepo extends ElequentRepository
             'coa_id'            => $request->coa_id ?? 0,
             'tax_id'            => $request->tax_id ?? 0,
             'tax_percentage'    => $request->tax_percentage,
-            'dp_type'           => $request->dp_type,
             'updated_by'        => $request->user_id,
             'updated_at'        => date('Y-m-d H:i:s')
         ];

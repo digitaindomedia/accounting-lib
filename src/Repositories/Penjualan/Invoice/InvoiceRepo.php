@@ -199,26 +199,35 @@ class InvoiceRepo extends ElequentRepository
 
     private function createInvoiceItemsFromDelivery(Request $request, $invoiceId)
     {
+        Log::info("Attempting to create invoice items from delivery for Invoice ID: $invoiceId");
         $deliveryIds = collect(is_array($request->delivery) ? $request->delivery : json_decode(json_encode($request->delivery)))->pluck('id');
-        // Eager load relations needed for creating the new item
         $deliveries = SalesDelivery::with(['deliveryproduct.orderproduct'])->find($deliveryIds);
 
+        if ($deliveries->isEmpty()) {
+            Log::warning("In createInvoiceItemsFromDelivery: No valid deliveries found for the provided IDs.");
+            return;
+        }
+
         foreach ($deliveries as $delivery) {
+            Log::info("In createInvoiceItemsFromDelivery: Processing Delivery ID: {$delivery->id}");
+            if ($delivery->deliveryproduct->isEmpty()) {
+                Log::warning("In createInvoiceItemsFromDelivery: Delivery ID: {$delivery->id} has no delivery products.");
+                continue;
+            }
             foreach ($delivery->deliveryproduct as $deliveryProduct) {
                 $orderProduct = $deliveryProduct->orderproduct;
                 if (!$orderProduct) {
-                    Log::warning("Could not find original SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id}. Skipping item creation for invoice.");
+                    Log::warning("In createInvoiceItemsFromDelivery: Could not find related SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id} (order_product_id: {$deliveryProduct->order_product_id}). Skipping item creation for invoice.");
                     continue;
                 }
 
-                // Prorate subtotal from original order item based on delivered quantity
+                Log::info("In createInvoiceItemsFromDelivery: Found OrderProduct ID: {$orderProduct->id} for DeliveryProduct ID: {$deliveryProduct->id}. Creating invoice item.");
+
                 $pricePerUnit = ($orderProduct->qty > 0) ? ($orderProduct->subtotal / $orderProduct->qty) : 0;
                 $newSubtotal = $pricePerUnit * $deliveryProduct->qty;
 
-                // Create a new SalesOrderProduct for the invoice, copying details
-                // from the original order product, but using the quantity from the delivery.
                 SalesOrderProduct::create([
-                    'qty'               => $deliveryProduct->qty, // Qty from what was delivered
+                    'qty'               => $deliveryProduct->qty,
                     'qty_left'          => $deliveryProduct->qty,
                     'product_id'        => $orderProduct->product_id,
                     'unit_id'           => $orderProduct->unit_id,
@@ -227,11 +236,11 @@ class InvoiceRepo extends ElequentRepository
                     'price'             => $orderProduct->price,
                     'tax_type'          => $orderProduct->tax_type,
                     'discount_type'     => $orderProduct->discount_type,
-                    'discount'          => $orderProduct->discount, // This might need prorating if it's a fixed amount
+                    'discount'          => $orderProduct->discount,
                     'subtotal'          => $newSubtotal,
                     'multi_unit'        => $orderProduct->multi_unit,
-                    'order_id'          => 0, // It's not an order item anymore
-                    'invoice_id'        => $invoiceId // Link to the new invoice
+                    'order_id'          => 0,
+                    'invoice_id'        => $invoiceId
                 ]);
             }
         }
@@ -413,7 +422,10 @@ class InvoiceRepo extends ElequentRepository
                     'sub_id' => 0, 'note'   => 'Penjualan (Header Fallback)'
                 ];
             }
-            if ($taxTotal > 0 && $settings['coa_ppn_keluaran']) {
+            if ($taxTotal > 0) {
+                if (empty($settings['coa_ppn_keluaran'])) {
+                    throw new Exception("Sales Tax Account (COA_PPN_KELUARAN) is not configured in Settings, but the invoice has tax. Cannot create tax journal entry.");
+                }
                 $journalEntries[] = [
                     'coa_id' => $settings['coa_ppn_keluaran'], 'posisi' => 'kredit', 'nominal'=> $taxTotal,
                     'sub_id' => 0, 'note'   => 'Tax (Header Fallback)'

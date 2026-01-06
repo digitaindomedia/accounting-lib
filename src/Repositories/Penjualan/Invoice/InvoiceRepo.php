@@ -14,9 +14,11 @@ use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDelivery;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDp;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -352,6 +354,20 @@ class InvoiceRepo extends ElequentRepository
 
     public function deleteAdditional($id)
     {
+        $invoice = $this->model->find($id);
+        if ($invoice && !empty($invoice->order_id)) {
+            $deliveryCount = SalesDelivery::where('order_id', $invoice->order_id)->count();
+            if ($deliveryCount > 0) {
+                SalesOrderRepo::changeStatusByDelivery($invoice->order_id);
+            } else {
+                SalesOrder::where('id', $invoice->order_id)->update(['order_status' => StatusEnum::OPEN]);
+            }
+
+            if ($invoice->invoice_type == ProductType::SERVICE) {
+                SalesOrderProduct::where('invoice_id', $id)->update(['invoice_id' => 0]);
+            }
+        }
+
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PENJUALAN, $id);
         SalesInvoicingDp::where('invoice_id', $id)->delete();
         SalesInvoicingDelivery::where('invoice_id', $id)->delete();

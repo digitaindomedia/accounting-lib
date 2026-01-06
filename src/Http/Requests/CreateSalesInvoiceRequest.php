@@ -76,13 +76,6 @@ class CreateSalesInvoiceRequest extends FormRequest
             $rules['orderproduct.*.product_id'] = 'required';
         }
 
-        // Tambahkan validasi unique jika invoice_no tidak kosong (manual input)
-        if (!empty($invoiceNo)) {
-            $rules['invoice_no'] = [
-                Rule::unique($table, 'invoice_no'),
-            ];
-        }
-
         return $rules;
     }
 

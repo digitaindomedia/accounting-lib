@@ -326,6 +326,11 @@ class DpRepo extends ElequentRepository
         return SalesDownpayment::where('order_id', $idOrder)->sum('nominal');
     }
 
+    public function countByOrderId($idOrder)
+    {
+        return $this->model->where('order_id', $idOrder)->count();
+    }
+
     public static function changeStatusUangMuka($idUangMuka, $statusUangMuka=StatusEnum::SELESAI)
     {
         $instance = new self(new SalesDownpayment());

@@ -26,7 +26,7 @@ class SalesOrderExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'order_date' => $item->order_date,
                 'order_no' => $item->order_no,
                 'vendor' => !empty($item->vendor) ? $item->vendor->vendor_name : "-",
-                'grandtotal' => number_format($item->grandtotal, SettingRepo::getSeparatorFormat()),
+                'grandtotal' => $item->grandtotal,
                 'order_status' => $item->order_status,
             ];
         });

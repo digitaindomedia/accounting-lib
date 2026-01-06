@@ -68,7 +68,7 @@ class CreatePurchaseReceivedRequest extends FormRequest
                 Rule::unique($table, 'received_no'),
             ];
         }
-        $rules['receiveproduct.*.qty'] = ['required', 'numeric', 'gt:0'];
+        $rules['receiveproduct.*.qty'] = ['required', 'gt:0'];
         return $rules;
     }
 
@@ -79,7 +79,6 @@ class CreatePurchaseReceivedRequest extends FormRequest
             'received_no.unique' => 'Nomor penerimaan sudah digunakan.',
             'warehouse_id.required' => 'Nama Gudang Masih Belum dipilih',
             'order_id.required' => 'Order Pembelian Belum dipilih', 'receiveproduct.required' => 'Daftar barang yang akan diterima masih kosong', 'receiveproduct.*.qty.required' => 'Kuantitas barang masih kosong',
-            'receiveproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
             'receiveproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 1'];
     }
 

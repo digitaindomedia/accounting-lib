@@ -17,7 +17,6 @@ use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
-use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -128,20 +127,12 @@ class InvoiceRepo extends ElequentRepository
                 $this->deleteAdditional($invoiceId);
             }
 
-            // 2. Process Invoice Items
-            // If deliveries are present, always rebuild the items from the delivery to ensure data integrity.
-            if (!empty($request->delivery)) {
-                $this->createInvoiceItemsFromDelivery($request, $invoiceId);
-            } else {
-                // Original logic for direct sales or POS
-                $this->processOrderProducts($request, $invoiceId);
-            }
-
-            // 3. Process Other Linked Data
+            // 2. Process Linked Data (Products, DP, Delivery)
+            $this->processOrderProducts($request, $invoiceId);
             $this->processDp($request, $invoiceId);
             $this->processDelivery($request, $invoiceId);
 
-            // 4. Handle POS specific logic or Regular Posting
+            // 3. Handle POS specific logic or Regular Posting
             if ($request->input_type == InputType::POS) {
                 $this->processPOSInvoice($request, $invoiceId, $arrData['invoice_no']);
             } else {
@@ -150,7 +141,7 @@ class InvoiceRepo extends ElequentRepository
                 $this->postingJurnal($invoiceId);
             }
 
-            // 5. File Upload
+            // 4. File Upload
             $this->handleFileUploads($request, $invoiceId);
 
             DB::commit();
@@ -160,7 +151,7 @@ class InvoiceRepo extends ElequentRepository
         } catch (Exception $e) {
             DB::rollBack();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
-            Log::error("Sales Invoice Store Error: " . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+            Log::error("Sales Invoice Store Error: " . $e->getMessage() . ' ini payload nya ' . json_encode($request->all()));
             return false;
         }
     }
@@ -197,97 +188,98 @@ class InvoiceRepo extends ElequentRepository
         ];
     }
 
-    private function createInvoiceItemsFromDelivery(Request $request, $invoiceId)
-    {
-        try {
-            Log::info("Attempting to create invoice items from delivery for Invoice ID: $invoiceId");
-            $deliveryIds = collect(is_array($request->delivery) ? $request->delivery : json_decode(json_encode($request->delivery)))->pluck('id');
-            $deliveries = SalesDelivery::with(['deliveryproduct.orderproduct'])->find($deliveryIds);
-
-            if ($deliveries->isEmpty()) {
-                Log::warning("In createInvoiceItemsFromDelivery: No valid deliveries found for the provided IDs.");
-                return;
-            }
-
-            foreach ($deliveries as $delivery) {
-                Log::info("In createInvoiceItemsFromDelivery: Processing Delivery ID: {$delivery->id}");
-                if ($delivery->deliveryproduct->isEmpty()) {
-                    Log::warning("In createInvoiceItemsFromDelivery: Delivery ID: {$delivery->id} has no delivery products.");
-                    continue;
-                }
-                foreach ($delivery->deliveryproduct as $deliveryProduct) {
-                    $orderProduct = $deliveryProduct->orderproduct;
-                    
-                    // If the direct relationship fails, try to find it manually.
-                    if (!$orderProduct && $deliveryProduct->order_product_id) {
-                        Log::warning("Direct relation 'orderproduct' failed for SalesDeliveryProduct ID: {$deliveryProduct->id}. Attempting manual lookup via order_product_id: {$deliveryProduct->order_product_id}.");
-                        $orderProduct = SalesOrderProduct::find($deliveryProduct->order_product_id);
-                    }
-
-                    if (!$orderProduct) {
-                        Log::error("Could not find any matching SalesOrderProduct for SalesDeliveryProduct ID: {$deliveryProduct->id}. Cannot create invoice item.");
-                        continue; // Skip this item
-                    }
-
-                    Log::info("In createInvoiceItemsFromDelivery: Found OrderProduct ID: {$orderProduct->id} for DeliveryProduct ID: {$deliveryProduct->id}. Creating invoice item.");
-
-                    $pricePerUnit = ($orderProduct->qty > 0) ? ($orderProduct->subtotal / $orderProduct->qty) : 0;
-                    $newSubtotal = $pricePerUnit * $deliveryProduct->qty;
-
-                    SalesOrderProduct::create([
-                        'qty'               => $deliveryProduct->qty,
-                        'qty_left'          => $deliveryProduct->qty,
-                        'product_id'        => $orderProduct->product_id,
-                        'unit_id'           => $orderProduct->unit_id,
-                        'tax_id'            => $orderProduct->tax_id,
-                        'tax_percentage'    => $orderProduct->tax_percentage,
-                        'price'             => $orderProduct->price,
-                        'tax_type'          => $orderProduct->tax_type,
-                        'discount_type'     => $orderProduct->discount_type,
-                        'discount'          => $orderProduct->discount,
-                        'subtotal'          => $newSubtotal,
-                        'multi_unit'        => $orderProduct->multi_unit,
-                        'order_id'          => 0,
-                        'invoice_id'        => $invoiceId
-                    ]);
-                }
-            }
-        } catch (Exception $e) {
-            Log::error("Error in createInvoiceItemsFromDelivery: " . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
-            throw $e;
-        }
-    }
-
     private function processOrderProducts(Request $request, $idInvoice)
     {
-        $products = is_array($request->orderproduct) ? $request->orderproduct : json_decode(json_encode($request->orderproduct));
-        if (!empty($products)) {
-            foreach ($products as $item) {
-                $item = (object)$item;
-                SalesOrderProduct::create([
-                    'qty'               => $item->qty,
-                    'qty_left'          => $item->qty,
-                    'product_id'        => $item->product_id ?? 0,
-                    'unit_id'           => $item->unit_id ?? 0,
-                    'tax_id'            => $item->tax_id ?? 0,
-                    'tax_percentage'    => $item->tax_percentage ?? 0,
-                    'price'             => Utility::remove_commas($item->price ?? 0),
-                    'tax_type'          => $request->tax_type ?? '',
-                    'discount_type'     => $item->discount_type ?? '',
-                    'discount'          => Utility::remove_commas($item->discount ?? 0),
-                    'subtotal'          => Utility::remove_commas($item->subtotal ?? 0),
-                    'multi_unit'        => 0,
-                    'order_id'          => 0,
-                    'invoice_id'        => $idInvoice
-                ]);
+        $orderId = $request->order_id ?? $request->input('order.id');
+
+        // If invoice is created from Sales Order (Service type), don't create new products
+        // Just update the invoice_id on existing order products
+        if (!empty($orderId) && $request->invoice_type == ProductType::SERVICE) {
+            Log::info("Invoice from Sales Order (Service). Updating existing orderproduct with invoice_id={$idInvoice}");
+
+            // Update existing order products to link with this invoice
+            SalesOrderProduct::where('order_id', $orderId)
+                ->where('invoice_id', 0) // Only update products not yet invoiced
+                ->update(['invoice_id' => $idInvoice]);
+
+            return;
+        }
+
+        // For direct invoice (no order_id) or Item type, create new products
+        $products = $request->orderproduct;
+        if (empty($products)) {
+            $products = $request->input('order.orderproduct');
+        }
+
+        if (empty($products)) {
+            Log::info("No orderproduct data to process");
+            return;
+        }
+
+        $products = is_array($products) ? json_decode(json_encode($products)) : $products;
+
+        foreach ($products as $item) {
+            $item = (object)$item;
+
+            $taxType = $item->tax_type ?? '';
+            $taxId = $item->tax_id ?? 0;
+
+            // If item has original ID (from order), check if it already exists
+            if (isset($item->id)) {
+                $existingProduct = SalesOrderProduct::find($item->id);
+                if ($existingProduct) {
+                    // Update existing product with invoice_id
+                    $existingProduct->update(['invoice_id' => $idInvoice]);
+                    Log::info("Updated existing orderproduct {$item->id} with invoice_id={$idInvoice}");
+                    continue;
+                }
+
+                // If not found, preserve original tax configuration
+                $originalProduct = SalesOrderProduct::where('order_id', $orderId)
+                    ->where('product_id', $item->product_id ?? 0)
+                    ->first();
+                if ($originalProduct) {
+                    $taxType = $originalProduct->tax_type;
+                    $taxId = $originalProduct->tax_id;
+                }
             }
+
+            // Fallback to request/order level tax_type if still empty
+            if (empty($taxType)) {
+                $taxType = $request->input('order.tax_type', $request->tax_type ?? '');
+            }
+
+            // Create new orderproduct
+            SalesOrderProduct::create([
+                'qty'               => $item->qty,
+                'qty_left'          => $item->qty,
+                'product_id'        => $item->product_id ?? 0,
+                'unit_id'           => $item->unit_id ?? 0,
+                'tax_id'            => $taxId,
+                'tax_percentage'    => $item->tax_percentage ?? 0,
+                'price'             => Utility::remove_commas($item->price ?? 0),
+                'tax_type'          => $taxType,
+                'discount_type'     => $item->discount_type ?? '',
+                'discount'          => Utility::remove_commas($item->discount ?? 0),
+                'subtotal'          => Utility::remove_commas($item->subtotal ?? 0),
+                'multi_unit'        => 0,
+                'order_id'          => $orderId ?? 0,
+                'invoice_id'        => $idInvoice
+            ]);
+
+            Log::info("Created new orderproduct for invoice {$idInvoice}");
         }
     }
 
     private function processDp(Request $request, $idInvoice)
     {
-        if (!empty($request->dp)) {
-            $dps = is_array($request->dp) ? $request->dp : json_decode(json_encode($request->dp));
+        $dps = $request->dp;
+        if (empty($dps)) {
+            $dps = $request->input('order.dp');
+        }
+        
+        if (!empty($dps)) {
+            $dps = is_array($dps) ? json_decode(json_encode($dps)) : $dps;
             foreach ($dps as $dp) {
                 $dp = (object)$dp;
                 SalesInvoicingDp::create([
@@ -300,8 +292,13 @@ class InvoiceRepo extends ElequentRepository
 
     private function processDelivery(Request $request, $idInvoice)
     {
-        if (!empty($request->delivery)) {
-            $deliveries = is_array($request->delivery) ? $request->delivery : json_decode(json_encode($request->delivery));
+        $deliveries = $request->delivery;
+        if (empty($deliveries)) {
+            $deliveries = $request->input('order.delivery');
+        }
+
+        if (!empty($deliveries)) {
+            $deliveries = is_array($deliveries) ? json_decode(json_encode($deliveries)) : $deliveries;
             foreach ($deliveries as $item) {
                 $item = (object)$item;
                 SalesInvoicingDelivery::create([
@@ -320,7 +317,7 @@ class InvoiceRepo extends ElequentRepository
             'meta_key' => 'payment',
             'meta_value' => Utility::remove_commas($request->total_payment)
         ]);
-        $this->insertPayment($request, $idInvoice, $noInvoice); // Passed header no directly
+        $this->insertPayment($request, $idInvoice, $noInvoice);
         $this->postingJurnalPOS($idInvoice, $request);
     }
 
@@ -375,9 +372,12 @@ class InvoiceRepo extends ElequentRepository
             'orderproduct.product',
             'orderproduct.tax.taxgroup.tax',
             'invoicedelivery.delivery.deliveryproduct.product',
+            'invoicedelivery.delivery.deliveryproduct.tax.taxgroup.tax'
         ])->find($idInvoice);
 
         if (!$find) return;
+        
+        Log::info("Posting Jurnal Invoice $idInvoice. Products: " . $find->orderproduct->count());
 
         // 2. Settings
         $settings = [
@@ -388,152 +388,291 @@ class InvoiceRepo extends ElequentRepository
             'coa_transit'   => SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN_DALAM_PERJALANAN),
             'coa_potongan'  => SettingRepo::getOptionValue(SettingEnum::COA_POTONGAN_PENJUALAN),
             'coa_uang_muka' => SettingRepo::getOptionValue(SettingEnum::COA_UANG_MUKA_PENJUALAN),
-            'coa_ppn_keluaran' => SettingRepo::getOptionValue(SettingEnum::COA_PPN_KELUARAN),
         ];
 
         $journalEntries = [];
         $inventoryRepo = new InventoryRepo(new Inventory());
 
-        $hasInvoiceItems = !$find->orderproduct->isEmpty();
-        $hasDelivery = !$find->invoicedelivery->isEmpty();
+        // 3. Process Items (Revenue, Tax, COGS/Inventory)
 
-        // --- 1. REVENUE & TAX ---
-        // Always generate from the invoice's own items, which have the correct pricing.
-        if ($hasInvoiceItems) {
+        // Scenario A: Direct Sales / Service (Via OrderProduct)
+        // Used when no Delivery Order is linked (e.g. Service or Direct Invoice)
+        if ($find->invoicedelivery->isEmpty()) {
+
             foreach ($find->orderproduct as $item) {
-                $coaRevenue = $settings['coa_penjualan'];
-                $dpp = $item->subtotal;
+                // Determine Revenue COA: Use product's coa_id if set, otherwise use default
+                $coaRevenue = (!empty($item->product->coa_id) && $item->product->coa_id != 0)
+                    ? $item->product->coa_id
+                    : $settings['coa_penjualan'];
 
-                $taxes = $this->calculateTaxComponents($item, $item->subtotal);
+                $subtotal = $item->subtotal;
+
+                // Important: Use tax_type from orderproduct, NOT from invoice level
+                $itemTaxType = $item->tax_type;
+
+                Log::info("Processing item {$item->id}: subtotal={$subtotal}, tax_type={$itemTaxType}, tax_id={$item->tax_id}, coa_revenue={$coaRevenue}");
+
+                // Calculate Tax Components
+                $taxes = $this->calculateTaxComponents($item, $subtotal);
+                $totalTaxAmount = 0;
+
                 foreach ($taxes as $tax) {
                     $journalEntries[] = [
-                        'coa_id' => $tax['coa_id'], 'posisi' => $tax['posisi'], 'nominal'=> $tax['nominal'],
-                        'sub_id' => $item->id, 'note'   => 'Tax ' . ($item->product->item_name ?? '')
+                        'coa_id' => $tax['coa_id'],
+                        'posisi' => $tax['posisi'],
+                        'nominal'=> $tax['nominal'],
+                        'sub_id' => $item->id,
+                        'note'   => 'Tax ' . ($item->product->item_name ?? '')
                     ];
-                    if ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $tax['posisi'] == 'kredit') {
-                        $dpp -= $tax['nominal'];
+
+                    // Sum up tax for DPP calculation
+                    if ($tax['posisi'] == 'kredit') {
+                        $totalTaxAmount += $tax['nominal'];
                     }
                 }
 
-                if ($dpp != 0) {
+                // Calculate DPP (Revenue before tax)
+                // INCLUDE: DPP = Subtotal - Tax (tax already included in subtotal)
+                // EXCLUDE: DPP = Subtotal (tax is additional, not included)
+                $dpp = $subtotal;
+                if ($itemTaxType == TypeEnum::TAX_TYPE_INCLUDE) {
+                    $dpp = $subtotal - $totalTaxAmount;
+                }
+                // For EXCLUDE: DPP remains as subtotal
+
+                Log::info("DPP calculation: subtotal={$subtotal}, tax_type={$itemTaxType}, totalTax={$totalTaxAmount}, dpp={$dpp}");
+
+                $journalEntries[] = [
+                    'coa_id' => $coaRevenue,
+                    'posisi' => 'kredit',
+                    'nominal'=> $dpp,
+                    'sub_id' => $item->id,
+                    'note'   => 'Penjualan ' . ($item->product->item_name ?? '')
+                ];
+
+                // 2. COGS & Inventory (Only for Non-Service Items)
+                if ($find->invoice_type != ProductType::SERVICE && $item->product_id) {
+                    $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $find->invoice_date);
+                    $subtotalHpp = $hpp * $item->qty;
+
+                    // Debit COGS
                     $journalEntries[] = [
-                        'coa_id' => $coaRevenue, 'posisi' => 'kredit', 'nominal'=> $dpp,
-                        'sub_id' => $item->id, 'note'   => 'Penjualan ' . ($item->product->item_name ?? '')
+                        'coa_id' => $settings['coa_hpp'],
+                        'posisi' => 'debet',
+                        'nominal'=> $subtotalHpp,
+                        'sub_id' => $item->id,
+                        'note'   => 'HPP ' . ($item->product->item_name ?? '')
                     ];
-                }
-            }
-        } else {
-            // Fallback to header totals if no items are on the invoice for some reason.
-            Log::warning("InvoiceRepo: No items found on Invoice {$find->invoice_no}. Falling back to Header totals for revenue.");
-            $taxTotal = $find->tax_total;
-            $revenueTotal = $find->subtotal; // Subtotal should be DPP
 
-            if ($revenueTotal > 0) {
-                $journalEntries[] = [
-                    'coa_id' => $settings['coa_penjualan'], 'posisi' => 'kredit', 'nominal'=> $revenueTotal,
-                    'sub_id' => 0, 'note'   => 'Penjualan (Header Fallback)'
-                ];
-            }
-            if ($taxTotal > 0) {
-                if (empty($settings['coa_ppn_keluaran'])) {
-                    throw new Exception("Sales Tax Account (COA_PPN_KELUARAN) is not configured in Settings, but the invoice has tax. Cannot create tax journal entry.");
+                    // Credit Inventory (use product's inventory COA if set)
+                    $coaSediaan = (!empty($item->product->coa_id) && $item->product->coa_id != 0)
+                        ? $item->product->coa_id
+                        : $settings['coa_sediaan'];
+
+                    $journalEntries[] = [
+                        'coa_id' => $coaSediaan,
+                        'posisi' => 'kredit',
+                        'nominal'=> $subtotalHpp,
+                        'sub_id' => $item->id,
+                        'note'   => 'Keluar Barang ' . ($item->product->item_name ?? '')
+                    ];
+
+                    // Log Inventory
+                    $this->logInventory($find, $item, $hpp, $subtotalHpp, $inventoryRepo);
                 }
-                $journalEntries[] = [
-                    'coa_id' => $settings['coa_ppn_keluaran'], 'posisi' => 'kredit', 'nominal'=> $taxTotal,
-                    'sub_id' => 0, 'note'   => 'Tax (Header Fallback)'
-                ];
             }
+
         }
+        // Scenario B: From Delivery Order
+        else {
+            foreach ($find->invoicedelivery as $delInv) {
+                if (!$delInv->delivery) continue;
 
-        // --- 2. COGS & INVENTORY ---
-        if ($hasDelivery) {
-             // From Delivery: Dr HPP, Cr In-Transit
-             foreach ($find->invoicedelivery as $delInv) {
-                 if (!$delInv->delivery) continue;
-                 foreach ($delInv->delivery->deliveryproduct as $item) {
+                foreach ($delInv->delivery->deliveryproduct as $item) {
+                    // Determine Revenue COA: Use product's coa_id if set, otherwise use default
+                    $coaRevenue = (!empty($item->product->coa_id) && $item->product->coa_id != 0)
+                        ? $item->product->coa_id
+                        : $settings['coa_penjualan'];
+
+                    $dpp = $item->subtotal;
+
+                    $taxes = $this->calculateTaxComponents($item, $item->subtotal);
+                    $totalTaxAmount = 0;
+
+                    foreach ($taxes as $tax) {
+                        $journalEntries[] = [
+                            'coa_id' => $tax['coa_id'],
+                            'posisi' => $tax['posisi'],
+                            'nominal'=> $tax['nominal'],
+                            'sub_id' => $item->id,
+                            'note'   => 'Tax ' . ($item->product->item_name ?? '')
+                        ];
+                        if ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $tax['posisi'] == 'kredit') {
+                            $totalTaxAmount += $tax['nominal'];
+                        }
+                    }
+
+                    // Calculate DPP for delivery product
+                    if ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE) {
+                        $dpp = $item->subtotal - $totalTaxAmount;
+                    }
+
+                    $journalEntries[] = [
+                        'coa_id' => $coaRevenue,
+                        'posisi' => 'kredit',
+                        'nominal'=> $dpp,
+                        'sub_id' => $item->id,
+                        'note'   => 'Penjualan ' . ($item->product->item_name ?? '')
+                    ];
+
+                    // 2. COGS (Debit) vs Inventory In Transit (Credit)
+                    $valTransit = DeliveryRepo::getValueSediaanDalamPerjalan($delInv->delivery_id, $settings['coa_transit']);
+
                     $hppFromDelivery = $item->hpp_price;
                     if($hppFromDelivery == 0) {
+                        // Fallback check inventory log
                         $log = Inventory::where(['transaction_code' => TransactionsCode::DELIVERY_ORDER, 'transaction_sub_id' => $item->id])->first();
                         $hppFromDelivery = $log ? $log->price : 0;
                     }
                     $subtotalHpp = $hppFromDelivery * $item->qty;
 
                     if ($subtotalHpp > 0) {
-                        $journalEntries[] = [ 'coa_id' => $settings['coa_hpp'], 'posisi' => 'debet', 'nominal'=> $subtotalHpp, 'sub_id' => $item->id, 'note' => 'HPP (From Delivery)'];
-                        $journalEntries[] = [ 'coa_id' => $settings['coa_transit'], 'posisi' => 'kredit', 'nominal'=> $subtotalHpp, 'sub_id' => $item->id, 'note' => 'Reversal In Transit'];
+                        $journalEntries[] = [
+                            'coa_id' => $settings['coa_hpp'],
+                            'posisi' => 'debet',
+                            'nominal'=> $subtotalHpp,
+                            'sub_id' => $item->id,
+                            'note'   => 'HPP (From Delivery)'
+                        ];
+                        $journalEntries[] = [
+                            'coa_id' => $settings['coa_transit'],
+                            'posisi' => 'kredit',
+                            'nominal'=> $subtotalHpp,
+                            'sub_id' => $item->id,
+                            'note'   => 'Reversal In Transit'
+                        ];
                     }
-                 }
-                 DeliveryRepo::changeStatusDelivery($delInv->delivery_id);
-             }
-        } elseif ($hasInvoiceItems) {
-             // Direct Sale: Dr HPP, Cr Inventory
-             foreach ($find->orderproduct as $item) {
-                if ($find->invoice_type != ProductType::SERVICE && $item->product_id) {
-                    $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $find->invoice_date);
-                    $subtotalHpp = $hpp * $item->qty;
 
-                    if ($subtotalHpp > 0) {
-                        $journalEntries[] = [ 'coa_id' => $settings['coa_hpp'], 'posisi' => 'debet', 'nominal'=> $subtotalHpp, 'sub_id' => $item->id, 'note' => 'HPP ' . ($item->product->item_name ?? '')];
-                        $coaSediaan = !empty($item->product->coa_id) ? $item->product->coa_id : $settings['coa_sediaan'];
-                        $journalEntries[] = [ 'coa_id' => $coaSediaan, 'posisi' => 'kredit', 'nominal'=> $subtotalHpp, 'sub_id' => $item->id, 'note' => 'Keluar Barang ' . ($item->product->item_name ?? '')];
-                        $this->logInventory($find, $item, $hpp, $subtotalHpp, $inventoryRepo);
-                    }
+                    // Update Delivery Status
+                    DeliveryRepo::changeStatusDelivery($delInv->delivery_id);
                 }
-             }
+            }
         }
 
-        // --- 3. DISCOUNTS, DP, AR ---
+        // 4. Discounts (Debit)
         if ($find->discount_total > 0) {
-            $journalEntries[] = [ 'coa_id' => $settings['coa_potongan'], 'posisi' => 'debet', 'nominal'=> $find->discount_total, 'sub_id' => 0, 'note' => 'Diskon Penjualan'];
-            $journalEntries[] = [ 'coa_id' => $settings['coa_piutang'], 'posisi' => 'kredit', 'nominal'=> $find->discount_total, 'sub_id' => 0, 'note' => 'Pengurangan Piutang (Diskon)'];
+            $journalEntries[] = [
+                'coa_id' => $settings['coa_potongan'],
+                'posisi' => 'debet',
+                'nominal'=> $find->discount_total,
+                'sub_id' => 0,
+                'note'   => 'Diskon Penjualan'
+            ];
+            $journalEntries[] = [
+                'coa_id' => $settings['coa_piutang'],
+                'posisi' => 'kredit',
+                'nominal'=> $find->discount_total,
+                'sub_id' => 0,
+                'note'   => 'Pengurangan Piutang (Diskon)'
+            ];
         }
 
+        // 5. Down Payments (Debit Liability / Credit AR)
         $dpEntries = $this->calculateDpEntries($find->id, $settings['coa_uang_muka'], $settings['coa_piutang']);
         $journalEntries = array_merge($journalEntries, $dpEntries);
 
-        $totalDpCredit = 0;
-        foreach ($dpEntries as $dpEntry) {
-             if (trim((string)$dpEntry['coa_id']) === trim((string)$settings['coa_piutang']) && strtolower($dpEntry['posisi']) == 'kredit') {
-                 $totalDpCredit += $dpEntry['nominal'];
-             }
+        // 6. Accounts Receivable (Debit - Piutang Usaha)
+        
+        // Calculate Total DP Used
+        $tableDp = (new SalesDownpayment())->getTable();
+        $tableInvoiceDp = (new SalesInvoicingDp())->getTable();
+        $totalDpUsed = SalesInvoicingDp::where('invoice_id', $find->id)
+            ->join($tableDp, $tableDp.'.id', '=', $tableInvoiceDp.'.dp_id')
+            ->sum($tableDp.'.nominal');
+
+        // Gross AR Calculation:
+        // For EXCLUDE tax: Total Invoice = Subtotal + Tax
+        // Gross AR = Subtotal + Tax + DP + Discount (because we credit AR for DP and Discount later)
+        // For this case: AR = 5,000,000 + 600,000 = 5,600,000
+        // We don't add DP here because grandtotal from frontend already excludes DP
+
+        // Check if invoice uses EXCLUDE tax type from orderproduct
+        $totalCredits = 0;
+        $totalDebits = 0;
+
+        foreach ($journalEntries as $entry) {
+            if ($entry['posisi'] == 'kredit') {
+                $totalCredits += $entry['nominal'];
+            } else {
+                $totalDebits += $entry['nominal'];
+            }
         }
-        $grossAR = $find->grandtotal + $totalDpCredit + $find->discount_total;
-        $journalEntries[] = [ 'coa_id' => $settings['coa_piutang'], 'posisi' => 'debet', 'nominal'=> $grossAR, 'sub_id' => 0, 'note' => 'Piutang Usaha'];
+
+        // AR (Debit) should balance: Total Credits - Total Debits (so far)
+        $grossAR = $totalCredits - $totalDebits;
+
+        Log::info("AR Calculation from entries: totalCredits={$totalCredits}, totalDebits={$totalDebits}, calculatedAR={$grossAR}");
+
+        $journalEntries[] = [
+            'coa_id' => $settings['coa_piutang'],
+            'posisi' => 'debet',
+            'nominal'=> $grossAR,
+            'sub_id' => 0,
+            'note'   => 'Piutang Usaha'
+        ];
 
         // 7. Update Invoice COA
         $this->update(['coa_id' => $settings['coa_piutang']], $find->id);
 
         // 8. Validate & Save
-        Log::info(json_encode($journalEntries, JSON_PRETTY_PRINT));
+        Log::info($journalEntries);
         $this->validateAndSaveJournal($journalEntries, $find);
     }
 
     private function calculateTaxComponents($item, $amount): array
     {
         $results = [];
-        if (empty($item) || !$item->relationLoaded('tax') || empty($item->tax)) {
+        $objTax = $item->tax;
+
+        // Debug logging
+        Log::info("Tax calculation for item {$item->id}: tax_id={$item->tax_id}, tax_percentage={$item->tax_percentage}, tax_type={$item->tax_type}, amount={$amount}");
+
+        if (empty($objTax)) {
+            Log::warning("No tax object found for item {$item->id} with tax_id={$item->tax_id}");
             return $results;
         }
-        $objTax = $item->tax;
 
         $taxList = [];
         if ($objTax->tax_type == VarType::TAX_TYPE_SINGLE) {
             $taxList[] = $objTax;
         } else {
-            if ($objTax->relationLoaded('taxgroup')) {
-                foreach ($objTax->taxgroup as $group) {
-                    if ($group->relationLoaded('tax') && $group->tax) $taxList[] = $group->tax;
-                }
+            foreach ($objTax->taxgroup as $group) {
+                if ($group->tax) $taxList[] = $group->tax;
             }
         }
 
         foreach ($taxList as $taxCfg) {
-            $func = ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE)
-                ? ($taxCfg->is_dpp_nilai_Lain == 1 ? 'hitungIncludeTaxDppNilaiLain' : 'hitungIncludeTax')
-                : ($taxCfg->is_dpp_nilai_Lain == 1 ? 'hitungExcludeTaxDppNilaiLain' : 'hitungExcludeTax');
+            $percentage = ($item->tax_percentage > 0) ? $item->tax_percentage : $taxCfg->tax_percentage;
 
-            $calc = Helpers::$func($taxCfg->tax_percentage, $amount);
-            $taxNominal = $calc[TypeEnum::PPN];
+            // Determine calculation function based on tax_type and is_dpp_nilai_Lain
+            $func = 'hitungExcludeTax'; // default
+
+            if ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE) {
+                $func = ($taxCfg->is_dpp_nilai_Lain == 1)
+                    ? 'hitungIncludeTaxDppNilaiLain'
+                    : 'hitungIncludeTax';
+            } else {
+                $func = ($taxCfg->is_dpp_nilai_Lain == 1)
+                    ? 'hitungExcludeTaxDppNilaiLain'
+                    : 'hitungExcludeTax';
+            }
+
+            Log::info("Using tax function: {$func}, is_dpp_nilai_Lain={$taxCfg->is_dpp_nilai_Lain}");
+
+            $calc = Helpers::$func($percentage, $amount);
+            $taxNominal = $calc[TypeEnum::PPN] ?? 0;
+
+            Log::info("Tax calculated: {$taxCfg->tax_name}, percentage={$percentage}, nominal={$taxNominal}, sign={$taxCfg->tax_sign}");
 
             // Sales Tax Logic:
             // PEMOTONG (Withholding/PPh) -> Debit (Asset/Prepaid)
@@ -546,6 +685,8 @@ class InvoiceRepo extends ElequentRepository
                 'nominal' => $taxNominal
             ];
         }
+
+        Log::info("Total tax components: " . count($results));
         return $results;
     }
 
@@ -557,12 +698,15 @@ class InvoiceRepo extends ElequentRepository
         foreach ($dps as $row) {
             $dp = $row->downpayment;
             $nominal = $dp->nominal;
-            $dpp = $nominal;
+            $dppDp = $nominal;
+            $totalTaxDp = 0;
 
-            // Handle DP Tax Reversal (Logic similar to Invoice Tax but reversed or adjusted)
+            // Handle DP Tax Reversal
             if ($dp->tax_id && $dp->tax) {
-                $taxes = $this->calculateTaxComponents($dp, $nominal); // uses dp->tax
+                $taxes = $this->calculateTaxComponents($dp, $nominal);
+
                 foreach($taxes as $tax) {
+                    // Reverse the position: if originally Credit, now Debit
                     $reversePos = ($tax['posisi'] == 'kredit') ? 'debet' : 'kredit';
                     $entries[] = [
                         'coa_id' => $tax['coa_id'],
@@ -572,22 +716,36 @@ class InvoiceRepo extends ElequentRepository
                         'note'   => 'Reversal Tax DP'
                     ];
 
-                    // Adjust DPP based on original logic logic
-                    if ($tax['posisi'] == 'kredit') $dpp -= $tax['nominal'];
-                    else $dpp += $tax['nominal'];
+                    // Sum tax amount for DPP calculation
+                    if ($tax['posisi'] == 'kredit') {
+                        $totalTaxDp += $tax['nominal'];
+                    }
                 }
+
+                // Calculate DPP DP:
+                // If tax exists and was recorded, DPP = Nominal - Tax
+                // This is because original DP journal was:
+                // Credit: Uang Muka (DPP) + Credit: Tax
+                // So we need to reverse only the DPP portion
+                $dppDp = $nominal - $totalTaxDp;
+
+                Log::info("DP with tax: nominal={$nominal}, tax={$totalTaxDp}, dpp={$dppDp}");
+            } else {
+                // No tax on DP
+                $dppDp = $nominal;
+                Log::info("DP without tax: nominal={$nominal}, dpp={$dppDp}");
             }
 
-            // Debit Uang Muka (Close Liability)
+            // Debit Uang Muka (Close Liability - DPP portion only)
             $entries[] = [
                 'coa_id' => $coaUangMuka,
                 'posisi' => 'debet',
-                'nominal'=> $dpp,
+                'nominal'=> $dppDp,
                 'sub_id' => $dp->id,
                 'note'   => 'Penggunaan Uang Muka'
             ];
 
-            // Credit Piutang (Reduce Invoice Claim)
+            // Credit Piutang (Reduce Invoice Claim by FULL nominal including tax)
             $entries[] = [
                 'coa_id' => $coaPiutang,
                 'posisi' => 'kredit',
@@ -754,7 +912,7 @@ class InvoiceRepo extends ElequentRepository
         $invoiceRepo = new self(new SalesInvoicing());
         $paymentInvoiceRepo = new PaymentInvoiceRepo(new SalesPaymentInvoice());
         $findInvoice = $invoiceRepo->findOne($idInvoice);
-        
+
         if (!$findInvoice) return;
 
         $paid = $paymentInvoiceRepo->getAllPaymentByInvoiceId($idInvoice);

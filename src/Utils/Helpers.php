@@ -33,12 +33,24 @@ class Helpers
 
     public static function hitungIncludeTaxDppNilaiLain($persenTax, $nomimal){
         // REPLACED HARDCODED 11% LOGIC WITH STANDARD LOGIC TO FIX BALANCE
-        return self::hitungIncludeTax($persenTax, $nomimal);
+        $taxRate = (11/12) * ($persenTax / 100);
+        $dpp = $nomimal / (1 + $taxRate);
+        $ppn = $dpp * $taxRate;
+
+        return array(
+            TypeEnum::DPP => $dpp,
+            TypeEnum::PPN => $ppn
+        );
     }
 
     public static function hitungExcludeTaxDppNilaiLain($persenTax, $nomimal){
         // REPLACED HARDCODED 11% LOGIC WITH STANDARD LOGIC TO FIX BALANCE
-        return self::hitungExcludeTax($persenTax, $nomimal);
+        $ppn = $nomimal * (11/12) * ($persenTax / 100);
+
+        return array(
+            TypeEnum::DPP => $nomimal,
+            TypeEnum::PPN => $ppn
+        );
     }
 
     public static function hitungExcludeTax($persenTax, $nomimal){

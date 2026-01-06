@@ -59,13 +59,7 @@ class CreateAdjustmentRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
-        if (empty($id) && !empty($refNo)) {
-            $rules['ref_no'] = [
-                Rule::unique($table, 'ref_no'),
-            ];
-        }
-        $rules['adjustmentproduct.*.qty_actual'] = ['required', 'numeric'];
+        $rules['adjustmentproduct.*.qty_actual'] = ['required'];
         $rules['adjustmentproduct.*.product_id'] = 'required';
         return $rules;
     }
@@ -75,7 +69,6 @@ class CreateAdjustmentRequest extends FormRequest
         return ['adjustment_date.required' => 'Tanggal penyesuaian Masih Kosong', 'warehouse_id.required' => 'Nama Gudang Masih Kosong',
             'coa_adjustment_id.required' => 'Akun penyesuaian Masih Kosong',
             'adjustmentproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
-            'adjustmentproduct.*.qty_actual.numeric' => 'Kuantitas barang harus berupa angka',
             'adjustmentproduct.*.qty_actual.required' => 'Kuantitas barang masih kosong',
             'adjustment_type.required' => 'Tipe penyesuaian','adjustmentproduct.required' => 'Daftar Barang Yang Akan disesuikan masih kosong'];
     }

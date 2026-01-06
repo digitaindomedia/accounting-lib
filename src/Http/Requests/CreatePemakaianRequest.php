@@ -57,13 +57,8 @@ class CreatePemakaianRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
-        if (empty($id) && !empty($refNo)) {
-            $rules['ref_no'] = [
-                Rule::unique($table, 'ref_no'),
-            ];
-        }
-        $rules['stockusageproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+
+        $rules['stockusageproduct.*.qty'] = ['required', 'min:0'];
         $rules['stockusageproduct.*.product_id'] = 'required';
         return $rules;
     }

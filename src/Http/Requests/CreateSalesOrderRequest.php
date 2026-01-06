@@ -62,13 +62,6 @@ class CreateSalesOrderRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
-        if (empty($id) && !empty($orderNo)) {
-            $rules['order_no'] = [
-                Rule::unique($table, 'order_no'),
-            ];
-        }
-
         // Tambahkan validasi service_name jika order_type SERVICE
 
         $rules['orderproduct.*.product_id'] = 'required|string';

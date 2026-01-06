@@ -59,13 +59,6 @@ class CreatePurchaseReturRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
-        if (empty($id) && !empty($returNo)) {
-            $rules['retur_no'] = [
-                Rule::unique($table, 'retur_no'),
-            ];
-        }
-
         return $rules;
     }
 

@@ -57,13 +57,7 @@ class CreatePurchaseBastRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika bast_no tidak kosong
-        if (empty($id) && !empty($bastNo)) {
-            $rules['bast_no'] = [
-                Rule::unique($table, 'bast_no'),
-            ];
-        }
-        $rules['bastproduct.*.qty'] = ['required', 'numeric', 'min:0'];
+        $rules['bastproduct.*.qty'] = ['required', 'min:0'];
         return $rules;
     }
 

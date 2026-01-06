@@ -59,12 +59,7 @@ class CreateSalesSpkRequest extends FormRequest
                 Rule::unique($table, 'spk_no')->ignore($id),
             ];
         }
-        // Hanya tambahkan validasi unique untuk create jika bast_no tidak kosong
-        if (empty($id) && !empty($spkNo)) {
-            $rules['spk_no'] = [
-                Rule::unique($table, 'spk_no'),
-            ];
-        }
+
         $rules['spkproduct.*.qty'] = ['required', 'numeric', 'min:0'];
         return $rules;
     }

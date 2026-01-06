@@ -60,13 +60,6 @@ class CreateSalesPaymentRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika payment_no tidak kosong
-        if (empty($id) && !empty($paymentNo)) {
-            $rules['payment_no'] = [
-                Rule::unique($table, 'payment_no'),
-            ];
-        }
-
         return $rules;
     }
 

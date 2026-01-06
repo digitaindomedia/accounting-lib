@@ -63,12 +63,6 @@ class CreatePurchaseDpRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika ref_no tidak kosong
-        if (empty($id) && !empty($refNo)) {
-            $rules['ref_no'] = [
-                Rule::unique($table, 'ref_no'),
-            ];
-        }
 
         return $rules;
     }

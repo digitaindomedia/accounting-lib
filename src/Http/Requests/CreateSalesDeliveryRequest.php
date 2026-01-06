@@ -60,12 +60,7 @@ class CreateSalesDeliveryRequest extends FormRequest
                 Rule::unique($table, 'delivery_no')->ignore($id),
             ];
         }
-        // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
-        if (empty($id) && !empty($deliveryNo)) {
-            $rules['delivery_no'] = [
-                Rule::unique($table, 'delivery_no'),
-            ];
-        }
+
         $rules['deliveryproduct.*.qty'] = ['required', 'gt:0'];
         return $rules;
     }

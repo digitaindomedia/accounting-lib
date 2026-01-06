@@ -62,12 +62,6 @@ class CreatePurchaseReceivedRequest extends FormRequest
             ];
         }
 
-        // Hanya tambahkan validasi unique untuk create jika order_no tidak kosong
-        if (empty($id) && !empty($receivedNo)) {
-            $rules['received_no'] = [
-                Rule::unique($table, 'received_no'),
-            ];
-        }
         $rules['receiveproduct.*.qty'] = ['required', 'gt:0'];
         return $rules;
     }

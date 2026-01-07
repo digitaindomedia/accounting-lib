@@ -86,7 +86,13 @@ class PemakaianRepo extends ElequentRepository
             $res = $this->saveData($arrData, $id, $userId);
 
             if ($res) {
-                $idUsage = empty($id) ? $res->id : $id;
+                if(empty($id)){
+                    $idUsage = $res->id;
+                } else {
+                    $this->deleteAdditional($id);
+                    $idUsage = $id;
+                }
+
 
                 $this->handleProducts($request, $idUsage);
                 $this->postingJurnal($idUsage);

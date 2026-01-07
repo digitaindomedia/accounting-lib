@@ -58,7 +58,8 @@ class CreatePemakaianRequest extends FormRequest
         }
 
 
-        $rules['stockusageproduct.*.qty'] = ['required', 'min:0'];
+        $rules['stockusageproduct.*.qty'] = ['required', 'gt:0'];
+        $rules['stockusageproduct.*.coa_id'] = 'required';
         $rules['stockusageproduct.*.product_id'] = 'required';
         return $rules;
     }
@@ -69,8 +70,9 @@ class CreatePemakaianRequest extends FormRequest
             'stockusageproduct.required' => 'Daftar Produk Pemakaian Masih Kosong',
             'stockusageproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'stockusageproduct.*.qty.numeric' => 'Kuantitas barang harus berupa angka',
-            'stockusageproduct.*.qty.min' => 'Kuantitas barang tidak boleh kurang dari 0',
+            'stockusageproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 1',
             'stockusageproduct.*.qty.required' => 'Kuantitas barang masih kosong',
+            'stockusageproduct.*.coa_id.required' => 'Akun item belum dipilih',
             'warehouse_id.required' => 'Nama Gudang Masih Belum diPilih'
         ];
     }

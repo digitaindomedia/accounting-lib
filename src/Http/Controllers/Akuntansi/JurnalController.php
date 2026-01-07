@@ -16,6 +16,7 @@ use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
 use Icso\Accounting\Utils\JurnalType;
 use Illuminate\Routing\Controller;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
@@ -26,6 +27,7 @@ class JurnalController extends Controller
     protected $jurnalAkunRepo;
     protected $transaksiRepo;
     protected $coaRepo;
+    protected $data = [];
 
     public function __construct(JurnalRepo $jurnalRepo, JurnalAkunRepo $jurnalAkunRepo, JurnalTransaksiRepo $transaksiRepo, CoaRepo $coaRepo)
     {
@@ -35,14 +37,16 @@ class JurnalController extends Controller
         $this->coaRepo = $coaRepo;
     }
 
-    public function getAllData(Request $request)
+    public function getAllData(Request $request): JsonResponse
     {
-        $search = $request->q;
-        $page = $request->page;
-        $perpage = $request->perpage;
+        $search = $request->input('q');
+        $page = $request->input('page');
+        $perpage = $request->input('perpage');
         $where = $this->buildWhere($request);
+        
         $data = $this->jurnalRepo->getAllDataBy($search, $page, $perpage, $where);
         $total = $this->jurnalRepo->getAllTotalDataBy($search, $where);
+        
         if (count($data) > 0) {
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
@@ -52,98 +56,126 @@ class JurnalController extends Controller
         } else {
             $this->data['status'] = false;
             $this->data['message'] = 'Data tidak ditemukan';
-            $this->data['data'] = array();
+            $this->data['data'] = [];
         }
         return response()->json($this->data);
     }
 
-    public function store(CreateJurnalRequest $request){
+    public function store(CreateJurnalRequest $request): JsonResponse
+    {
         $res = $this->jurnalRepo->store($request);
-        if($res)
-        {
+        if ($res) {
             $this->data['status'] = true;
             $this->data['data'] = '';
             $this->data['message'] = 'Data berhasil disimpan';
-
-        }else{
+            return response()->json($this->data, 200);
+        } else {
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal disimpan';
-            $this->data['data'] = array();
+            $this->data['data'] = [];
+            return response()->json($this->data, 200);
         }
-        return response()->json($this->data);
     }
 
-    public function findJurnalById(Request $request) {
-        $id = $request->id;
-        $res = $this->jurnalRepo->findOne($id, array(),['jurnal_akun', 'coa','jurnal_akun.coa', 'jurnal_meta']);
-        if($res){
+    public function findJurnalById(Request $request): JsonResponse
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['status' => false, 'message' => 'ID tidak ditemukan', 'data' => ''], 400);
+        }
+
+        $res = $this->jurnalRepo->findOne($id, [], ['jurnal_akun', 'coa', 'jurnal_akun.coa', 'jurnal_meta']);
+        if ($res) {
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
             $this->data['data'] = $res;
-        }
-        else{
+        } else {
             $this->data['status'] = false;
             $this->data['message'] = 'Data tidak ditemukan';
-            $this->data['data'] = array();
+            $this->data['data'] = [];
         }
         return response()->json($this->data);
     }
 
-    public function deleteById(Request $request) {
-        $id = $request->id;
+    public function deleteById(Request $request): JsonResponse
+    {
+        $id = $request->input('id');
+        if (!$id) {
+            return response()->json(['status' => false, 'message' => 'ID tidak ditemukan', 'data' => ''], 400);
+        }
+
         $res = $this->jurnalRepo->delete($id);
-        if($res) {
+        if ($res) {
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus ';
         } else {
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
-            $this->data['data'] = array();
+            $this->data['data'] = [];
         }
         return response()->json($this->data);
     }
 
-    public function deleteAllJurnal(Request $request) {
-        $reqData = json_decode(json_encode($request->ids));
+    public function deleteAllJurnal(Request $request): JsonResponse
+    {
+        $request->validate([
+            'ids' => 'required|array'
+        ]);
+
+        $reqData = $request->input('ids');
         $successDelete = 0;
         $failedDelete = 0;
-        if(count($reqData) > 0){
-            foreach ($reqData as $item){
-                if($item->can_delete){
-                    $res = $this->jurnalRepo->delete($item->id);
-                    if($res){
-                        $successDelete = $successDelete + 1;
-                    } else{
-                        $failedDelete = $failedDelete + 1;
+        
+        if (count($reqData) > 0) {
+            foreach ($reqData as $item) {
+                // Handle both object (from json_decode) and array (from input) structures if needed,
+                // but since we use input('ids') and validate array, we expect array of objects or IDs.
+                // Assuming input is array of objects with 'id' and 'can_delete' properties based on original code logic
+                // Or if it's just IDs, we need to adjust. Original code: $item->can_delete
+                
+                // Safe access to properties
+                $itemId = is_array($item) ? ($item['id'] ?? null) : ($item->id ?? null);
+                $canDelete = is_array($item) ? ($item['can_delete'] ?? false) : ($item->can_delete ?? false);
+
+                if ($itemId && $canDelete) {
+                    $res = $this->jurnalRepo->delete($itemId);
+                    if ($res) {
+                        $successDelete++;
+                    } else {
+                        $failedDelete++;
                     }
                 }
-
             }
         }
 
-        if($successDelete > 0) {
+        if ($successDelete > 0) {
             $this->data['status'] = true;
             $this->data['message'] = "$successDelete Data berhasil dihapus";
-            $this->data['data'] = array();
+            $this->data['data'] = [];
         } else {
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
-            $this->data['data'] = array();
+            $this->data['data'] = [];
         }
         return response()->json($this->data);
     }
 
-    public function showAccountJurnal(Request $request){
-        $noJurnal = $request->jurnal_no;
-        $findJurnal =$this->transaksiRepo->findAllByWhere(array('transaction_no' => $noJurnal),array(),['coa']);
-        if(count($findJurnal) > 0){
+    public function showAccountJurnal(Request $request): JsonResponse
+    {
+        $noJurnal = $request->input('jurnal_no');
+        if (!$noJurnal) {
+             return response()->json(['status' => false, 'message' => 'Nomor Jurnal tidak ditemukan', 'data' => []], 400);
+        }
+
+        $findJurnal = $this->transaksiRepo->findAllByWhere(['transaction_no' => $noJurnal], [], ['coa']);
+        if (count($findJurnal) > 0) {
             $this->data['status'] = true;
             $this->data['message'] = "Data ditemukan";
             $this->data['data'] = $findJurnal;
         } else {
             $this->data['status'] = false;
             $this->data['message'] = " Data tidak ditemukan";
-            $this->data['data'] = array();
+            $this->data['data'] = [];
         }
         return response()->json($this->data);
     }
@@ -163,7 +195,7 @@ class JurnalController extends Controller
         $request->validate([
             'file' => 'required|mimes:xlsx,xls,csv',
         ]);
-        $userId = $request->user_id;
+        $userId = $request->input('user_id');
         $import = new JurnalUmumImport($userId);
         Excel::import($import, $request->file('file'));
 
@@ -179,8 +211,8 @@ class JurnalController extends Controller
         $request->validate([
             'file' => 'required|mimes:xlsx,xls,csv',
         ]);
-        $userId = $request->user_id;
-        $transType = $request->trans_type;
+        $userId = $request->input('user_id');
+        $transType = $request->input('trans_type');
         $import = new JurnalKasBankImport($userId, $transType);
         Excel::import($import, $request->file('file'));
 
@@ -193,23 +225,23 @@ class JurnalController extends Controller
 
     public function export(Request $request)
     {
-        $search = $request->q;
-        $page = $request->page;
+        $search = $request->input('q');
+        $page = $request->input('page');
         $where = $this->buildWhere($request);
         $total = $this->jurnalRepo->getAllTotalDataBy($search, $where);
         $data = $this->jurnalRepo->getAllDataBy($search, $page, $total, $where);
-        return $this->handleExport($data, $request->jurnal_type);
+        return $this->handleExport($data, $request->input('jurnal_type'));
 
     }
 
     public function exportPdf(Request $request)
     {
-        $search = $request->q;
-        $page = $request->page;
+        $search = $request->input('q');
+        $page = $request->input('page');
         $where = $this->buildWhere($request);
         $total = $this->jurnalRepo->getAllTotalDataBy($search, $where);
         $data = $this->jurnalRepo->getAllDataBy($search, $page, $total, $where);
-        return $this->handleExportPdf($data, $request->jurnal_type);
+        return $this->handleExportPdf($data, $request->input('jurnal_type'));
     }
 
     private function handleExport($data, $jurnalType)
@@ -223,21 +255,23 @@ class JurnalController extends Controller
     private function handleExportPdf($data, $jurnalType)
     {
         if ($jurnalType) {
-            $pdf = PDF::loadView('accounting::jurnal.jurnal_kas_bank_pdf', ['arrData' => (new JurnalKasBankExport($data))->collection()]);
+            $pdf = Pdf::loadView('accounting::jurnal.jurnal_kas_bank_pdf', ['arrData' => (new JurnalKasBankExport($data))->collection()]);
             return $pdf->download('jurnal-kas-bank.pdf');
         }
-        $pdf = PDF::loadView('accounting::jurnal.jurnal_umum_pdf', ['arrData' => (new JurnalUmumExport($data))->collection()]);
+        $pdf = Pdf::loadView('accounting::jurnal.jurnal_umum_pdf', ['arrData' => (new JurnalUmumExport($data))->collection()]);
         return $pdf->download('jurnal-umum.pdf');
     }
 
     private function buildWhere(Request $request)
     {
-        $where = ['jurnal_type' => $request->jurnal_type ?: JurnalType::JURNAL_UMUM];
-        if ($request->coa_id) {
-            $where['coa_id'] = $request->coa_id;
+        $jurnalType = $request->input('jurnal_type');
+        $where = ['jurnal_type' => $jurnalType ?: JurnalType::JURNAL_UMUM];
+        
+        if ($request->input('coa_id')) {
+            $where['coa_id'] = $request->input('coa_id');
         }
-        if ($request->from_date && $request->until_date) {
-            $where['jurnal_date'] = [$request->from_date, $request->until_date];
+        if ($request->input('from_date') && $request->input('until_date')) {
+            $where['jurnal_date'] = [$request->input('from_date'), $request->input('until_date')];
         }
         return $where;
     }

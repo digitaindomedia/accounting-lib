@@ -89,7 +89,7 @@ class PemakaianController extends Controller
             $this->data['message'] = "Data gagal disimpan";
             $this->data['data'] = '';
         }
-        return response()->json($this->data, $res ? 200 : 500);
+        return response()->json($this->data);
     }
 
     public function show(Request $request): JsonResponse

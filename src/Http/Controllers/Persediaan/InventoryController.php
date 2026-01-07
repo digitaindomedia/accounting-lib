@@ -525,9 +525,8 @@ class InventoryController extends Controller
         // ==== FAST MOVING ====
         $fastMoving = Inventory::where('inventory_date', '>=', $thirtyDaysAgo)
             ->where('qty_out', '>', 0)
-            ->groupBy('product_id')
-            ->get() // Need get() to count groups
-            ->count();
+            ->distinct()
+            ->count('product_id');
 
 
         return response()->json([

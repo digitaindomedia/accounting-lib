@@ -84,8 +84,38 @@ class SpkController extends Controller
         $res = $this->salesSpkRepo->findOne($request->id,array(),['vendor','order','spkproduct','spkproduct.orderproduct','spkproduct.product']);
         if($res){
             if(!empty($res->spkproduct)){
-                foreach ($res->spkproduct as $item){
-                    $countDelivered = $this->salesSpkRepo->getSpkProduct($item->spk_id,$item->product_id);
+                // Collect all product IDs and SPK IDs to perform a single query if possible,
+                // or optimize the logic.
+                // However, getSpkProduct in repo does a simple sum.
+                // To avoid N+1, we should ideally fetch all delivered quantities in one go.
+                // But since getSpkProduct is a specific business logic in repo,
+                // we can at least keep it as is if it's not too heavy, or refactor repo.
+                // Given the user asked to fix issues, and N+1 is one, let's try to optimize.
+                
+                // Optimization: Pre-fetch delivered quantities for all products in this SPK
+                // But getSpkProduct filters by spk_id AND product_id.
+                // Since we are inside a single SPK ($res), spk_id is constant ($res->id).
+                // We can query all SalesSpkProduct for this spk_id grouped by product_id.
+                
+                // However, getSpkProduct implementation:
+                // SalesSpkProduct::where(array('product_id' => $idProduct, 'spk_id' => $spkId))->sum('qty');
+                // This seems to sum qty for a specific product in a specific SPK.
+                // Wait, isn't $res->spkproduct ALREADY the list of products for this SPK?
+                // If so, $item->qty is the qty for that line item.
+                // Why do we need to query again?
+                // Maybe there are multiple entries for the same product in the same SPK?
+                // Or maybe it's checking across OTHER SPKs?
+                // The repo code: where('product_id' => $idProduct, 'spk_id' => $spkId)
+                // It filters by the SAME spk_id.
+                // So it sums up qty of that product within the SAME SPK.
+                
+                // If $res->spkproduct contains all lines, we can just sum them up in PHP
+                // without querying DB again.
+                
+                $spkProducts = $res->spkproduct;
+                foreach ($spkProducts as $item){
+                    // Calculate sum in memory to avoid N+1
+                    $countDelivered = $spkProducts->where('product_id', $item->product_id)->sum('qty');
                     $item->qty_delivered = $countDelivered;
                 }
             }

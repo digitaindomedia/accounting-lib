@@ -12,6 +12,7 @@ use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SpkRepo extends ElequentRepository
 {
@@ -81,7 +82,7 @@ class SpkRepo extends ElequentRepository
     {
         $id = $request->id;
         $spkNo = $request->spk_no;
-        if(empty($bastNo)){
+        if(empty($spkNo)){
             $spkNo = self::generateCodeTransaction(new SalesSpk(),KeyNomor::NO_SPK,'spk_no','spk_date');
         }
         $spkDate = !empty($request->spk_date) ? Utility::changeDateFormat($request->spk_date) : date('Y-m-d');
@@ -98,6 +99,8 @@ class SpkRepo extends ElequentRepository
             'updated_by' => $userId,
             'updated_at' => date('Y-m-d H:i:s')
         );
+        
+        DB::beginTransaction();
         try {
             if(empty($id)){
                 $arrData['reason'] = '';
@@ -149,11 +152,12 @@ class SpkRepo extends ElequentRepository
                 return true;
             }
             else {
+                DB::rollBack();
                 return false;
             }
         }
         catch (\Exception $e){
-            echo $e->getMessage();
+            Log::error($e->getMessage());
             DB::rollBack();
             return false;
         }

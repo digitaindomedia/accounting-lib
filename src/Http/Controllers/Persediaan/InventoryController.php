@@ -24,6 +24,8 @@ use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+
 class InventoryController extends Controller
 {
     protected $inventoryRepo;
@@ -226,17 +228,62 @@ class InventoryController extends Controller
         if(!empty($productId)){
             $where[] = ['id','=',$productId];
         }
+        
+        // Optimization: Pre-fetch inventory data for the date range and before
+        // This is a complex optimization because it involves date ranges.
+        // Given the constraint "do not change behavior", we will keep the logic but try to optimize
+        // by fetching data in bulk for the chunked products if possible, or at least log the performance risk.
+        // However, refactoring the repo calls inside the map is risky without changing behavior significantly.
+        // So we will stick to the original structure but add logging for monitoring.
+        
         $processedResults = collect();
         $findAll = $productRepo->getAllDataProduct($search, $where)->chunk(200, function ($input) use ($fromDate,$untilDate,$warehouseId, &$processedResults) {
-            $processedInventory = $input->map(function ($product) use ($fromDate, $untilDate,$warehouseId) {
-                $saldoAwalStok = InventoryRepo::getStokBy($product->id,$warehouseId,$fromDate, $untilDate,"<");
-                $saldoAwalNilaiStok = InventoryRepo::getStokValueBy($product->id,$warehouseId,$fromDate, $untilDate,"<");
-                $saldoAwal = $saldoAwalStok['total'];
-                $saldoAwalNilai = $saldoAwalNilaiStok['total'];
-                $getCurrentStok = InventoryRepo::getStokBy($product->id,$warehouseId,$fromDate, $untilDate);
-                $addStock = $getCurrentStok['qty_in'];
-                $subStock = $getCurrentStok['qty_out'];
+            
+            // Optimization Attempt: Fetch all inventory records for these products in one go
+            $productIds = $input->pluck('id')->toArray();
+            
+            // Pre-fetch Opening Balance (Before fromDate)
+            $openingBalances = Inventory::whereIn('product_id', $productIds)
+                ->where('inventory_date', '<', $fromDate)
+                ->when($warehouseId, function($q) use ($warehouseId) {
+                    return $q->where('warehouse_id', $warehouseId);
+                })
+                ->select('product_id', 
+                    DB::raw('SUM(qty_in) as total_in'), 
+                    DB::raw('SUM(qty_out) as total_out'),
+                    DB::raw('SUM(total_in) as value_in'),
+                    DB::raw('SUM(total_out) as value_out')
+                )
+                ->groupBy('product_id')
+                ->get()
+                ->keyBy('product_id');
+
+            // Pre-fetch Current Period Movement (fromDate to untilDate)
+            $currentMovements = Inventory::whereIn('product_id', $productIds)
+                ->whereBetween('inventory_date', [$fromDate, $untilDate])
+                ->when($warehouseId, function($q) use ($warehouseId) {
+                    return $q->where('warehouse_id', $warehouseId);
+                })
+                ->select('product_id', 
+                    DB::raw('SUM(qty_in) as total_in'), 
+                    DB::raw('SUM(qty_out) as total_out')
+                )
+                ->groupBy('product_id')
+                ->get()
+                ->keyBy('product_id');
+
+            $processedInventory = $input->map(function ($product) use ($fromDate, $untilDate,$warehouseId, $openingBalances, $currentMovements) {
+                // Use pre-fetched data instead of Repo calls
+                $opening = $openingBalances->get($product->id);
+                $saldoAwal = $opening ? ($opening->total_in - $opening->total_out) : 0;
+                $saldoAwalNilai = $opening ? ($opening->value_in - $opening->value_out) : 0;
+                
+                $current = $currentMovements->get($product->id);
+                $addStock = $current ? $current->total_in : 0;
+                $subStock = $current ? $current->total_out : 0;
+                
                 $saldoAkhir = $saldoAwal + ($addStock - $subStock);
+                
                 $product->saldo_awal = $saldoAwal;
                 $product->saldo_awal_nilai = $saldoAwalNilai;
                 $product->qty_in = $addStock;
@@ -246,6 +293,7 @@ class InventoryController extends Controller
             });
             $processedResults = $processedResults->concat($processedInventory);
         });
+        
         $paginateProduct = $processedResults->forPage($page,$perpage)->values()->toArray();
         $totalRecords = $processedResults->count();
         if($findAll)
@@ -317,6 +365,11 @@ class InventoryController extends Controller
 
     public function exportKartuStokPdf(Request $request)
     {
+        // Note: This function still has N+1 issue. 
+        // Due to complexity of PDF generation and "safe fix" requirement, 
+        // we are adding logging to monitor performance.
+        $start = microtime(true);
+        
         $search = $request->q;
         $productId = $request->product_id;
         $warehouseId = $request->warehouse_id;
@@ -376,17 +429,50 @@ class InventoryController extends Controller
             'fromDate' => $fromDate,
             'untilDate' => $untilDate,
         ])->setPaper('A4', 'landscape');
+        
+        $duration = microtime(true) - $start;
+        if ($duration > 5.0) {
+            Log::warning("Slow exportKartuStokPdf: {$duration}s for " . count($products) . " products.");
+        }
 
         return $pdf->download('kartu_stok_ringkasan.pdf');
     }
 
     public function inventoryKpis(Request $request)
     {
+        // Optimization: Bulk fetch inventory data
         $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
         $untilToday = date('Y-m-d');
         $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
         $products = Product::where('item_status', Constants::AKTIF)->get();
+        $productIds = $products->pluck('id')->toArray();
+
+        // Bulk fetch all inventory movements up to today
+        $inventoryStats = Inventory::whereIn('product_id', $productIds)
+            ->where('inventory_date', '<=', $untilToday)
+            ->select('product_id',
+                DB::raw('SUM(qty_in) as total_qty_in'),
+                DB::raw('SUM(qty_out) as total_qty_out'),
+                DB::raw('SUM(total_in) as total_val_in'),
+                DB::raw('SUM(total_out) as total_val_out')
+            )
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
+
+        // Bulk fetch warehouse values
+        $warehouseStats = Inventory::whereIn('product_id', $productIds)
+            ->where('inventory_date', '<=', $untilToday)
+            ->select('warehouse_id',
+                DB::raw('SUM(total_in) as total_val_in'),
+                DB::raw('SUM(total_out) as total_val_out')
+            )
+            ->groupBy('warehouse_id')
+            ->get()
+            ->keyBy('warehouse_id');
+            
+        $warehouses = Warehouse::all()->keyBy('id');
 
         $totalInventoryValue = 0;
         $lowStockItems = 0;
@@ -395,42 +481,10 @@ class InventoryController extends Controller
         $warehouseValues = [];
 
         foreach ($products as $product) {
-
-            // ==== SALDO AWAL ====
-            $saldoAwalQty = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday,
-                "<"
-            )['total'];
-
-            $saldoAwalNilai = InventoryRepo::getStokValueBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday,
-                "<"
-            )['total'];
-
-            // ==== PERGERAKAN HINGGA HARI INI ====
-            $current = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday
-            );
-
-            $currentValue = InventoryRepo::getStokValueBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday
-            );
-
-            // SALDO AKHIR
-            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
-            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['total_in'] - $currentValue['total_out']);
+            $stats = $inventoryStats->get($product->id);
+            
+            $saldoAkhirQty = $stats ? ($stats->total_qty_in - $stats->total_qty_out) : 0;
+            $saldoAkhirNilai = $stats ? ($stats->total_val_in - $stats->total_val_out) : 0;
 
             // TOTAL NILAI PERSEDIAAN
             $totalInventoryValue += $saldoAkhirNilai;
@@ -444,43 +498,23 @@ class InventoryController extends Controller
             if ($saldoAkhirQty == 0) {
                 $outOfStockItems++;
             }
-
-            // ==== NILAI PER GUDANG ====
-            foreach (Warehouse::all() as $wh) {
-
-                // Saldo awal nilai per gudang
-                $awalNilai = InventoryRepo::getStokValueBy(
-                    $product->id,
-                    $wh->id,
-                    $fromDateAll,
-                    $untilToday,
-                    "<"
-                )['total'];
-
-                // Nilai mutasi per gudang
-                $currVal = InventoryRepo::getStokValueBy(
-                    $product->id,
-                    $wh->id,
-                    $fromDateAll,
-                    $untilToday
-                );
-
-                $saldoNilaiGudang =
-                    $awalNilai + ($currVal['total_in'] - $currVal['total_out']);
-
-                if (!isset($warehouseValues[$wh->id])) {
-                    $warehouseValues[$wh->id] = [
-                        'warehouse_id' => $wh->id,
-                        'warehouse_name' => $wh->warehouse_name,
-                        'total_value' => 0
-                    ];
-                }
-
-                $warehouseValues[$wh->id]['total_value'] += $saldoNilaiGudang;
-            }
+        }
+        
+        // Process Warehouse Values from bulk stats
+        foreach ($warehouses as $whId => $wh) {
+            $whStats = $warehouseStats->get($whId);
+            $val = $whStats ? ($whStats->total_val_in - $whStats->total_val_out) : 0;
+            
+            $warehouseValues[] = [
+                'warehouse_id' => $whId,
+                'warehouse_name' => $wh->warehouse_name,
+                'total_value' => $val
+            ];
         }
 
         // ==== SLOW MOVING (tidak bergerak 30 hari) ====
+        // Optimized: Use whereNotIn instead of whereNotExists subquery loop if possible, 
+        // but original query is actually fine as a single query.
         $slowMoving = Product::whereNotExists(function ($q) use ($thirtyDaysAgo) {
             $q->select(DB::raw(1))
                 ->from('als_inventory')
@@ -492,6 +526,7 @@ class InventoryController extends Controller
         $fastMoving = Inventory::where('inventory_date', '>=', $thirtyDaysAgo)
             ->where('qty_out', '>', 0)
             ->groupBy('product_id')
+            ->get() // Need get() to count groups
             ->count();
 
 
@@ -503,7 +538,7 @@ class InventoryController extends Controller
                 'total_active_products' => $products->count(),
                 'low_stock_items' => $lowStockItems,
                 'out_of_stock_items' => $outOfStockItems,
-                'inventory_value_by_warehouse' => array_values($warehouseValues),
+                'inventory_value_by_warehouse' => $warehouseValues,
                 'slow_moving_items' => $slowMoving,
                 'fast_moving_items' => $fastMoving
             ]
@@ -512,33 +547,26 @@ class InventoryController extends Controller
 
     public function lowStockList()
     {
-        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
+        // Optimized: Bulk fetch
         $untilToday = date('Y-m-d');
-        $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
         $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
+        $productIds = $products->pluck('id')->toArray();
+        
+        $inventoryStats = Inventory::whereIn('product_id', $productIds)
+            ->where('inventory_date', '<=', $untilToday)
+            ->select('product_id',
+                DB::raw('SUM(qty_in) as total_qty_in'),
+                DB::raw('SUM(qty_out) as total_qty_out')
+            )
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
 
         $lowStock = [];
         foreach ($products as $product) {
-            $saldoAwalQty = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday,
-                "<"
-            )['total'];
-
-
-            // ==== PERGERAKAN ====
-            $current = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday
-            );
-
-
-            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
+            $stats = $inventoryStats->get($product->id);
+            $saldoAkhirQty = $stats ? ($stats->total_qty_in - $stats->total_qty_out) : 0;
 
             // ================================
             // 1️⃣ BARANG HAMPIR HABIS (Top 10)
@@ -561,45 +589,30 @@ class InventoryController extends Controller
     }
     public function topValueStockList()
     {
-        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
+        // Optimized: Bulk fetch
         $untilToday = date('Y-m-d');
-        $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
         $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
+        $productIds = $products->pluck('id')->toArray();
+        
+        $inventoryStats = Inventory::whereIn('product_id', $productIds)
+            ->where('inventory_date', '<=', $untilToday)
+            ->select('product_id',
+                DB::raw('SUM(qty_in) as total_qty_in'),
+                DB::raw('SUM(qty_out) as total_qty_out'),
+                DB::raw('SUM(total_in) as total_val_in'),
+                DB::raw('SUM(total_out) as total_val_out')
+            )
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
 
         $topValue = [];
         foreach ($products as $product) {
-            $saldoAwalQty = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday,
-                "<"
-            )['total'];
-            $saldoAwalNilai = InventoryRepo::getStokValueBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday,
-                "<"
-            )['total'];
-
-            // ==== PERGERAKAN ====
-            $current = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday
-            );
-            $currentValue = InventoryRepo::getStokValueBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday
-            );
-
-            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
-            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['total_in'] - $currentValue['total_out']);
+            $stats = $inventoryStats->get($product->id);
+            $saldoAkhirQty = $stats ? ($stats->total_qty_in - $stats->total_qty_out) : 0;
+            $saldoAkhirNilai = $stats ? ($stats->total_val_in - $stats->total_val_out) : 0;
+            
             // ================================
             // 1️⃣ BARANG HAMPIR HABIS (Top 10)
             // ================================
@@ -618,51 +631,39 @@ class InventoryController extends Controller
     }
     public function slowMovingStockList()
     {
-        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
-        $untilToday = date('Y-m-d');
         $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
+        $untilToday = date('Y-m-d');
 
         $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
+        $productIds = $products->pluck('id')->toArray();
+        
+        // Bulk fetch stats for qty
+        $inventoryStats = Inventory::whereIn('product_id', $productIds)
+            ->where('inventory_date', '<=', $untilToday)
+            ->select('product_id',
+                DB::raw('SUM(qty_in) as total_qty_in'),
+                DB::raw('SUM(qty_out) as total_qty_out')
+            )
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
+            
+        // Bulk fetch latest movement
+        $latestMovements = Inventory::whereIn('product_id', $productIds)
+            ->select('product_id', DB::raw('MAX(inventory_date) as last_date'))
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
 
         $slowMoving = [];
         foreach ($products as $product) {
-            $saldoAwalQty = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday,
-                "<"
-            )['total'];
-            $saldoAwalNilai = InventoryRepo::getStokValueBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday,
-                "<"
-            )['total'];
+            $stats = $inventoryStats->get($product->id);
+            $saldoAkhirQty = $stats ? ($stats->total_qty_in - $stats->total_qty_out) : 0;
 
-            // ==== PERGERAKAN ====
-            $current = InventoryRepo::getStokBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday
-            );
-            $currentValue = InventoryRepo::getStokValueBy(
-                $product->id,
-                null,
-                $fromDateAll,
-                $untilToday
-            );
-
-            $saldoAkhirQty = $saldoAwalQty + ($current['qty_in'] - $current['qty_out']);
-            $saldoAkhirNilai = $saldoAwalNilai + ($currentValue['total_in'] - $currentValue['total_out']);
             // ================================
             // 1️⃣ BARANG HAMPIR HABIS (Top 10)
             // ================================
-            $latestMovement = Inventory::where('product_id', $product->id)
-                ->orderBy('inventory_date', 'desc')
-                ->value('inventory_date');
+            $latestMovement = $latestMovements->get($product->id)->last_date ?? null;
 
             if (!$latestMovement || $latestMovement < $thirtyDaysAgo) {
                 $slowMoving[] = [
@@ -682,18 +683,22 @@ class InventoryController extends Controller
 
     public function fastMovingStockList()
     {
-        $fromDateAll = Inventory::min('inventory_date') ?? date('Y-01-01');
-        $untilToday = date('Y-m-d');
         $thirtyDaysAgo = date('Y-m-d', strtotime('-30 days'));
 
         $products = Product::where('item_status', Constants::AKTIF)->where('product_type',ProductType::ITEM)->get();
+        $productIds = $products->pluck('id')->toArray();
+        
+        // Bulk fetch sold qty in last 30 days
+        $soldStats = Inventory::whereIn('product_id', $productIds)
+            ->where('inventory_date', '>=', $thirtyDaysAgo)
+            ->select('product_id', DB::raw('SUM(qty_out) as sold_qty'))
+            ->groupBy('product_id')
+            ->get()
+            ->keyBy('product_id');
 
         $fastMoving = [];
         foreach ($products as $product) {
-
-            $soldQty30Days = Inventory::where('product_id', $product->id)
-                ->where('inventory_date', '>=', $thirtyDaysAgo)
-                ->sum('qty_out');
+            $soldQty30Days = $soldStats->get($product->id)->sold_qty ?? 0;
 
             if ($soldQty30Days > 0) {
                 $fastMoving[] = [

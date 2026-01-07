@@ -6,6 +6,7 @@ use Icso\Accounting\Exports\SalesReturReportExport;
 use Icso\Accounting\Exports\SalesReturExport;
 use Icso\Accounting\Http\Requests\CreateSalesReturRequest;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Penjualan\Retur\SalesReturProduct;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
 use Icso\Accounting\Repositories\Penjualan\Retur\ReturRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -54,16 +55,44 @@ class ReturController extends Controller
         $data = $this->returRepo->getAllDataBy($search,$page,$perpage,$where);
         $total = $this->returRepo->getAllTotalDataBy($search,$where);
         $hasMore = Helpers::hasMoreData($total, $page, $data);
-        $deliveryRepo = new DeliveryRepo(new SalesDelivery());
+        
         if(count($data) > 0) {
+            // Optimization: Collect all delivery_product_ids to fetch retur quantities in bulk
+            $deliveryProductIds = [];
+            foreach ($data as $res) {
+                if (!empty($res->returproduct)) {
+                    foreach ($res->returproduct as $item) {
+                        if (!empty($item->delivery_product_id)) {
+                            $deliveryProductIds[] = $item->delivery_product_id;
+                        }
+                    }
+                }
+            }
+
+            // Fetch all retur quantities for these delivery products in one query
+            $returQuantities = [];
+            if (!empty($deliveryProductIds)) {
+                $returQuantities = SalesReturProduct::whereIn('delivery_product_id', $deliveryProductIds)
+                    ->select('delivery_product_id', DB::raw('sum(qty) as total_qty'))
+                    ->groupBy('delivery_product_id')
+                    ->pluck('total_qty', 'delivery_product_id')
+                    ->toArray();
+            }
+
             foreach ($data as $res){
                 if(!empty($res->returproduct)){
-
                     foreach ($res->returproduct as $item){
                         $deliProduct = $item->deliveryproduct;
-                        $qtyRetur = $deliveryRepo->getQtyRetur($deliProduct->id);
-                        $item->qty_bs_retur = ($deliProduct->qty - $qtyRetur) + $item->qty;
-                        $item->qty_delivery = $deliProduct->qty;
+                        if ($deliProduct) {
+                            // Use pre-fetched quantity or 0 if not found
+                            $qtyRetur = $returQuantities[$deliProduct->id] ?? 0;
+                            
+                            $item->qty_bs_retur = ($deliProduct->qty - $qtyRetur) + $item->qty;
+                            $item->qty_delivery = $deliProduct->qty;
+                        } else {
+                            $item->qty_bs_retur = $item->qty;
+                            $item->qty_delivery = 0;
+                        }
                     }
                 }
             }
@@ -100,12 +129,33 @@ class ReturController extends Controller
         $res = $this->returRepo->findOne($id,array(),['vendor','delivery','returproduct','returproduct.product','returproduct.unit','returproduct.tax','returproduct.tax.taxgroup','returproduct.deliveryproduct','returproduct.deliveryproduct.product']);
         if($res){
             if(!empty($res->returproduct)){
-                $deliveryRepo = new DeliveryRepo(new SalesDelivery());
+                // Optimization for show method as well
+                $deliveryProductIds = [];
+                foreach ($res->returproduct as $item) {
+                    if (!empty($item->delivery_product_id)) {
+                        $deliveryProductIds[] = $item->delivery_product_id;
+                    }
+                }
+
+                $returQuantities = [];
+                if (!empty($deliveryProductIds)) {
+                    $returQuantities = SalesReturProduct::whereIn('delivery_product_id', $deliveryProductIds)
+                        ->select('delivery_product_id', DB::raw('sum(qty) as total_qty'))
+                        ->groupBy('delivery_product_id')
+                        ->pluck('total_qty', 'delivery_product_id')
+                        ->toArray();
+                }
+
                 foreach ($res->returproduct as $item){
                     $deliProduct = $item->deliveryproduct;
-                    $qtyRetur = $deliveryRepo->getQtyRetur($deliProduct->id);
-                    $item->qty_bs_retur = ($deliProduct->qty - $qtyRetur) + $item->qty;
-                    $item->qty_delivery = $deliProduct->qty;
+                    if ($deliProduct) {
+                        $qtyRetur = $returQuantities[$deliProduct->id] ?? 0;
+                        $item->qty_bs_retur = ($deliProduct->qty - $qtyRetur) + $item->qty;
+                        $item->qty_delivery = $deliProduct->qty;
+                    } else {
+                        $item->qty_bs_retur = $item->qty;
+                        $item->qty_delivery = 0;
+                    }
                 }
             }
             $this->data['status'] = true;

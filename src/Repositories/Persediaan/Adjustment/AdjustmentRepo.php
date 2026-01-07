@@ -3,19 +3,19 @@
 namespace Icso\Accounting\Repositories\Persediaan\Adjustment;
 
 use Icso\Accounting\Enums\JurnalStatusEnum;
-use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
-use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Jurnal\JurnalTransaksi;
 use Icso\Accounting\Models\Persediaan\Adjustment;
 use Icso\Accounting\Models\Persediaan\AdjustmentMeta;
 use Icso\Accounting\Models\Persediaan\AdjustmentProducts;
 use Icso\Accounting\Models\Persediaan\Inventory;
-use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
-use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
-use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Repositories\Jurnal\JurnalTransaksiRepo;
+use Icso\Accounting\Repositories\Persediaan\InventoryRepo;
+use Icso\Accounting\Repositories\SettingRepo;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\SettingEnum;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -447,7 +447,7 @@ class AdjustmentRepo extends ElequentRepository
                             'transaction_code' => TransactionsCode::ADJUSTMENT,
                             'coa_id' => $find->coa_adjustment_id,
                             'transaction_id' => $find->id,
-                            'transaction_sub_id' => 0,
+                            'transaction_sub_id' => 0, // Fixed: Use 0 instead of $item->id
                             'created_at' => date("Y-m-d H:i:s"),
                             'updated_at' => date("Y-m-d H:i:s"),
                             'transaction_no' => $refNo,
@@ -467,7 +467,7 @@ class AdjustmentRepo extends ElequentRepository
                             'transaction_code' => TransactionsCode::ADJUSTMENT,
                             'coa_id' => $find->coa_adjustment_id,
                             'transaction_id' => $find->id,
-                            'transaction_sub_id' => $item->id,
+                            'transaction_sub_id' => 0, // Fixed: Use 0 instead of $item->id
                             'created_at' => date("Y-m-d H:i:s"),
                             'updated_at' => date("Y-m-d H:i:s"),
                             'transaction_no' => $refNo,

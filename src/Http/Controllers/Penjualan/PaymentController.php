@@ -5,6 +5,7 @@ namespace Icso\Accounting\Http\Controllers\Penjualan;
 use Icso\Accounting\Exports\SalesPaymentExport;
 use Icso\Accounting\Exports\SalesPaymentReportDetailExport;
 use Icso\Accounting\Http\Requests\CreateSalesPaymentRequest;
+use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -62,30 +63,10 @@ class PaymentController extends Controller
         $data = $this->paymentRepo->getAllDataBy($search, $page, $perpage,$where);
         $total = $this->paymentRepo->getAllTotalDataBy($search, $where);
         $hasMore = Helpers::hasMoreData($total, $page, $data);
+        
         if(count($data) > 0) {
-            foreach ($data as $res){
-                if(!empty($res->invoice)){
-                    foreach ($res->invoice as $item){
-                        $val = $item->salesinvoice;
-                        if(!empty($val))
-                        {
-                            $paid = $this->paymentInvoiceRepo->getAllPaymentByInvoiceId($val->id);
-                            $item->id = $val->id;
-                            $item->nominal_paid = $item->total_payment;
-                            $item->total_kurang_bayar = $item->total_discount;
-                            $item->total_lebih_bayar = $item->total_overpayment;
-                            $item->coa_lebih_bayar = !empty($item->coa_id_overpayment) ? json_decode($item->coa_id_overpayment) : $item->coa_id_overpayment;
-                            $item->coa_kurang_bayar = !empty($item->coa_id_discount) ? json_decode($item->coa_id_discount) : $item->coa_id_discount;
-                            $item->grandtotal = $val->grandtotal;
-                            $terbayar = $paid - (($item->total_payment + $item->total_discount) - $item->total_overpayment);
-                            $item->paid = $terbayar;
-                            $sisa = $val->grandtotal - $terbayar;
-                            $item->left_bill = $sisa;
-                        }
-
-                    }
-                }
-            }
+            $this->enrichPaymentData($data);
+            
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
             $this->data['data'] = $data;
@@ -117,27 +98,10 @@ class PaymentController extends Controller
     {
         $res = $this->paymentRepo->findOne($request->id,array(),['vendor','payment_method','invoice','invoice.salesinvoice','invoiceretur','invoiceretur.retur']);
         if($res){
-            if(!empty($res->invoice)){
-                foreach ($res->invoice as $item){
-                    $val = $item->salesinvoice;
-                    if(!empty($val))
-                    {
-                        $paid = $this->paymentInvoiceRepo->getAllPaymentByInvoiceId($val->id);
-                        $item->id = $val->id;
-                        $item->nominal_paid = $item->total_payment;
-                        $item->total_kurang_bayar = $item->total_discount;
-                        $item->total_lebih_bayar = $item->total_overpayment;
-                        $item->coa_lebih_bayar = !empty($item->coa_id_overpayment) ? json_decode($item->coa_id_overpayment) : $item->coa_id_overpayment;
-                        $item->coa_kurang_bayar = !empty($item->coa_id_discount) ? json_decode($item->coa_id_discount) : $item->coa_id_discount;
-                        $item->grandtotal = $val->grandtotal;
-                        $terbayar = $paid - (($item->total_payment + $item->total_discount) - $item->total_overpayment);
-                        $item->paid = $terbayar;
-                        $sisa = $val->grandtotal - $terbayar;
-                        $item->left_bill = $sisa;
-                    }
-
-                }
-            }
+            // Wrap single result in array to reuse enrichment logic, then unwrap
+            $dataCollection = collect([$res]);
+            $this->enrichPaymentData($dataCollection);
+            
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
             $this->data['data'] = $res;
@@ -146,6 +110,85 @@ class PaymentController extends Controller
             $this->data['message'] = "Data gagal ditemukan";
         }
         return response()->json($this->data);
+    }
+
+    /**
+     * Helper to enrich payment data with invoice details efficiently (avoiding N+1)
+     */
+    private function enrichPaymentData($data)
+    {
+        // 1. Collect all Invoice IDs
+        $invoiceIds = [];
+        foreach ($data as $res) {
+            if (!empty($res->invoice)) {
+                foreach ($res->invoice as $item) {
+                    if (!empty($item->salesinvoice)) {
+                        $invoiceIds[] = $item->salesinvoice->id;
+                    }
+                }
+            }
+        }
+        $invoiceIds = array_unique($invoiceIds);
+
+        // 2. Bulk fetch payments for these invoices
+        // We need to sum (total_payment + total_discount - total_overpayment) per invoice_id
+        $invoicePayments = [];
+        if (!empty($invoiceIds)) {
+            $sums = SalesPaymentInvoice::whereIn('invoice_id', $invoiceIds)
+                ->select('invoice_id', 
+                    DB::raw('SUM(total_payment) as sum_payment'),
+                    DB::raw('SUM(total_discount) as sum_discount'),
+                    DB::raw('SUM(total_overpayment) as sum_overpayment')
+                )
+                ->groupBy('invoice_id')
+                ->get();
+
+            foreach ($sums as $sum) {
+                $invoicePayments[$sum->invoice_id] = ($sum->sum_payment + $sum->sum_discount) - $sum->sum_overpayment;
+            }
+        }
+
+        // 3. Map back to data
+        foreach ($data as $res) {
+            if (!empty($res->invoice)) {
+                foreach ($res->invoice as $item) {
+                    $val = $item->salesinvoice;
+                    if (!empty($val)) {
+                        // Use pre-calculated paid amount
+                        $paid = $invoicePayments[$val->id] ?? 0;
+                        
+                        $item->id = $val->id;
+                        $item->nominal_paid = $item->total_payment;
+                        $item->total_kurang_bayar = $item->total_discount;
+                        $item->total_lebih_bayar = $item->total_overpayment;
+                        $item->coa_lebih_bayar = !empty($item->coa_id_overpayment) ? json_decode($item->coa_id_overpayment) : $item->coa_id_overpayment;
+                        $item->coa_kurang_bayar = !empty($item->coa_id_discount) ? json_decode($item->coa_id_discount) : $item->coa_id_discount;
+                        $item->grandtotal = $val->grandtotal;
+                        
+                        // Calculate 'terbayar' (Total Paid so far - Current Payment Contribution)
+                        // Logic from original code: $paid - (($item->total_payment + $item->total_discount) - $item->total_overpayment);
+                        // This seems to calculate "Amount paid BEFORE this specific payment detail".
+                        // Is that the intent? Or "Total Paid including this"?
+                        // "paid" variable name suggests "Total Paid".
+                        // "terbayar" calculation suggests "Previous Paid".
+                        // "item->paid" assignment suggests it wants to show how much was paid *before* this transaction?
+                        // Or maybe "paid" is total paid for that invoice across ALL payments.
+                        // Let's stick to original logic:
+                        // $paid is Total Paid for Invoice X across all payments.
+                        // current_contribution = (this_payment + this_discount - this_overpayment)
+                        // $terbayar = $paid - current_contribution.
+                        // So $terbayar represents "Amount paid by OTHER payments".
+                        
+                        $currentContribution = ($item->total_payment + $item->total_discount) - $item->total_overpayment;
+                        $terbayar = $paid - $currentContribution;
+                        
+                        $item->paid = $terbayar;
+                        $sisa = $val->grandtotal - $terbayar; // Remaining bill before this payment
+                        $item->left_bill = $sisa;
+                    }
+                }
+            }
+        }
     }
 
     public function destroy(Request $request)

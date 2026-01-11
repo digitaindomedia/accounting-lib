@@ -6,6 +6,7 @@ use Icso\Accounting\Exports\CategoryExport;
 use Icso\Accounting\Http\Requests\CreateCategoryRequest;
 use Icso\Accounting\Models\Master\Category;
 use Icso\Accounting\Repositories\Master\CategoryRepo;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Facades\Excel;
@@ -100,7 +101,19 @@ class CategoryController extends Controller
             if($data)
             {
                 if($data->canDelete()){
+                    $oldData = $data;
                     $data->delete();
+                    $this->activityLog->log([
+                        'user_id'         => $request->user_id,
+                        'action'          => 'Hapus data master kategori dengan nama '.$oldData->category_name,
+                        'model_type'      => Category::class,
+                        'model_id'        => $id,
+                        'old_values'      => $oldData,
+                        'new_values'      => null,
+                        'request_payload' => RequestAuditHelper::sanitize(request()),
+                        'ip_address'      => request()->ip(),
+                        'user_agent'      => request()->userAgent(),
+                    ]);
                     $this->data['status'] = true;
                     $this->data['message'] = 'Data berhasil dihapus ';
                 } else {

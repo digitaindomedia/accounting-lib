@@ -5,6 +5,8 @@ namespace Icso\Accounting\Repositories\Master;
 use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\Master\TaxGroup;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +15,6 @@ use Illuminate\Support\Facades\Log;
 class TaxRepo extends ElequentRepository
 {
     protected $model;
-
     public function __construct(Tax $model)
     {
         parent::__construct($model);
@@ -50,6 +51,7 @@ class TaxRepo extends ElequentRepository
     {
         // TODO: Implement store() method.
         $id = $request->id;
+        $userId = $request->user_id;
         $arrData = array(
             'tax_name' => $request->tax_name,
             'tax_sign' => $request->tax_sign,
@@ -61,17 +63,22 @@ class TaxRepo extends ElequentRepository
             'purchase_coa_id' => !empty($request->purchase_coa_id) ? $request->purchase_coa_id : '0',
             'sales_coa_id' => !empty($request->sales_coa_id) ? $request->sales_coa_id : '0',
             'updated_at' => date('Y-m-d H:i:s'),
-            'updated_by' => $request->user_id
+            'updated_by' => $userId
         );
-
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['taxgroup'])?->toArray();
+        }
         DB::beginTransaction();
         try {
             if(empty($id)) {
-                $arrData['created_by'] = $request->user_id;
+                $arrData['created_by'] = $userId;
                 $arrData['created_at'] = date('Y-m-d H:i:s');
                 $res = $this->create($arrData);
+                $action = 'Tambah data master pajak dengan nama '.$request->tax_name;
             } else {
                 $res = $this->update($arrData, $id);
+                $action = 'Edit data master pajak dengan nama '.$request->tax_name;
             }
             if($res){
                 if(!empty($id)){
@@ -93,6 +100,17 @@ class TaxRepo extends ElequentRepository
                         }
                     }
                 }
+                ActivityLogService::insertLog([
+                    'user_id'         => $userId,
+                    'action'          => $action,
+                    'model_type'      => Tax::class,
+                    'model_id'        => $idTax,
+                    'old_values'      => $oldData,
+                    'new_values'      => $this->findOne($idTax, [], ['taxgroup'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address'      => $request->ip(),
+                    'user_agent'      => $request->userAgent(),
+                ]);
                 DB::commit();
                 return true;
             }

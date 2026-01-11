@@ -248,10 +248,22 @@ class ReturRepo extends ElequentRepository
 
         // 4. Credits: Inventory & Taxes
         foreach ($find->returproduct as $item) {
+            // Calculate Tax Components first
+            $taxes = $this->calculateTaxComponents($item);
+            $totalTax = 0;
+            foreach ($taxes as $tax) {
+                $totalTax += $tax['nominal'];
+            }
+
             // A. Credit Inventory (Reduce Asset)
-            // Value = Qty * HPP
             $coaInventory = $item->product->coa_id ?? $coaSediaan;
-            $subtotalHpp = $item->qty * (float) $item->hpp_price;
+
+            // Calculate Inventory Amount based on Tax Type to ensure Balance
+            if ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE) {
+                $subtotalHpp = $item->subtotal - $totalTax;
+            } else {
+                $subtotalHpp = $item->subtotal;
+            }
 
             $journalEntries[] = [
                 'coa_id' => $coaInventory,
@@ -262,12 +274,7 @@ class ReturRepo extends ElequentRepository
             ];
 
             // B. Credit Tax (Reverse Input VAT)
-            // Use helper to handle Single/Group tax logic
-            $taxes = $this->calculateTaxComponents($item);
             foreach ($taxes as $tax) {
-                // Return implies reversing the original transaction.
-                // Purchase: Debit PPN Masukan.
-                // Retur: Credit PPN Masukan.
                 $journalEntries[] = [
                     'coa_id' => $tax['coa_id'],
                     'posisi' => 'kredit',

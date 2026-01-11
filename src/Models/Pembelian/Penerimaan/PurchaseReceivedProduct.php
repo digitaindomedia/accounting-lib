@@ -40,6 +40,7 @@ class PurchaseReceivedProduct extends Model
     {
         $purchaseReceivedRepo =  new ReceiveRepo(new PurchaseReceived());
         $qtyRetur = $purchaseReceivedRepo->getQtyRetur($this->id);
-        return $qtyRetur;
+        $qtyBsRetur = $this->qty - $qtyRetur;
+        return $qtyBsRetur;
     }
 }

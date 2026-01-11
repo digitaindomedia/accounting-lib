@@ -5,17 +5,24 @@ namespace Icso\Accounting\Repositories\Master;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Models\Master\PaymentMethod;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
 
 class PaymentMethodRepo extends ElequentRepository
 {
 
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PaymentMethod $model)
+    public function __construct(PaymentMethod $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -55,20 +62,58 @@ class PaymentMethodRepo extends ElequentRepository
         // TODO: Implement store() method.
         $id = $request->id;
         $coa_id = $request->coa_id;
+        $userId = $request->user_id;
+
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id)?->toArray();
+        }
 
         $arrData = array(
             'payment_name' => $request->payment_name,
             'descriptions' => (!empty($request->descriptions) ? $request->descriptions : ''),
             'coa_id' => $coa_id,
-            'updated_by' => $request->user_id,
+            'updated_by' => $userId,
             'updated_at' => date('Y-m-d H:i:s')
         );
-        if(empty($id)) {
-            $arrData['created_by'] = $request->user_id;
-            $arrData['created_at'] = date('Y-m-d H:i:s');
-            return $this->create($arrData);
-        } else {
-            return $this->update($arrData, $id);
+        DB::beginTransaction();
+        try {
+            if (empty($id)) {
+                // CREATE
+                $arrData['created_by'] = $userId;
+                $arrData['created_at'] = now();
+
+                $result = $this->create($arrData);
+                $paymentMethodId = $result->id;
+                $action = 'Tambah data master metode pembayaran dengan nama '.$request->payment_name;
+            } else {
+                // UPDATE
+                $this->update($arrData, $id);
+                $paymentMethodId = $id;
+                $action = 'Edit data master metode pembayaran dengan nama '.$request->payment_name;
+            }
+
+            DB::commit();
+
+            // 🔥 ACTIVITY LOG
+            $this->activityLog->log([
+                'user_id'         => $userId,
+                'action'          => $action,
+                'model_type'      => PaymentMethod::class,
+                'model_id'        => $paymentMethodId,
+                'old_values'      => $oldData,
+                'new_values'      => $this->findOne($paymentMethodId)?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address'      => $request->ip(),
+                'user_agent'      => $request->userAgent(),
+            ]);
+
+            return true;
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[PaymentMethodRepo][store] ' . $e->getMessage());
+            return false;
         }
     }
 }

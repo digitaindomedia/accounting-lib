@@ -7,8 +7,11 @@ use Icso\Accounting\Exports\KartuPiutangExcelExport;
 use Icso\Accounting\Exports\SalesInvoiceExport;
 use Icso\Accounting\Exports\SalesInvoiceReportExport;
 use Icso\Accounting\Exports\SampleSalesInvoiceExport;
+use Icso\Accounting\Exports\SampleJurnalInvoiceExport;
+use Icso\Accounting\Exports\JurnalInvoiceExport;
 use Icso\Accounting\Http\Requests\CreateSalesInvoiceRequest;
 use Icso\Accounting\Imports\SalesInvoiceImport;
+use Icso\Accounting\Imports\JurnalInvoiceImport;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
@@ -112,6 +115,9 @@ class InvoiceController extends Controller
         }
         if ($request->from_date && $request->until_date) {
             $where[] = ['method' => 'whereBetween', 'value' => ['field' => 'invoice_date', 'value' => [$request->from_date, $request->until_date]]];
+        }
+        if ($request->input_type) {
+            $where[] = ['method' => 'where', 'value' => [['input_type', '=', $request->input_type]]];
         }
 
         return $where;
@@ -486,6 +492,11 @@ class InvoiceController extends Controller
         return Excel::download(new SampleSalesInvoiceExport($orderType), 'sample_invoice_penjualan.xlsx');
     }
 
+    public function downloadSampleJurnal(Request $request)
+    {
+        return Excel::download(new SampleJurnalInvoiceExport(), 'sample_jurnal_invoice.xlsx');
+    }
+
     public function import(Request $request)
     {
         $request->validate([
@@ -501,6 +512,22 @@ class InvoiceController extends Controller
         }
 
         return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+    }
+
+    public function importJurnal(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+        ]);
+        $userId = $request->user_id;
+        $import = new JurnalInvoiceImport($userId);
+        Excel::import($import, $request->file('file'));
+
+        if ($errors = $import->getErrors()) {
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+        }
+
+        return response()->json(['status' => true, 'success' => $import->getSuccessCount(),'messageError' => [],'errors' => 0, 'imported' => $import->getTotalRows()]);
     }
 
     private function prepareExportData(Request $request)
@@ -635,5 +662,34 @@ class InvoiceController extends Controller
         return $pdf->download('kartu_piutang_rekap.pdf');
     }
 
+    public function exportJurnal(Request $request)
+    {
+        return $this->exportJurnalAsFormat($request, 'jurnal-invoice-penjualan.xlsx');
+    }
+
+    public function exportJurnalCsv(Request $request)
+    {
+        return $this->exportJurnalAsFormat($request, 'jurnal-invoice-penjualan.csv');
+    }
+
+    private function exportJurnalAsFormat(Request $request, string $filename)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+        $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
+        $data = $this->invoiceRepo->getAllDataBy($search, $page, $total, $where);
+        return Excel::download(new JurnalInvoiceExport($data), $filename);
+    }
+
+    public function exportJurnalPdf(Request $request)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+        $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
+        $data = $this->invoiceRepo->getAllDataBy($search, $page, $total, $where);
+        $export = new JurnalInvoiceExport($data);
+        $pdf = PDF::loadView('accounting::sales.jurnal_invoice_pdf', ['arrData' => $export->collection()]);
+        return $pdf->download('jurnal-invoice-penjualan.pdf');
+    }
 
 }

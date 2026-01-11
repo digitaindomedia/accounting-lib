@@ -73,7 +73,7 @@ class ReceiveRepo extends ElequentRepository
             $query->where($where);
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
             $query->whereBetween('receive_date', $whereBetween);
-        })->orderBy('receive_date','desc')->with(['vendor', 'order', 'warehouse','receiveproduct.product'])->offset($page)->limit($perpage)->get();
+        })->orderBy('receive_date','desc')->with(['vendor', 'order', 'warehouse','receiveproduct.product','receiveproduct.unit','receiveproduct.tax','receiveproduct.product.unit'])->offset($page)->limit($perpage)->get();
     }
 
     public function getAllTotalDataBetweenBy($search, array $where = [], array $whereBetween=[])

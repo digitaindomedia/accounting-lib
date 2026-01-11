@@ -2,6 +2,10 @@
 
 namespace Icso\Accounting\Http\Controllers\Akuntansi;
 
+use Barryvdh\DomPDF\Facade\Pdf;
+use Icso\Accounting\Exports\BukuPembantuExport;
+use Icso\Accounting\Exports\SampleBukuPembantuExport;
+use Icso\Accounting\Imports\BukuPembantuImport;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\BukuPembantuRepo;
 use Icso\Accounting\Repositories\Akuntansi\PelunasanBukuPembantuRepo;
@@ -10,6 +14,7 @@ use Icso\Accounting\Utils\Utility;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 
 class BukuPembantuController extends Controller
 {
@@ -118,6 +123,106 @@ class BukuPembantuController extends Controller
             $this->data['message'] = "Data gagal disimpan";
         }
         return response()->json($this->data);
+    }
+
+    public function deleteSaldoAwal(Request $request)
+    {
+        $id = $request->id;
+        $res = $this->bukuPembantuRepo->delete($id);
+        if($res){
+            $this->data['status'] = true;
+            $this->data['message'] = 'Data berhasil dihapus';
+            $this->data['data'] = "";
+        } else {
+            $this->data['status'] = false;
+            $this->data['message'] = "Data gagal dihapus";
+        }
+        return response()->json($this->data);
+    }
+
+    public function downloadSampleBukuPembantu(Request $request)
+    {
+        return Excel::download(new SampleBukuPembantuExport(), 'sample_buku_pembantu.xlsx');
+    }
+
+    public function importBukuPembantu(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+            'coa_id' => 'required',
+            'user_id' => 'required'
+        ]);
+
+        $userId = $request->user_id;
+        $coaId = $request->coa_id;
+        $import = new BukuPembantuImport($userId, $coaId, $this->bukuPembantuRepo);
+        Excel::import($import, $request->file('file'));
+
+        if ($errors = $import->getErrors()) {
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+        }
+
+        return response()->json(['status' => true, 'success' => $import->getSuccessCount(),'messageError' => [],'errors' => 0, 'imported' => $import->getTotalRows()]);
+    }
+
+    public function exportBukuPembantu(Request $request)
+    {
+        return $this->exportBukuPembantuAsFormat($request, 'buku_pembantu.xlsx');
+    }
+
+    public function exportBukuPembantuCsv(Request $request)
+    {
+        return $this->exportBukuPembantuAsFormat($request, 'buku_pembantu.csv');
+    }
+
+    private function exportBukuPembantuAsFormat(Request $request, string $filename)
+    {
+        $search = $request->q;
+        $inputType = $request->input_type;
+        $coaId = $request->coa_id;
+        $fieldName = $request->field_name;
+
+        $where = [];
+        if (!empty($inputType)) {
+            $where[] = ['input_type', '=', $inputType];
+        }
+        if (!empty($coaId)) {
+            $where[] = ['coa_id', '=', $coaId];
+        }
+        if (!empty($fieldName)) {
+            $where[] = ['field_name', '=', $fieldName];
+        }
+
+        $total = $this->bukuPembantuRepo->getAllTotalDataBy($search, $where);
+        $data = $this->bukuPembantuRepo->getAllDataBy($search, 1, $total, $where);
+
+        return Excel::download(new BukuPembantuExport($data), $filename);
+    }
+
+    public function exportBukuPembantuPdf(Request $request)
+    {
+        $search = $request->q;
+        $inputType = $request->input_type;
+        $coaId = $request->coa_id;
+        $fieldName = $request->field_name;
+
+        $where = [];
+        if (!empty($inputType)) {
+            $where[] = ['input_type', '=', $inputType];
+        }
+        if (!empty($coaId)) {
+            $where[] = ['coa_id', '=', $coaId];
+        }
+        if (!empty($fieldName)) {
+            $where[] = ['field_name', '=', $fieldName];
+        }
+
+        $total = $this->bukuPembantuRepo->getAllTotalDataBy($search, $where);
+        $data = $this->bukuPembantuRepo->getAllDataBy($search, 1, $total, $where);
+
+        $export = new BukuPembantuExport($data);
+        $pdf = Pdf::loadView('accounting::akuntansi.buku_pembantu_pdf', ['arrData' => $export->collection()]);
+        return $pdf->download('buku_pembantu.pdf');
     }
 
 }

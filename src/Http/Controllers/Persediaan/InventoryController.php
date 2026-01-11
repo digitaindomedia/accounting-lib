@@ -6,6 +6,9 @@ namespace Icso\Accounting\Http\Controllers\Persediaan;
 
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\KartuStokExport;
+use Icso\Accounting\Exports\SampleStockAwalExport;
+use Icso\Accounting\Exports\StockAwalExport;
+use Icso\Accounting\Imports\StockAwalImport;
 use Icso\Accounting\Models\Akuntansi\SaldoAwal;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\ProductConvertion;
@@ -191,7 +194,23 @@ class InventoryController extends Controller
     }
 
     public function deleteSaldoAwal(Request $request){
-
+        $id = $request->id;
+        DB::beginTransaction();
+        try {
+            StockAwal::where('id', $id)->delete();
+            Inventory::where('transaction_code', TransactionsCode::SALDO_AWAL)
+                ->where('transaction_id', $id)
+                ->delete();
+            DB::commit();
+            $this->data['status'] = true;
+            $this->data['message'] = 'Data berhasil dihapus';
+            $this->data['data'] = '';
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->data['status'] = false;
+            $this->data['message'] = 'Data gagal dihapus';
+        }
+        return response()->json($this->data);
     }
 
     public function getStockByProductId(Request $request)
@@ -713,5 +732,60 @@ class InventoryController extends Controller
             'message' => 'Berhasil mengambil data dashboard inventory',
             'data' => $fastMoving
         ]);
+    }
+
+    public function downloadSampleStockAwal(Request $request)
+    {
+        return Excel::download(new SampleStockAwalExport(), 'sample_stock_awal.xlsx');
+    }
+
+    public function importStockAwal(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+            'coa_id' => 'required',
+            'user_id' => 'required'
+        ]);
+
+        $userId = $request->user_id;
+        $coaId = $request->coa_id;
+        $import = new StockAwalImport($userId, $coaId, $this->inventoryRepo);
+        Excel::import($import, $request->file('file'));
+
+        if ($errors = $import->getErrors()) {
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+        }
+
+        return response()->json(['status' => true, 'success' => $import->getSuccessCount(),'messageError' => [],'errors' => 0, 'imported' => $import->getTotalRows()]);
+    }
+
+    public function exportStockAwal(Request $request)
+    {
+        return $this->exportStockAwalAsFormat($request, 'stock_awal.xlsx');
+    }
+
+    public function exportStockAwalCsv(Request $request)
+    {
+        return $this->exportStockAwalAsFormat($request, 'stock_awal.csv');
+    }
+
+    private function exportStockAwalAsFormat(Request $request, string $filename)
+    {
+        $search = $request->q;
+        $coaId = $request->coa_id;
+        $total = $this->inventoryRepo->getAllTotalDataStockAwalBy($search, array(StockAwal::getTableName().'.coa_id' => $coaId));
+        $data = $this->inventoryRepo->getAllDataStockAwalBy($search, 1, $total, array(StockAwal::getTableName().'.coa_id' => $coaId));
+        return Excel::download(new StockAwalExport($data), $filename);
+    }
+
+    public function exportStockAwalPdf(Request $request)
+    {
+        $search = $request->q;
+        $coaId = $request->coa_id;
+        $total = $this->inventoryRepo->getAllTotalDataStockAwalBy($search, array(StockAwal::getTableName().'.coa_id' => $coaId));
+        $data = $this->inventoryRepo->getAllDataStockAwalBy($search, 1, $total, array(StockAwal::getTableName().'.coa_id' => $coaId));
+        $export = new StockAwalExport($data);
+        $pdf = Pdf::loadView('accounting::stock.stock_awal_pdf', ['arrData' => $export->collection()]);
+        return $pdf->download('stock_awal.pdf');
     }
 }

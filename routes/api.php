@@ -172,6 +172,8 @@ Route::group([
         Route::get('get-hpp', [InventoryController::class, 'getStockHppByDate']);
         Route::post('save-awal', [InventoryController::class, 'storeAwal']);
         Route::post('update-awal', [InventoryController::class, 'updateAwal']);
+        Route::get('download-sample-saldo-awal', [InventoryController::class, 'downloadSampleStockAwal']);
+        Route::post('import-saldo-awal', [InventoryController::class, 'importStockAwal']);
         Route::delete('delete-awal', [InventoryController::class, 'deleteSaldoAwal']);
         Route::get('kartu-stok', [InventoryController::class, 'kartuStok']);
         Route::get('kartu-stok-detail', [InventoryController::class, 'showKartuStockDetail']);
@@ -182,6 +184,9 @@ Route::group([
         Route::get('dashboard-top-value', [InventoryController::class, 'topValueStockList']);
         Route::get('dashboard-slow-moving', [InventoryController::class, 'slowMovingStockList']);
         Route::get('dashboard-fast-moving', [InventoryController::class, 'fastMovingStockList']);
+        Route::get('export-saldo-awal-excel', [InventoryController::class, 'exportStockAwal']);
+        Route::get('export-saldo-awal-pdf', [InventoryController::class, 'exportStockAwalPdf']);
+        Route::get('export-saldo-awal-csv', [InventoryController::class, 'exportStockAwalCsv']);
     });
 
     Route::prefix('purchase-invoice')->group(function () {
@@ -198,7 +203,9 @@ Route::group([
         Route::delete('delete-all',[InvoiceController::class, 'deleteAll']);
         Route::get('total-saldo',[InvoiceController::class, 'getTotalInvoice']);
         Route::get('download-sample', [InvoiceController::class, 'downloadSample']);
+        Route::get('download-sample-saldo-awal', [InvoiceController::class, 'downloadSampleJurnal']);
         Route::post('import', [InvoiceController::class, 'import']);
+        Route::post('import-saldo-awal-hutang', [InvoiceController::class, 'importJurnal']);
         Route::get('export-excel', [InvoiceController::class, 'export']);
         Route::get('export-csv', [InvoiceController::class, 'exportCsv']);
         Route::get('export-pdf', [InvoiceController::class, 'exportPdf']);
@@ -206,12 +213,21 @@ Route::group([
         Route::get('export-pdf-report', [InvoiceController::class, 'exportReportPdf']);
         Route::get('export-kartu-hutang', [InvoiceController::class, 'exportKartuHutangExcel']);
         Route::get('export-kartu-hutang-pdf', [InvoiceController::class, 'exportKartuHutangSummaryPdf']);
+        Route::get('export-saldo-awal-pdf', [InvoiceController::class, 'exportJurnalPdf']);
+        Route::get('export-saldo-awal-csv', [InvoiceController::class, 'exportJurnalCsv']);
+        Route::get('export-saldo-awal-excel', [InvoiceController::class, 'exportJurnal']);
     });
 
     Route::prefix('buku-pembantu')->group(function () {
         Route::get('get-all-list', [BukuPembantuController::class, 'getAllData']);
         Route::post('store-saldo-awal', [BukuPembantuController::class, 'storeSaldoAwal']);
         Route::post('update-saldo-awal', [BukuPembantuController::class, 'updateSaldoAwal']);
+        Route::get('download-sample-saldo-awal', [BukuPembantuController::class, 'downloadSampleBukuPembantu']);
+        Route::post('import-saldo-awal', [BukuPembantuController::class, 'importBukuPembantu']);
+        Route::get('export-saldo-awal-pdf', [BukuPembantuController::class, 'exportBukuPembantuPdf']);
+        Route::get('export-saldo-awal-csv', [BukuPembantuController::class, 'exportBukuPembantuCsv']);
+        Route::get('export-saldo-awal-excel', [BukuPembantuController::class, 'exportBukuPembantu']);
+        Route::delete('delete-saldo-awal', [BukuPembantuController::class, 'deleteSaldoAwal']);
     });
 
     Route::prefix('report')->group(function () {
@@ -387,6 +403,8 @@ Route::group([
         Route::delete('delete', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'destroy']);
         Route::delete('delete-all', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'deleteAll']);
         Route::get('download-sample', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'downloadSample']);
+        Route::get('download-sample-saldo-awal', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'downloadSampleJurnal']);
+        Route::get('import-saldo-awal-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'importJurnal']);
         Route::post('import', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'import']);
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportCsv']);
@@ -395,6 +413,9 @@ Route::group([
         Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportReportExcel']);
         Route::get('export-kartu-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangExcel']);
         Route::get('export-kartu-piutang-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangSummaryPdf']);
+        Route::get('export-saldo-awal-piutang-excel', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnal']);
+        Route::get('export-saldo-awal-piutang-csv', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnalCsv']);
+        Route::get('export-saldo-awal-piutang-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnalPdf']);
     });
 
     Route::prefix('sales-payment')->group(function () {

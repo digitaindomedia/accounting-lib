@@ -28,7 +28,7 @@ class PurchaseDownPaymentExport implements FromCollection, WithHeadings, ShouldA
                 'ref_no' => $item->ref_no,
                 'order' => !empty($item->order) ? $item->order->order_no : "",
                 'vendor' => !empty($item->order) ? !empty($item->order->vendor) ? $item->order->vendor->vendor_company_name : "" : "",
-                'nominal' => number_format($item->nominal, SettingRepo::getSeparatorFormat())
+                'nominal' => $item->nominal, SettingRepo::getSeparatorFormat()
             ];
         });
     }

@@ -6,6 +6,7 @@ namespace Icso\Accounting\Http\Requests;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -64,6 +65,23 @@ class CreatePurchaseReceivedRequest extends FormRequest
 
         $rules['receiveproduct.*.qty'] = ['required', 'gt:0'];
         return $rules;
+    }
+
+    protected function prepareForValidation()
+    {
+        if ($this->has('receiveproduct')) {
+            $products = $this->input('receiveproduct');
+
+            foreach ($products as $i => $product) {
+                if (isset($product['qty'])) {
+                    $products[$i]['qty'] = Utility::remove_commas(',', '', $product['qty']);
+                }
+            }
+
+            $this->merge([
+                'receiveproduct' => $products
+            ]);
+        }
     }
 
     public function messages()

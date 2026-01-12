@@ -74,7 +74,7 @@ class CreatePurchaseReceivedRequest extends FormRequest
 
             foreach ($products as $i => $product) {
                 if (isset($product['qty'])) {
-                    $products[$i]['qty'] = Utility::remove_commas(',', '', $product['qty']);
+                    $products[$i]['qty'] = Utility::remove_commas($product['qty']);
                 }
             }
 

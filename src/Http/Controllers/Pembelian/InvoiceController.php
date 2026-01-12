@@ -668,6 +668,7 @@ class InvoiceController extends Controller
     {
         $params = $this->setQueryParameters($request);
         extract($params);
+        $where[] = ['method' => 'where', 'value' => [['input_type', '=', InputType::JURNAL]]];
         $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
         $data = $this->invoiceRepo->getAllDataBy($search, $page, $total, $where);
         return Excel::download(new JurnalPurchaseInvoiceExport($data), $filename);
@@ -677,6 +678,7 @@ class InvoiceController extends Controller
     {
         $params = $this->setQueryParameters($request);
         extract($params);
+        $where[] = ['method' => 'where', 'value' => [['input_type', '=', InputType::JURNAL]]];
         $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
         $data = $this->invoiceRepo->getAllDataBy($search, $page, $total, $where);
         $export = new JurnalPurchaseInvoiceExport($data);

@@ -32,12 +32,7 @@ class CreateProductRequest extends FormRequest
         $table = (new Product)->getTable();
         if (empty($id)) {
             // ===== CREATE =====
-            return array_merge(
-                Product::$rules,
-                [
-                    'item_code' => "required|unique:$table,item_code",
-                ]
-            );
+            return Product::$rules;
         }
 
         // ===== UPDATE =====

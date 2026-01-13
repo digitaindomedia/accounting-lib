@@ -85,7 +85,7 @@ class ProductsImport implements ToCollection
             }
 
             // Validasi COA biaya jika SERVICE
-            $coaBiaya = 0;
+           /* $coaBiaya = 0;
             if ($this->productType == ProductType::SERVICE) {
                 if (empty($row[7])) {
                     $messages[] = "Kode akun biaya kosong.";
@@ -97,7 +97,7 @@ class ProductsImport implements ToCollection
                         $rowHasError = true;
                     }
                 }
-            }
+            }*/
 
             // Jika error
             if ($rowHasError) {

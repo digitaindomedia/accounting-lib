@@ -112,7 +112,7 @@ class InvoiceRepo extends ElequentRepository
                 $this->handleDownPayments($request->dp, $idInvoice);
                 $this->handleReceivedProducts($request->receive, $idInvoice);
 
-                if ($data['input_type'] != InputType::JURNAL) {
+                if ($data['input_type'] == InputType::PURCHASE) {
                     $this->postingJurnal($idInvoice);
                 }
 

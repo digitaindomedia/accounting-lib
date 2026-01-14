@@ -11,6 +11,7 @@ use Icso\Accounting\Models\Akuntansi\JurnalAkun;
 use Icso\Accounting\Models\Akuntansi\JurnalMeta;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Akuntansi\PelunasanBukuPembantu;
+use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePayment;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
@@ -268,10 +269,17 @@ class JurnalRepo extends ElequentRepository
             foreach ($jurnalAkun as $i => $val)
             {
                 $nomInput = !empty($val->nominal) ? Utility::remove_commas($val->nominal) : '0';
+                $findCoa = Coa::where('id',$val->coa_id)->first();
+                $dataSession = (!empty($val->data_session) ? json_encode($val->data_session) : '');
+                if(!empty($findCoa)){
+                    if($findCoa->connect_db == 0){
+                        $dataSession = '';
+                    }
+                }
                 $arrItemAkun = array(
                     'jurnal_id' => $jurnalId,
                     'coa_id' => $val->coa_id,
-                    'data_sess' => (!empty($val->data_session) ? json_encode($val->data_session) : ''),
+                    'data_sess' => $dataSession,
                     'debet' => '0',
                     'kredit' => '0',
                     'nominal' => $nomInput,
@@ -558,10 +566,17 @@ class JurnalRepo extends ElequentRepository
                // echo $val['coa_id'];
                 $nomDebet = !empty($val->debet) ? Utility::remove_commas($val->debet) : '0';
                 $nomKredit = !empty($val->kredit) ? Utility::remove_commas($val->kredit) : '0';
+                $findCoa = Coa::where('id',$val->coa_id)->first();
+                $dataSession = (!empty($val->data_session) ? json_encode($val->data_session) : '');
+                if(!empty($findCoa)){
+                    if($findCoa->connect_db == 0){
+                        $dataSession = '';
+                    }
+                }
                 $arrItemAkun = array(
                     'jurnal_id' => $jurnalId,
                     'coa_id' => $val->coa_id,
-                    'data_sess' => (!empty($val->data_session) ? json_encode($val->data_session) : ''),
+                    'data_sess' => $dataSession,
                     'debet' => $nomDebet,
                     'kredit' => $nomKredit,
                     'nominal' => '0',

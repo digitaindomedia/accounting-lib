@@ -62,7 +62,7 @@ class JurnalPurchaseInvoiceImport implements ToCollection
             $req->subtotal = Utility::remove_commas($nominal);
             $req->grandtotal = Utility::remove_commas($nominal);
             $req->invoice_type = ProductType::ITEM;
-            $req->input_type = InputType::JURNAL;
+            $req->input_type = InputType::SALDO_AWAL;
 
             try {
                 $res = $this->invoiceRepo->store($req);

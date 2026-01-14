@@ -404,7 +404,7 @@ Route::group([
         Route::delete('delete-all', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'deleteAll']);
         Route::get('download-sample', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'downloadSample']);
         Route::get('download-sample-saldo-awal', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'downloadSampleJurnal']);
-        Route::get('import-saldo-awal-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'importJurnal']);
+        Route::post('import-saldo-awal-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'importJurnal']);
         Route::post('import', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'import']);
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportCsv']);

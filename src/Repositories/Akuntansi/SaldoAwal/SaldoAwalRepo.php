@@ -142,7 +142,7 @@ class SaldoAwalRepo extends ElequentRepository
        // $kredit = json_decode($request->kredit);
         $id = $request->id;
         $userId = $request->user_id;
-        $saldoDate = $request->saldo_date;
+        $saldoDate = !empty($request->saldo_date) ? $request->saldo_date : date('Y-m-d');
         DB::beginTransaction();
         try {
             $noRef = "SALDOAWAL-".date("His");

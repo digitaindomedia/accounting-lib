@@ -122,7 +122,7 @@ class JurnalUmumImport implements ToCollection
         $debetValue = !empty($debet) ? Utility::remove_commas($debet) : 0;
         $kreditValue = !empty($kredit) ? Utility::remove_commas($kredit) : 0;
 
-        JurnalAkun::create([
+        $resItem = JurnalAkun::create([
             'jurnal_id' => $jurnalId,
             'coa_id' => $coa->id,
             'debet' => $debetValue,
@@ -138,7 +138,7 @@ class JurnalUmumImport implements ToCollection
             'transaction_code' => TransactionsCode::JURNAL,
             'coa_id' => $coa->id,
             'transaction_id' => $jurnalId,
-            'transaction_sub_id' => null,
+            'transaction_sub_id' => $resItem->id,
             'transaction_no' => $noJurnal,
             'transaction_status' => JurnalStatusEnum::OK,
             'note' => $note,

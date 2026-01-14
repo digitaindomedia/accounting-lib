@@ -200,10 +200,10 @@ class JurnalController extends Controller
         Excel::import($import, $request->file('file'));
 
         if ($errors = $import->getErrors()) {
-            return response()->json(['errors' => $errors], 422);
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
         }
 
-        return response()->json(['message' => 'File imported successfully'], 200);
+        return response()->json(['status' => true,'success' => $import->getSuccessCount(),'errors' => count($import->getErrors()), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows()], 200);
     }
 
     public function importKasBank(Request $request)
@@ -217,10 +217,10 @@ class JurnalController extends Controller
         Excel::import($import, $request->file('file'));
 
         if ($errors = $import->getErrors()) {
-            return response()->json(['errors' => $errors], 422);
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
         }
 
-        return response()->json(['message' => 'File imported successfully'], 200);
+        return response()->json(['status' => true,'success' => $import->getSuccessCount(),'errors' => count($import->getErrors()), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows()], 200);
     }
 
     public function export(Request $request)

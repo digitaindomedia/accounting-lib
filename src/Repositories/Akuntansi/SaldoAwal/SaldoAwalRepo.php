@@ -163,6 +163,7 @@ class SaldoAwalRepo extends ElequentRepository
                 $idData = $id;
             } else {
                // $idData = $res->id;
+                $idData = $res->id;
             }
             if(count($coa) > 0)
             {

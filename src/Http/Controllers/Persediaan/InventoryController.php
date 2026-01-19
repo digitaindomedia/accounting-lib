@@ -245,7 +245,7 @@ class InventoryController extends Controller
 
         $where=array('product_type' => ProductType::ITEM);
         if(!empty($productId)){
-            $where[] = ['id','=',$productId];
+            $where[] = [Product::getTableName().'.id','=',$productId];
         }
         
         // Optimization: Pre-fetch inventory data for the date range and before

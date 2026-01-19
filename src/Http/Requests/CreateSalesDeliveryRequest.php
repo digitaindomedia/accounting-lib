@@ -61,7 +61,7 @@ class CreateSalesDeliveryRequest extends FormRequest
             ];
         }
 
-        $rules['deliveryproduct.*.qty'] = ['required', 'gt:0'];
+        $rules['deliveryproduct.*.qty'] = ['required'];
         return $rules;
     }
 
@@ -73,8 +73,7 @@ class CreateSalesDeliveryRequest extends FormRequest
             'vendor_id.required' => 'Nama Customer Masih Kosong',
             'warehouse_id.required' => 'Nama Gudang Masih Kosong' ,
             'deliveryproduct.required' => 'Daftar barang yang akan dikirim Masih Kosong',
-            'deliveryproduct.*.qty.required' => 'Kuantitas barang masih kosong',
-            'deliveryproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 0'];
+            'deliveryproduct.*.qty.required' => 'Kuantitas barang masih kosong'];
     }
 
     public function failedValidation(Validator $validator)

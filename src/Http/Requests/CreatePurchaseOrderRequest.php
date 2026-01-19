@@ -70,7 +70,7 @@ class CreatePurchaseOrderRequest extends FormRequest
         if( $orderType == ProductType::ITEM){
             $rules['orderproduct.*.product_id'] = 'required|string';
         }
-        $rules['orderproduct.*.qty'] = ['required', 'gt:0'];
+        $rules['orderproduct.*.qty'] = ['required'];
         return $rules;
     }
 
@@ -83,7 +83,6 @@ class CreatePurchaseOrderRequest extends FormRequest
             'order_no.required' => 'Nomor order belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
             'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
             'order_no.unique' => 'Nomor Order Pembelian sudah digunakan.',
-            'orderproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 0',
             'orderproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'orderproduct.*.service_name.required' => 'Nama jasa pada salah satu item masih kosong.',
             'orderproduct.*.service_name.string' => 'Nama jasa harus berupa teks.',

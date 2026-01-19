@@ -6,6 +6,7 @@ use Icso\Accounting\Exports\CategoryExport;
 use Icso\Accounting\Http\Requests\CreateCategoryRequest;
 use Icso\Accounting\Models\Master\Category;
 use Icso\Accounting\Repositories\Master\CategoryRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\RequestAuditHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -103,7 +104,7 @@ class CategoryController extends Controller
                 if($data->canDelete()){
                     $oldData = $data;
                     $data->delete();
-                    $this->activityLog->log([
+                    ActivityLogService::insertLog([
                         'user_id'         => $request->user_id,
                         'action'          => 'Hapus data master kategori dengan nama '.$oldData->category_name,
                         'model_type'      => Category::class,

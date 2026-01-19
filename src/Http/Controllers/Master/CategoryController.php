@@ -127,6 +127,7 @@ class CategoryController extends Controller
                 $this->data['message'] = 'Data tidak ditemukan';
             }
         } catch (\Exception $e) {
+            Log::error($e->getMessage());
             $this->data['status'] = false;
             $this->data['message'] = 'Terjadi kesalahan dalam hapus data';
         }

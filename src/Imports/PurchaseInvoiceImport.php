@@ -23,7 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use stdClass;
-
+use Illuminate\Support\Facades\DB;
 class PurchaseInvoiceImport implements ToCollection
 {
     protected $userId;
@@ -49,6 +49,7 @@ class PurchaseInvoiceImport implements ToCollection
         $idInvoice = '0';
         $oldNo = '0';
         $statIns = false;
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
         foreach ($rows as $index => $row) {
             // Skip the header row
             if ($index === 0) {
@@ -87,6 +88,7 @@ class PurchaseInvoiceImport implements ToCollection
                 $persenPpn = $row[13];
                 $warehouseId = WarehouseRepo::getWarehouseId($kodeGudang);
             }
+            $note = !empty($note) ? $note : "";
 
             if($this->orderType == ProductType::ITEM){
                 if ($this->hasValidationErrors($index, $row)) {
@@ -135,6 +137,7 @@ class PurchaseInvoiceImport implements ToCollection
                 $this->updateDataInvoice($invId);
             }
         }
+        DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
 
     private function updateDataInvoice($idInvoice)
@@ -175,6 +178,7 @@ class PurchaseInvoiceImport implements ToCollection
                 $akunBiayaId = $findCoa->id;
             }
         }
+        $note = !empty($note) ? $note : "";
         $request = new Request();
         $request->invoice_no = $invoiceNo;
         $request->invoice_date = $invoiceDate;
@@ -196,7 +200,7 @@ class PurchaseInvoiceImport implements ToCollection
         if($res){
             $this->insertInvoiceProduct($itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage,$res->id, $invoiceDate, $note, $warehouseId);
         }
-        return $res;
+        return $res ? $res->id : '';
     }
 
     public function insertInvoiceProduct($itemCode, $qty,$price,$diskonItem,$diskonItemType, $taxType, $taxPercentage, $invoiceId, string $invoiceDate, string $note, string $warehouseId)

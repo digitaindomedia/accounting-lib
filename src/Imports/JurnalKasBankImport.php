@@ -79,7 +79,7 @@ class JurnalKasBankImport implements ToCollection
 
                 } elseif ($oldNo !== $noJurnal) {
                     // Ganti Jurnal baru
-                    $this->updateNominalKasBank($idJurnal, $totalBal);
+                   // $this->updateNominalKasBank($idJurnal, $totalBal);
                     $totalBal = 0;
 
                     if (Jurnal::where('jurnal_no', $noJurnal)->exists()) {
@@ -93,7 +93,8 @@ class JurnalKasBankImport implements ToCollection
 
                 } else {
                     // Masih satu jurnal
-                    $this->createJurnalAkunAndTransaksi($idJurnal, $noJurnal, $jurnalDate, $noteItem, $coaItem, $transType, $nominalValue, $totalBal);
+                    $transTypeEnum = $transType == 'masuk' ? JurnalType::INCOME_TYPE : JurnalType::EXPENSE_TYPE;
+                    $this->createJurnalAkunAndTransaksi($idJurnal, $noJurnal, $jurnalDate, $noteItem, $coaItem, $transTypeEnum, $nominalValue, $totalBal);
                     $this->updateNominalKasBank($idJurnal, $totalBal);
                 }
             }
@@ -135,14 +136,9 @@ class JurnalKasBankImport implements ToCollection
             return true;
         }
 
-        if (empty($row[4])) {
-            $this->errors[] = "Baris $rowNumber: Diterima/dibayar oleh kosong.";
-            return true;
-        }
-
         if (empty($row[6])) {
-            $this->errors[] = "Baris $rowNumber: Kode COA item kosong.";
-            return true;
+            //$this->errors[] = "Baris $rowNumber: Kode COA item kosong.";
+            //return true;
         } else {
             $coaItem = Coa::where('coa_code', trim($row[6]))->first();
             if (!$coaItem) {
@@ -152,8 +148,8 @@ class JurnalKasBankImport implements ToCollection
         }
 
         if (empty($row[7])) {
-            $this->errors[] = "Baris $rowNumber: Nominal kosong.";
-            return true;
+           // $this->errors[] = "Baris $rowNumber: Nominal kosong.";
+            //return true;
         }
 
         return false;
@@ -186,6 +182,9 @@ class JurnalKasBankImport implements ToCollection
 
     private function createJurnalAkunAndTransaksi($jurnalId, $noJurnal, $jurnalDate, $note, $coa, $transTypeEnum, $nominal, &$totalBal)
     {
+        if (!$coa) {
+            return;
+        }
         $jurnalDateTime = "$jurnalDate " . now()->format('H:i:s');
 
         $jurnalAkun = JurnalAkun::create([

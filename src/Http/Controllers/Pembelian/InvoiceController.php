@@ -193,11 +193,18 @@ class InvoiceController extends Controller
     public function store(CreatePurchaseInvoiceRequest $request){
         try {
             $res = $this->invoiceRepo->store($request);
+            if($res){
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Data berhasil disimpan',
+                ]);
+            } else {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Data gagal disimpan',
+                ]);
+            }
 
-            return response()->json([
-                'status'  => true,
-                'message' => 'Data berhasil disimpan',
-            ]);
         } catch (\Throwable $e) {
             return response()->json([
                 'status'  => false,

@@ -152,7 +152,12 @@ class PurchaseInvoiceImport implements ToCollection
                     $taxData = Helpers::hitungTaxDpp($orderProduct->subtotal, $orderProduct->tax_id, $orderProduct->tax_type, $orderProduct->tax_percentage);
                     $subtotal = $subtotal + $orderProduct->subtotal;
                     if(!empty($orderProduct->tax_id)){
-                        $total += $orderProduct->subtotal + ($taxData[TypeEnum::TAX_SIGN] === VarType::TAX_SIGN_PEMOTONG ? -$taxData['ppn'] : $taxData['ppn']);
+                        if($orderProduct->tax_type == TypeEnum::TAX_TYPE_EXCLUDE){
+                            $total += $orderProduct->subtotal + ($taxData[TypeEnum::TAX_SIGN] === VarType::TAX_SIGN_PEMOTONG ? -$taxData['ppn'] : $taxData['ppn']);
+                        }
+                        else {
+                            $total += $orderProduct->subtotal;
+                        }
                     } else {
                         $total += $orderProduct->subtotal;
                     }

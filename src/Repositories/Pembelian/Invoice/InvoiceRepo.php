@@ -122,7 +122,7 @@ class InvoiceRepo extends ElequentRepository
                 DB::statement('SET FOREIGN_KEY_CHECKS=1');
                 return true;
             } else {
-                throw new Exception("Failed to save Invoice Header");
+                return false;
             }
         } catch (Exception $e) {
             DB::rollBack();
@@ -358,15 +358,8 @@ class InvoiceRepo extends ElequentRepository
                     $coaDebit = $item->product->coa_id ?: $settings['coa_sediaan'];
                 }
 
-                $journalEntries[] = [
-                    'coa_id' => $coaDebit,
-                    'posisi' => 'debet',
-                    'nominal'=> $item->subtotal,
-                    'sub_id' => $item->id,
-                    'note'   => $item->product ? $item->product->item_name : $item->service_name
-                ];
-
                 $taxes = $this->calculateTaxComponents($item, $item->subtotal);
+                $totalTax = 0;
                 foreach($taxes as $tax) {
                     $journalEntries[] = [
                         'coa_id' => $tax['coa_id'],
@@ -374,6 +367,24 @@ class InvoiceRepo extends ElequentRepository
                         'nominal'=> $tax['nominal'],
                         'sub_id' => $item->id,
                         'note'   => 'PPN'
+                    ];
+                    $totalTax = $totalTax + $tax['nominal'];
+                }
+                if($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE ){
+                    $journalEntries[] = [
+                        'coa_id' => $coaDebit ,
+                        'posisi' => 'debet',
+                        'nominal'=> $item->subtotal- $totalTax,
+                        'sub_id' => $item->id,
+                        'note'   => $item->product ? $item->product->item_name : $item->service_name
+                    ];
+                } else {
+                    $journalEntries[] = [
+                        'coa_id' => $coaDebit,
+                        'posisi' => 'debet',
+                        'nominal'=> $item->subtotal,
+                        'sub_id' => $item->id,
+                        'note'   => $item->product ? $item->product->item_name : $item->service_name
                     ];
                 }
             }

@@ -2,6 +2,7 @@
 namespace Icso\Accounting\Repositories\Utils;
 
 use Config;
+use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Models\Setting;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Utils\VarType;
@@ -86,17 +87,29 @@ class SettingRepo extends ElequentRepository
         $currency = self::getOptionValue('currency');
         $currencyFormat = self::getOptionValue('currency_format');
         $resetNumber = self::getOptionValue('reset_number');
+        $taxTypePurchase = SettingRepo::getOption(SettingEnum::TAX_TYPE_PURCHASE);
+        $taxTypeSales = SettingRepo::getOption(SettingEnum::TAX_TYPE_SALES);
         $isPkp = false;
         if(tenant()->is_pkp == 'yes')
         {
             $isPkp = true;
+        }
+        if(!empty($taxTypePurchase)){
+            $jsDec = json_decode($taxTypePurchase);
+            $taxTypePurchase = $jsDec->meta_value;
+        }
+        if(!empty($taxTypeSales)){
+            $jsDec = json_decode($taxTypeSales);
+            $taxTypeSales = $jsDec->meta_value;
         }
         return array(
             'currency' => $currency,
             'currency_format' => $currencyFormat,
             'reset_number' => $resetNumber,
             'is_pkp' => $isPkp,
-            'user_id' => tenant()->user_id
+            'user_id' => tenant()->user_id,
+            'tax_type_purchase' => $taxTypePurchase,
+            'tax_type_sales' => $taxTypeSales,
         );
     }
 

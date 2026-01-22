@@ -27,13 +27,17 @@ class Setting extends Controller
         $currency = SettingRepo::getOption('currency');
         $currencyFormat = SettingRepo::getOption('currency_format');
         $resetNumber = SettingRepo::getOption('reset_number');
+        $taxTypePurchase = SettingRepo::getOption(SettingEnum::TAX_TYPE_PURCHASE);
+        $taxTypeSales = SettingRepo::getOption(SettingEnum::TAX_TYPE_SALES);
 
         $this->data['status'] = true;
         if(empty($userId)){
             $this->data['data'] = array(
                 'currency' => $currency,
                 'currency_format' => $currencyFormat,
-                'reset_number' => $resetNumber
+                'reset_number' => $resetNumber,
+                'tax_type_purchase' => $taxTypePurchase,
+                'tax_type_sales' => $taxTypeSales,
             );
         }
         else{

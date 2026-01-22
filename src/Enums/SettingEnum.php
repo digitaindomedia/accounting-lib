@@ -55,5 +55,7 @@ class SettingEnum
     public const COMPANY_POSTAL_CODE = "COMPANY_POSTAL_CODE";
     public const COMPANY_CITY = "COMPANY_CITY";
     public const COMPANY_PROVINCE = "COMPANY_PROVINCE";
+    public const TAX_TYPE_PURCHASE = "TAX_TYPE_PURCHASE";
+    public const TAX_TYPE_SALES = "TAX_TYPE_SALES";
 
 }

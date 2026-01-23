@@ -179,6 +179,7 @@ class JurnalTransaksiRepo extends ElequentRepository
             foreach ($arrDataType as $item){
                 $arrData[] = array(
                     'coa_code' => "",
+                    'id' => $item->id,
                     'coa_name' => $item->coa_name
                 );
                 $subSaldo = 0;
@@ -195,6 +196,7 @@ class JurnalTransaksiRepo extends ElequentRepository
                         $arrData[] = array(
                             'coa_code' =>$child->coa_code,
                             'coa_name' => $child->coa_name,
+                            'id' => $child->id,
                             'saldo' => $saldo
                         );
                         $subSaldo = $subSaldo + $saldo;
@@ -202,6 +204,7 @@ class JurnalTransaksiRepo extends ElequentRepository
                 }
                 $arrData[] = array(
                     'coa_code' => "",
+                    'id' => $item->id,
                     'coa_name' => "Total ".$item->coa_name,
                     'saldo' => $subSaldo
                 );
@@ -210,6 +213,7 @@ class JurnalTransaksiRepo extends ElequentRepository
         }
         $arrData[] = array(
             'coa_code' => "",
+            'id' => "",
             'coa_name' => "Total ".$fieldType,
             'saldo' => $grandTotal
         );

@@ -2,24 +2,28 @@
 
 namespace Icso\Accounting\Imports;
 
-use App\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Enums\TypeEnum;
+use Icso\Accounting\Enums\InvoiceStatusEnum;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Master\Warehouse;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Repositories\Master\TaxRepo;
 use Icso\Accounting\Repositories\Master\Vendor\VendorRepo;
+use Icso\Accounting\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use stdClass;
+use Illuminate\Support\Facades\DB;
 
 class SalesInvoiceImport implements ToCollection
 {
@@ -47,6 +51,7 @@ class SalesInvoiceImport implements ToCollection
         $idInvoice = '0';
         $oldNo = '0';
         $statIns = false;
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
         foreach ($rows as $index => $row) {
             // Skip the header row
             if ($index === 0) {
@@ -70,8 +75,8 @@ class SalesInvoiceImport implements ToCollection
                 $diskonItemType = $row[11];
                 $persenPpn = $row[12];
             } else {
-                $kodeGudang = $row[2];
-                $kodeCustomer = $row[3];
+                $kodeGudang = $row[3];
+                $kodeCustomer = $row[2];
                 $note = $row[4];
                 $diskon = $row[5];
                 $diskonType = $row[6];
@@ -134,28 +139,41 @@ class SalesInvoiceImport implements ToCollection
                 $this->updateDataInvoice($invId);
             }
         }
+        DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
 
     public function insertInvoiceEntry($invoiceNo, $invoiceDate, $note, $warehouseId, $vendorId, $discount,$discountType,$taxType,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxPercentage)
     {
-        $request = new Request();
-        $request->invoice_no = $invoiceNo;
-        $request->invoice_date = $invoiceDate;
-        $request->note = $note;
-        $request->tax_type = $taxType;
-        $request->discount_type = $discountType;
-        $request->vendor_id = $vendorId;
-        $request->warehouse_id = $warehouseId;
-        $request->subtotal = 0;
-        $request->discount = $discount;
-        $request->grandtotal = 0;
-        $request->invoice_type = $this->orderType;
-        $request->input_type = InputType::SALES;
-        $request->order_id = 0;
-        $request->due_date = "";
-        $arrData = $this->invoiceRepo->prepareInvoiceData($request, $invoiceNo, $invoiceDate, $note, "", $this->userId,$vendorId);
-        $arrData = $this->invoiceRepo->prepareCreateOrUpdateData($request, $arrData, "");
-        $res = $this->invoiceRepo->createOrUpdateInvoice($arrData,'');
+        $discountVal = 0;
+        if(isset($discount) && $discount !== ''){
+             $discountVal = Utility::remove_commas($discount);
+             if($discountVal === '') $discountVal = 0;
+        }
+
+        $arrData = [
+            'invoice_no' => $invoiceNo,
+            'invoice_date' => $invoiceDate,
+            'note' => $note,
+            'tax_type' => $taxType,
+            'discount_type' => $discountType,
+            'vendor_id' => $vendorId,
+            'warehouse_id' => $warehouseId,
+            'subtotal' => 0,
+            'discount' => $discountVal,
+            'grandtotal' => 0,
+            'invoice_type' => $this->orderType,
+            'input_type' => InputType::SALES,
+            'order_id' => 0,
+            'due_date' => $invoiceDate,
+            'created_by' => $this->userId,
+            'updated_by' => $this->userId,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+            'invoice_status' => InvoiceStatusEnum::BELUM_LUNAS,
+            'reason' => ''
+        ];
+
+        $res = $this->invoiceRepo->create($arrData);
         if($res){
             $this->insertInvoiceProduct($itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage,$res->id);
             $this->success[] = "No Invoice ".$invoiceNo." berhasil import";
@@ -164,16 +182,16 @@ class SalesInvoiceImport implements ToCollection
             $this->errors[] = "No Invoice ".$invoiceNo." gagal import";
             return 0;
         }
-
     }
 
     public function insertInvoiceProduct($itemCode, $qty,$price,$diskonItem,$diskonItemType, $taxType, $taxPercentage, $invoiceId)
     {
-        $product1 = new stdClass();
         $findBarang = Product::where('item_code', $itemCode)->first();
+        $productId = 0;
+        $unitId = 0;
         if(!empty($findBarang)){
-            $product1->product_id = $findBarang->id;
-            $product1->unit_id = $findBarang->unit_id;
+            $productId = $findBarang->id;
+            $unitId = $findBarang->unit_id;
         }
         $taxId = 0;
         if(!empty($taxPercentage)){
@@ -181,19 +199,41 @@ class SalesInvoiceImport implements ToCollection
         }
 
         $subtotal = Helpers::hitungSubtotal($qty,$price,$diskonItem,$diskonItemType);
-        $product1->qty = $qty;
+        
+        $priceVal = 0;
+        if(isset($price) && $price !== ''){
+             $priceVal = Utility::remove_commas($price);
+             if($priceVal === '') $priceVal = 0;
+        }
+        
+        $discountVal = 0;
+        if(isset($diskonItem) && $diskonItem !== ''){
+             $discountVal = Utility::remove_commas($diskonItem);
+             if($discountVal === '') $discountVal = 0;
+        }
+        
+        $subtotalVal = 0;
+        if(isset($subtotal) && $subtotal !== ''){
+             $subtotalVal = Utility::remove_commas($subtotal);
+             if($subtotalVal === '') $subtotalVal = 0;
+        }
 
-        $product1->tax_id = $taxId;
-        $product1->tax_percentage = $taxPercentage;
-        $product1->price = $price;
-        $product1->tax_type = $taxType;
-        $product1->subtotal = $subtotal;
-        $product1->discount = !empty($diskonItem) ? $diskonItem : 0;
-
-        $product1->discount_type = !empty($diskonItemType) ? $diskonItemType : "fix";
-        $products = [$product1];
-        $this->invoiceRepo->handleOrderProducts($products,$invoiceId,$taxType);
-
+        SalesOrderProduct::create([
+            'qty' => $qty,
+            'qty_left' => $qty,
+            'product_id' => $productId,
+            'unit_id' => $unitId,
+            'tax_id' => $taxId,
+            'tax_percentage' => $taxPercentage,
+            'price' => $priceVal,
+            'tax_type' => $taxType,
+            'discount_type' => !empty($diskonItemType) ? $diskonItemType : "fix",
+            'discount' => $discountVal,
+            'subtotal' => $subtotalVal,
+            'multi_unit' => 0,
+            'order_id' => 0,
+            'invoice_id' => $invoiceId
+        ]);
     }
 
     private function hasValidationErrors($index, $row)
@@ -215,7 +255,7 @@ class SalesInvoiceImport implements ToCollection
             $this->errors[] = "Baris " . ($index + 1) . ": Kode customer tidak ditemukan.";
             return true;
         }
-        if (empty($row[3]) || !Warehouse::where('warehouse_code', $row[2])->exists()) {
+        if (empty($row[3]) || !Warehouse::where('warehouse_code', $row[3])->exists()) {
             $this->errors[] = "Baris " . ($index + 1) . ": Kode gudang tidak ditemukan.";
             return true;
         }
@@ -311,7 +351,12 @@ class SalesInvoiceImport implements ToCollection
                     $taxData = Helpers::hitungTaxDpp($orderProduct->subtotal, $orderProduct->tax_id, $orderProduct->tax_type, $orderProduct->tax_percentage);
                     $subtotal = $subtotal + $orderProduct->subtotal;
                     if(!empty($orderProduct->tax_id)){
-                        $total += $orderProduct->subtotal + ($taxData[TypeEnum::TAX_SIGN] === VarType::TAX_SIGN_PEMOTONG ? -$taxData['ppn'] : $taxData['ppn']);
+                        if($orderProduct->tax_type == TypeEnum::TAX_TYPE_EXCLUDE){
+                            $total += $orderProduct->subtotal + ($taxData[TypeEnum::TAX_SIGN] === VarType::TAX_SIGN_PEMOTONG ? -$taxData['ppn'] : $taxData['ppn']);
+                        }
+                        else {
+                            $total += $orderProduct->subtotal;
+                        }
                     } else {
                         $total += $orderProduct->subtotal;
                     }

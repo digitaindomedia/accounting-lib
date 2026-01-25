@@ -343,7 +343,7 @@ class InventoryController extends Controller
             $where[] = ['warehouse_id', '=', $warehouseId];
         }
         $processedResults = collect();
-        $resultInventory = Inventory::where($where)->whereBetween('inventory_date',[$fromDate,$untilDate])->chunk(200, function ($input) use (&$processedResults) {
+        $resultInventory = Inventory::where($where)->whereBetween('inventory_date',[$fromDate,$untilDate])->orderBy('inventory_date', 'asc')->chunk(200, function ($input) use (&$processedResults) {
             $processedInventory = $input->map(function ($inventory) {
                 $findTransaction = TransactionsCode::getNumberAndNameTransaction($inventory->transaction_code, $inventory->transaction_id);
                 $inventory->transaction_name = $findTransaction['transaction_name'];

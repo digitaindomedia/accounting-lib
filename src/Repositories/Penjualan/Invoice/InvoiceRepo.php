@@ -417,9 +417,7 @@ class InvoiceRepo extends ElequentRepository
 
             foreach ($find->orderproduct as $item) {
                 // Determine Revenue COA: Use product's coa_id if set, otherwise use default
-                $coaRevenue = (!empty($item->product->coa_id) && $item->product->coa_id != 0)
-                    ? $item->product->coa_id
-                    : $settings['coa_penjualan'];
+                $coaRevenue = $settings['coa_penjualan'];
 
                 $subtotal = $item->subtotal;
 

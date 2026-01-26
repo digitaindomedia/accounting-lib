@@ -124,7 +124,13 @@ class SalesOrderRepo extends ElequentRepository
                 } else {
                     $products = $request->orderproduct;
                 }
+                if (is_array($request->ordermeta)) {
+                    $metas  = json_decode(json_encode($request->ordermeta));
+                } else {
+                    $metas = $request->ordermeta;
+                }
                 $this->handleOrderProducts($products, $idOrder, $taxType);
+                $this->handleMetas($metas,$idOrder);
                 $this->handleFileUploads($request->file('files'), $idOrder, $userId);
                 DB::statement('SET FOREIGN_KEY_CHECKS=1');
                 DB::commit();
@@ -137,6 +143,24 @@ class SalesOrderRepo extends ElequentRepository
             DB::rollBack();
             return false;
         }
+    }
+
+    private function handleMetas($metas,$idOrder)
+    {
+        if(!empty($metas)){
+            foreach ($metas as $item) {
+                if(!empty($item->meta_value)){
+                    $arrDataMeta = [
+                        'meta_key' => $item->meta_key,
+                        'meta_value' => $item->meta_value,
+                        'order_id' => $idOrder
+                    ];
+                    SalesOrderMeta::create($arrDataMeta);
+                }
+
+            }
+        }
+
     }
 
     public function handleNewData($arrData, $orderType, $userId)

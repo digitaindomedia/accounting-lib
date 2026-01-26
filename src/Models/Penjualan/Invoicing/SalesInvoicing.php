@@ -56,6 +56,11 @@ class SalesInvoicing extends Model
         return $this->belongsTo(SalesOrder::class, 'order_id');
     }
 
+    public function invoicemeta()
+    {
+        return $this->hasMany(SalesInvoicingMeta::class,'invoice_id');
+    }
+
     public function getAttachmentsAttribute()
     {
         $baseUrl = url('storage/'.tenant()->id.'/app/public/');

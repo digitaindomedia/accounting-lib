@@ -279,7 +279,7 @@ class InvoiceController extends Controller
     public function show(Request $request){
         $salesDeliveryRepo = new DeliveryRepo(new SalesDelivery());
         $id = $request->id;
-        $res = $this->invoiceRepo->findOne($id,array(),['vendor','warehouse','invoicedelivery','invoicedelivery.delivery.warehouse','invoicedelivery.delivery.deliveryproduct','invoicedelivery.delivery.deliveryproduct.unit','invoicedelivery.delivery.deliveryproduct.product','invoicedelivery.delivery.deliveryproduct.tax','invoicedelivery.delivery.deliveryproduct.tax.taxgroup','invoicedelivery.delivery.deliveryproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+        $res = $this->invoiceRepo->findOne($id,array(),['vendor','warehouse','invoicemeta','invoicedelivery','invoicedelivery.delivery.warehouse','invoicedelivery.delivery.deliveryproduct','invoicedelivery.delivery.deliveryproduct.unit','invoicedelivery.delivery.deliveryproduct.product','invoicedelivery.delivery.deliveryproduct.tax','invoicedelivery.delivery.deliveryproduct.tax.taxgroup','invoicedelivery.delivery.deliveryproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if($res){
             if(!empty($res->invoicedelivery)){
                 foreach ($res->invoicedelivery as $item){

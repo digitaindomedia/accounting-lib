@@ -142,7 +142,12 @@ class InvoiceRepo extends ElequentRepository
                 // This will THROW Exception if Unbalanced
                 $this->postingJurnal($invoiceId);
             }
-
+            if (is_array($request->invoicemeta)) {
+                $metas  = json_decode(json_encode($request->invoicemeta));
+            } else {
+                $metas = $request->invoicemeta;
+            }
+            $this->handleMetas($metas,$invoiceId);
             // 4. File Upload
             $this->handleFileUploads($request, $invoiceId);
 
@@ -156,6 +161,24 @@ class InvoiceRepo extends ElequentRepository
             Log::error("Sales Invoice Store Error: " . $e->getMessage() . ' ini payload nya ' . json_encode($request->all()));
             return false;
         }
+    }
+
+    private function handleMetas($metas,$idInvoice)
+    {
+        if(!empty($metas)){
+            foreach ($metas as $item) {
+                if(!empty($item->meta_value)){
+                    $arrDataMeta = [
+                        'meta_key' => $item->meta_key,
+                        'meta_value' => $item->meta_value,
+                        'invoice_id' => $idInvoice
+                    ];
+                    SalesInvoicingMeta::create($arrDataMeta);
+                }
+
+            }
+        }
+
     }
 
     private function gatherInputData(Request $request)

@@ -14,6 +14,7 @@ use Icso\Accounting\Imports\SalesInvoiceImport;
 use Icso\Accounting\Imports\JurnalInvoiceImport;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
@@ -32,7 +33,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
-
+use Illuminate\Support\Facades\Log;
 class InvoiceController extends Controller
 {
     protected $invoiceRepo;
@@ -692,6 +693,67 @@ class InvoiceController extends Controller
         $export = new JurnalInvoiceExport($data);
         $pdf = PDF::loadView('accounting::sales.jurnal_invoice_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('jurnal-invoice-penjualan.pdf');
+    }
+
+    public function getAllFakturPajak(Request $request)
+    {
+        $res = SalesInvoicingMeta::where(array('invoice_id' => $request->invoice_id))->get();
+        $arrData = [];
+        if($res->count() > 0){
+            foreach ($res as $item){
+                $val = json_decode($item->meta_value);
+                $arrData[] = array(
+                    'id' => $item->id,
+                    'faktur_date' => $val->faktur_date ?? '',
+                    'faktur_no' => $val->faktur_no ?? '',
+                    'faktur_nominal' => $val->faktur_nominal ?? 0
+                );
+            }
+            $this->data['status'] = true;
+            $this->data['message'] = 'Data berhasil ditemukan';
+            $this->data['data'] = $arrData;
+        } else {
+            $this->data['status'] = false;
+            $this->data['message'] = "Data gagal ditemukan";
+            $this->data['data'] = [];
+        }
+        return response()->json($this->data);
+    }
+
+    public function saveFakturPajak(Request $request)
+    {
+        DB::beginTransaction();
+        try{
+            SalesInvoicingMeta::where(array('invoice_id' => $request->invoice_id))->delete();
+            $faktur = json_decode(json_encode($request->faktur_pajak));
+            if(!empty($faktur)){
+                foreach ($faktur as $item){
+                    $arrData = array(
+                        'invoice_id' => $request->invoice_id,
+                        'meta_key' => 'faktur_pajak',
+                        'meta_value' => json_encode([
+                            'faktur_date' => Utility::changeDateFormat($item->faktur_date),
+                            'faktur_no' => $item->faktur_no,
+                            'faktur_nominal' => Utility::remove_commas($item->faktur_nominal)
+                        ])
+                    );
+                    SalesInvoicingMeta::create($arrData);
+                }
+            }
+
+            DB::commit();
+            $this->data['status'] = true;
+            $this->data['message'] = 'Data berhasil disimpan';
+            $this->data['data'] = '';
+        }
+        catch (\Exception $e) {
+            Log::error($e->getMessage());
+            DB::rollBack();
+            $this->data['status'] = false;
+            $this->data['message'] = 'Data gagal disimpan';
+            $this->data['data'] = '';
+        }
+        return response()->json($this->data);
     }
 
 }

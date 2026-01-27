@@ -416,6 +416,8 @@ Route::group([
         Route::get('export-saldo-awal-piutang-excel', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnal']);
         Route::get('export-saldo-awal-piutang-csv', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnalCsv']);
         Route::get('export-saldo-awal-piutang-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnalPdf']);
+        Route::get('get-all-faktur-pajak', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'getAllFakturPajak']);
+        Route::post('save-data-faktur-pajak', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'saveFakturPajak']);
     });
 
     Route::prefix('sales-payment')->group(function () {

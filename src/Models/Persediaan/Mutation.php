@@ -6,6 +6,7 @@ namespace Icso\Accounting\Models\Persediaan;
 use Icso\Accounting\Models\Master\Warehouse;
 use Icso\Accounting\Traits\CreatedByName;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Mutation extends Model
 {
@@ -41,6 +42,11 @@ class Mutation extends Model
     public function towarehouse(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Warehouse::class,'to_warehouse_id');
+    }
+
+    public function mutation(): BelongsTo
+    {
+        return $this->belongsTo(Mutation::class,'mutation_out_id');
     }
 
     public function getAttachmentsAttribute()

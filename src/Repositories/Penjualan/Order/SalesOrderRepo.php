@@ -209,8 +209,8 @@ class SalesOrderRepo extends ElequentRepository
     public function createProduct($item, $orderId, $taxType='')
     {
         $arrItem = [
-            'qty' => $item->qty,
-            'qty_left' => $item->qty,
+            'qty' => Utility::remove_commas($item->qty),
+            'qty_left' => Utility::remove_commas($item->qty),
             'product_id' => $item->product_id ?: '0',
             'unit_id' => $item->unit_id ?: '0',
             'tax_id' => $item->tax_id ?: '0',

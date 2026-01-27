@@ -23,6 +23,7 @@ use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -179,7 +180,7 @@ class DeliveryRepo extends ElequentRepository
 
         return [
             'delivery_no'   => $deliveryNo,
-            'delivery_date' => $request->delivery_date,
+            'delivery_date' => !empty($request->delivery_date) ? Utility::changeDateFormat($request->delivery_date) : date('Y-m-d'),
             'order_id'      => $request->order_id,
             'vendor_id'     => $request->vendor_id,
             'warehouse_id'  => $request->warehouse_id,

@@ -266,13 +266,28 @@ class InvoiceController extends Controller
 
     public function deleteById(Request $request){
         $id = $request->id;
-        $res = $this->invoiceRepo->delete($id);
-        if($res) {
+        DB::beginTransaction();
+        try
+        {
+            $find = SalesInvoicing::with(['invoicedelivery'])->find($id);
+            if (!empty($find->invoicedelivery)) {
+                foreach ($find->invoicedelivery as $item) {
+                    DeliveryRepo::changeStatusDelivery($item->delivery_id, StatusEnum::OPEN);
+                }
+            }
+
+            $this->invoiceRepo->deleteAdditional($id);
+            $this->invoiceRepo->delete($id);
+            DB::commit();
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus';
-        } else {
+            $this->data['data'] = array();
+        }
+        catch (\Exception $e) {
+            DB::rollback();
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
+            $this->data['data'] = array();
         }
         return response()->json($this->data);
     }
@@ -392,6 +407,13 @@ class InvoiceController extends Controller
         DB::beginTransaction();
         try
         {
+            $find = SalesInvoicing::with(['invoicedelivery'])->find($id);
+            if (!empty($find->invoicedelivery)) {
+                foreach ($find->invoicedelivery as $item) {
+                    DeliveryRepo::changeStatusDelivery($item->delivery_id, StatusEnum::OPEN);
+                }
+            }
+
             $this->invoiceRepo->deleteAdditional($id);
             $this->invoiceRepo->delete($id);
             DB::commit();
@@ -418,6 +440,12 @@ class InvoiceController extends Controller
                 DB::beginTransaction();
                 try
                 {
+                    $find = SalesInvoicing::with(['invoicedelivery'])->find($id);
+                    if (!empty($find->invoicedelivery)) {
+                        foreach ($find->invoicedelivery as $item) {
+                            DeliveryRepo::changeStatusDelivery($item->delivery_id, StatusEnum::OPEN);
+                        }
+                    }
                     $this->invoiceRepo->deleteAdditional($id);
                     $this->invoiceRepo->delete($id);
                     DB::commit();

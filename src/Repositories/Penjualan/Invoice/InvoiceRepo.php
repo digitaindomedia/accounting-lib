@@ -379,12 +379,12 @@ class InvoiceRepo extends ElequentRepository
     {
         $invoice = $this->model->find($id);
         if ($invoice && !empty($invoice->order_id)) {
-            $deliveryCount = SalesDelivery::where('order_id', $invoice->order_id)->count();
+           /* $deliveryCount = SalesDelivery::where('order_id', $invoice->order_id)->count();
             if ($deliveryCount > 0) {
                 SalesOrderRepo::changeStatusByDelivery($invoice->order_id);
             } else {
                 SalesOrder::where('id', $invoice->order_id)->update(['order_status' => StatusEnum::OPEN]);
-            }
+            }*/
 
             if ($invoice->invoice_type == ProductType::SERVICE) {
                 SalesOrderProduct::where('invoice_id', $id)->update(['invoice_id' => 0]);

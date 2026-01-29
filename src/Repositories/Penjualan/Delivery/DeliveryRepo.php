@@ -382,4 +382,16 @@ class DeliveryRepo extends ElequentRepository
         $instance = new self(new SalesDelivery());
         $instance->update(['delivery_status' => $statusDelivery], $idDelivery);
     }
+
+    public function resetSalesOrderStatus($orderId)
+    {
+        if (!empty($orderId)) {
+            $count = SalesDelivery::where('order_id', $orderId)->count();
+            if ($count == 0) {
+                SalesOrderRepo::changeStatusOrderById($orderId, StatusEnum::OPEN);
+            } else {
+                SalesOrderRepo::changeStatusByDelivery($orderId);
+            }
+        }
+    }
 }

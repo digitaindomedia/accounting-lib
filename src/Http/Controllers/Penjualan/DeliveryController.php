@@ -9,13 +9,14 @@ use Icso\Accounting\Exports\SalesDeliveryReportDetail;
 use Icso\Accounting\Http\Requests\CreateSalesDeliveryRequest;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
+use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\ProductType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
-
+use Illuminate\Support\Facades\Log;
 class DeliveryController extends Controller
 {
     protected $deliveryRepo;
@@ -128,8 +129,13 @@ class DeliveryController extends Controller
         DB::beginTransaction();
         try
         {
+            $find = $this->deliveryRepo->findOne($id);
+            $orderId = $find->order_id ?? null;
+
             $this->deliveryRepo->deleteAdditional($id);
             $this->deliveryRepo->delete($id);
+
+            $this->deliveryRepo->resetSalesOrderStatus($orderId);
             DB::commit();
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus';
@@ -137,6 +143,7 @@ class DeliveryController extends Controller
         }
         catch (\Exception $e) {
             DB::rollback();
+            Log::error($e->getMessage());
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
@@ -154,13 +161,17 @@ class DeliveryController extends Controller
                 DB::beginTransaction();
                 try
                 {
+                    $find = $this->deliveryRepo->findOne($id);
+                    $orderId = $find->order_id ?? null;
                     $this->deliveryRepo->deleteAdditional($id);
                     $this->deliveryRepo->delete($id);
+                    $this->deliveryRepo->resetSalesOrderStatus($orderId);
                     DB::commit();
                     $successDelete = $successDelete + 1;
                 }
                 catch (\Exception $e) {
                     DB::rollback();
+                    Log::error($e->getMessage());
                     $failedDelete = $failedDelete + 1;
                 }
             }

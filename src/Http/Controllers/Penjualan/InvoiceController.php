@@ -52,7 +52,7 @@ class InvoiceController extends Controller
         $search = $request->q;
         $page = $request->page;
         $perpage = $request->perpage;
-        $page = ($page -1) * $perpage;
+        //$page = ($page -1) * $perpage;
         $where = $this->buildWhereClause($request);
         $fromDate = $request->from_date;
         $untilDate = $request->until_date;

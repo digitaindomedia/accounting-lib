@@ -10,6 +10,7 @@ use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
+use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
@@ -116,7 +117,7 @@ class BukuBesarController extends Controller
             $where[] = ['coa_id', '=', $coaId];
         }
 
-        return $this->jurnalTransaksiRepo->getAllDataWithDateBy($search, $page, $perpage, $where, ['coa_id', 'asc', 'transaction_datetime', 'asc'], ['coa'], ['column' => 'transaction_date', 'range' => [$fromDate, $untilDate]]);
+        return $this->jurnalTransaksiRepo->getAllDataWithDateBy($search, $page, $perpage, $where, ['coa_id', 'asc', 'transaction_datetime', 'asc', 'id', 'asc'], ['coa'], ['column' => 'transaction_date', 'range' => [$fromDate, $untilDate]]);
     }
 
     private function getFilteredTotal(Request $request)
@@ -140,9 +141,27 @@ class BukuBesarController extends Controller
         if (count($data) > 0) {
             $unique = $data->unique('coa_id');
             foreach ($unique as $item) {
-                $res = JurnalTransaksiRepo::filterArrayByCoaId($data, $item->coa_id);
-                $tanggal = $res[0]->transaction_datetime;
-                $saldoAwal = JurnalTransaksiRepo::sumSaldoAwal($item->coa_id, $tanggal);
+                $res = $data->where('coa_id', $item->coa_id)->values();
+
+                if ($res->isEmpty()) continue;
+
+                $firstItem = $res[0];
+                $saldoAwal = $this->getSaldoAwal($item->coa_id, $firstItem->transaction_datetime, $firstItem->id);
+
+                $currentSaldo = $saldoAwal;
+                $coaPosition = $item->coa->coa_position ?? 'debet';
+
+                foreach ($res as $transaction) {
+                    $amount = 0;
+                    if ($coaPosition == 'debet') {
+                        $amount = $transaction->debet - $transaction->kredit;
+                    } else {
+                        $amount = $transaction->kredit - $transaction->debet;
+                    }
+                    $currentSaldo += $amount;
+                    $transaction->saldo = $currentSaldo;
+                }
+
                 $arrData[] = [
                     'saldo_awal' => $saldoAwal,
                     'coa' => $item->coa,
@@ -151,6 +170,27 @@ class BukuBesarController extends Controller
             }
         }
         return $arrData;
+    }
+
+    private function getSaldoAwal($coaId, $date, $transactionId)
+    {
+        $query = JurnalTransaksi::where('coa_id', $coaId)
+            ->where(function($q) use ($date, $transactionId) {
+                $q->where('transaction_datetime', '<', $date)
+                    ->orWhere(function($sub) use ($date, $transactionId) {
+                        $sub->where('transaction_datetime', $date)
+                            ->where('id', '<', $transactionId);
+                    });
+            });
+
+        $totalDebet = (clone $query)->sum('debet');
+        $totalKredit = (clone $query)->sum('kredit');
+
+        $coa = Coa::find($coaId);
+        if ($coa && $coa->coa_position == 'debet') {
+            return $totalDebet - $totalKredit;
+        }
+        return $totalKredit - $totalDebet;
     }
 
     private function calculateTotalAkun($coaId)

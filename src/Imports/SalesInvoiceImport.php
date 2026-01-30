@@ -19,6 +19,7 @@ use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
+use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -110,7 +111,7 @@ class SalesInvoiceImport implements ToCollection
                 $tanggalInvoice = Helpers::formatDateExcel($tanggalInvoice);
             }
 
-            $vendorId = VendorRepo::getVendorId($kodeCustomer);
+            $vendorId = VendorRepo::getCustomerId($kodeCustomer);
 
 
             if ($oldNo == '0') {
@@ -251,7 +252,7 @@ class SalesInvoiceImport implements ToCollection
             $this->errors[] = "Baris " . ($index + 1) . ": Kode customer Kosong.";
             return true;
         }
-        if (!Vendor::where('vendor_code', $row[2])->exists()) {
+        if (!Vendor::where('vendor_code', $row[2])->where('vendor_type', VendorType::CUSTOMER)->exists()) {
             $this->errors[] = "Baris " . ($index + 1) . ": Kode customer tidak ditemukan.";
             return true;
         }

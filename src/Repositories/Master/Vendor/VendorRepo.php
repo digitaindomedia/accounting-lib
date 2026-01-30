@@ -5,6 +5,7 @@ use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Utils\Constants;
 use Icso\Accounting\Utils\Utility;
+use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
 
 class VendorRepo extends ElequentRepository
@@ -23,10 +24,12 @@ class VendorRepo extends ElequentRepository
         // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('vendor_name', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_code', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_address', 'like', '%' .$search. '%');
+            $query->where(function($q) use($search){
+                $q->where('vendor_name', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_code', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_address', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->orderBy('vendor_name','asc')->offset($page)->limit($perpage)->get();
@@ -38,10 +41,12 @@ class VendorRepo extends ElequentRepository
         // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('vendor_name', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_code', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_address', 'like', '%' .$search. '%');
+            $query->where(function($q) use($search){
+                $q->where('vendor_name', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_code', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_address', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->orderBy('vendor_name','asc')->count();
@@ -117,10 +122,12 @@ class VendorRepo extends ElequentRepository
         // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('vendor_name', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_code', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-            $query->orWhere('vendor_address', 'like', '%' .$search. '%');
+            $query->where(function($q) use($search){
+                $q->where('vendor_name', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_code', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                $q->orWhere('vendor_address', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->orderBy('vendor_name','asc');
@@ -132,4 +139,17 @@ class VendorRepo extends ElequentRepository
         $vendor = Vendor::where('vendor_code', $kodeSupplier)->first();
         return $vendor ? $vendor->id : 0;
     }
+
+    public static function getSupplierId($kodeSupplier)
+    {
+        $vendor = Vendor::where('vendor_code', $kodeSupplier)->where('vendor_type', VendorType::SUPPLIER)->first();
+        return $vendor ? $vendor->id : 0;
+    }
+
+    public static function getCustomerId($kodeCustomer)
+    {
+        $vendor = Vendor::where('vendor_code', $kodeCustomer)->where('vendor_type', VendorType::CUSTOMER)->first();
+        return $vendor ? $vendor->id : 0;
+    }
+
 }

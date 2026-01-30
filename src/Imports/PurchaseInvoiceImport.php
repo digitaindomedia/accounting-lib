@@ -19,6 +19,7 @@ use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\VarType;
+use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -106,7 +107,7 @@ class PurchaseInvoiceImport implements ToCollection
                 $statIns = false;
             }
 
-            $vendorId = VendorRepo::getVendorId($kodeSupplier);
+            $vendorId = VendorRepo::getSupplierId($kodeSupplier);
             if(!empty($tanggalInvoice)){
                 $tanggalInvoice = Helpers::formatDateExcel($tanggalInvoice);
             }
@@ -262,7 +263,7 @@ class PurchaseInvoiceImport implements ToCollection
             $this->errors[] = "Baris " . ($index + 1) . ": Kode supplier dari Kosong.";
             return true;
         }
-        if (!Vendor::where('vendor_code', $row[3])->exists()) {
+        if (!Vendor::where('vendor_code', $row[3])->where('vendor_type', VendorType::SUPPLIER)->exists()) {
             $this->errors[] = "Baris " . ($index + 1) . ": Kode supplier tidak ditemukan.";
             return true;
         }

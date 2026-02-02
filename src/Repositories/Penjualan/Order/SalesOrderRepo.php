@@ -50,7 +50,7 @@ class SalesOrderRepo extends ElequentRepository
                 $query->where('vendor_name', 'like', '%' .$search. '%');
                 $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
         });
-        })->orderBy('order_date','desc')->with(['vendor','orderproduct','orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])->offset($page)->limit($perpage)->get();
+        })->orderBy('order_date','desc')->with(['vendor','orderproduct','ordermeta','orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])->offset($page)->limit($perpage)->get();
         return $dataSet;
     }
 

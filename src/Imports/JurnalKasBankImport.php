@@ -77,26 +77,33 @@ class JurnalKasBankImport implements ToCollection
                     if ($idJurnal) $this->successCount++;
                     $oldNo = $noJurnal;
 
-                } elseif ($oldNo !== $noJurnal) {
-                    // Ganti Jurnal baru
-                   // $this->updateNominalKasBank($idJurnal, $totalBal);
-                    $totalBal = 0;
+                } else{
+                    if ($oldNo !== $noJurnal) {
+                        // Ganti Jurnal baru
+                        $this->updateNominalKasBank($idJurnal, $totalBal);
+                        $totalBal = 0;
 
-                    if (Jurnal::where('jurnal_no', $noJurnal)->exists()) {
-                        $this->errors[] = "Baris " . ($index + 1) . ": No Jurnal '$noJurnal' sudah digunakan.";
-                        continue;
+                        if (Jurnal::where('jurnal_no', $noJurnal)->exists()) {
+                            $this->errors[] = "Baris " . ($index + 1) . ": No Jurnal '$noJurnal' sudah digunakan.";
+                            continue;
+                        }
+
+                        $idJurnal = $this->insertJurnalEntry($noJurnal, $jurnalDate, $note, $coaKasBank, $transType, $person, $coaItem, $nominalValue, $noteItem, $totalBal);
+                        if ($idJurnal) $this->successCount++;
+                        $oldNo = $noJurnal;
+
+                    } else {
+                        // Masih satu jurnal
+                        $transTypeEnum = $transType == 'masuk' ? JurnalType::INCOME_TYPE : JurnalType::EXPENSE_TYPE;
+                        $this->createJurnalAkunAndTransaksi($idJurnal, $noJurnal, $jurnalDate, $noteItem, $coaItem, $transTypeEnum, $nominalValue, $totalBal);
+                       // $this->updateNominalKasBank($idJurnal, $totalBal);
                     }
-
-                    $idJurnal = $this->insertJurnalEntry($noJurnal, $jurnalDate, $note, $coaKasBank, $transType, $person, $coaItem, $nominalValue, $noteItem, $totalBal);
-                    if ($idJurnal) $this->successCount++;
-                    $oldNo = $noJurnal;
-
-                } else {
-                    // Masih satu jurnal
-                    $transTypeEnum = $transType == 'masuk' ? JurnalType::INCOME_TYPE : JurnalType::EXPENSE_TYPE;
-                    $this->createJurnalAkunAndTransaksi($idJurnal, $noJurnal, $jurnalDate, $noteItem, $coaItem, $transTypeEnum, $nominalValue, $totalBal);
-                    $this->updateNominalKasBank($idJurnal, $totalBal);
                 }
+            }
+
+            // Pastikan jurnal terakhir ikut di-update setelah loop selesai.
+            if ($idJurnal) {
+                $this->updateNominalKasBank($idJurnal, $totalBal);
             }
 
             DB::commit();

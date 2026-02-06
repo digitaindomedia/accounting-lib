@@ -330,8 +330,9 @@ class ProductController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params); // $search, $page, $categoryType
         $filters = $request->only(['product_type']);
+        $countPage = $this->productRepo->getAllTotalDataBy($search, $filters);
 
-        return $this->productRepo->getAllDataBy($search, $page, 100, $filters);
+        return $this->productRepo->getAllDataBy($search, $page, $countPage, $filters);
     }
 
 }

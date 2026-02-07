@@ -4,12 +4,15 @@ namespace Icso\Accounting\Http\Controllers\Akuntansi;
 
 
 use Barryvdh\DomPDF\Facade\Pdf;
+use Icso\Accounting\Enums\TransactionType;
 use Icso\Accounting\Exports\BukuBesarExport;
 use Icso\Accounting\Exports\JurnalTransaksiExport;
+use Icso\Accounting\Models\Akuntansi\Jurnal;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
+use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -160,6 +163,14 @@ class BukuBesarController extends Controller
                     }
                     $currentSaldo += $amount;
                     $transaction->saldo = $currentSaldo;
+                    if($transaction->transaction_code == TransactionsCode::JURNAL){
+                        if(empty($transaction->note)){
+                            $findJurnal = Jurnal::where('id', $transaction->transaction_id)->first();
+                            if(!empty($findJurnal)){
+                                $transaction->note = $findJurnal->note;
+                            }
+                        }
+                    }
                 }
 
                 $arrData[] = [

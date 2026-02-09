@@ -200,6 +200,11 @@ class PaymentRepo extends ElequentRepository
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PELUNASAN_PEMBELIAN, $idPayment);
     }
 
+    public static function postingJurnalPayment($idPayment){
+        $repo = new self(new PurchasePayment());
+        $repo->postingJurnal($idPayment);
+    }
+
     /**
      * Refactored Posting Jurnal
      * Calculates all entries first, verifies balance, then saves.

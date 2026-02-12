@@ -129,5 +129,10 @@ class Vendor extends Model
         return $this->belongsTo(Coa::class, 'coa_id');
     }
 
+    public function vendor_meta()
+    {
+        return $this->hasMany(VendorMeta::class, 'vendor_id');
+    }
+
 
 }

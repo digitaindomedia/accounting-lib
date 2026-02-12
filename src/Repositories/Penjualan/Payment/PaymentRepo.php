@@ -207,6 +207,12 @@ class PaymentRepo extends ElequentRepository
         }
     }
 
+    public static function postingJurnalPayment($idPayment){
+        $repo = new self(new SalesPayment());
+        $repo->postingJurnal($idPayment);
+
+    }
+
     /**
      * Refactored Posting Jurnal with Balance Check
      */

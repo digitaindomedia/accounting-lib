@@ -34,7 +34,7 @@ class CreateVendorRequest extends FormRequest
             return array_merge(
                 Vendor::$rules,
                 [
-                    'vendor_code' => "required|unique:$table,vendor_code",
+                    'vendor_code' => "unique:$table,vendor_code",
                 ]
             );
         }
@@ -53,7 +53,6 @@ class CreateVendorRequest extends FormRequest
     {
         return ['vendor_name.required' => 'Nama Masih Kosong',
             'vendor_company_name.required' => 'Nama perusahaan Masih Kosong',
-            'vendor_code.required' => 'Kode Masih Kosong',
             'vendor_code.unique' => 'Kode sudah digunakan'];
     }
 

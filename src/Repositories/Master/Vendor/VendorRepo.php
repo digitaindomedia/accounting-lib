@@ -2,6 +2,7 @@
 namespace Icso\Accounting\Repositories\Master\Vendor;
 
 use Icso\Accounting\Models\Master\Vendor;
+use Icso\Accounting\Models\Master\VendorMeta;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Utils\Constants;
 use Icso\Accounting\Utils\Utility;
@@ -91,12 +92,31 @@ class VendorRepo extends ElequentRepository
             $arrData['vendor_type'] = $request->vendor_type;
             $arrData['created_by'] = $request->user_id;
             $arrData['created_at'] = date('Y-m-d H:i:s');
-            return $this->create($arrData);
+
+            $vendorId =  $this->create($arrData);
+            $this->insertVendorMeta($vendorId->id, $request->vendor_meta);
+            return $vendorId;
         } else {
             if(!empty($vendorPhoto)) {
                 $arrData['vendor_photo'] = $vendorPhoto;
             }
-            return $this->update($arrData,$id);
+            $updateRes =  $this->update($arrData,$id);
+            $this->insertVendorMeta($id, $request->vendor_meta);
+            return $updateRes;
+        }
+    }
+
+    private function insertVendorMeta($vendorId, $arrVendorMeta)
+    {
+        if(!empty($arrVendorMeta)){
+            VendorMeta::where('vendor_id', $vendorId)->delete();
+            foreach ($arrVendorMeta as $value) {
+                VendorMeta::create([
+                    'vendor_id' => $vendorId,
+                    'meta_key' => 'shipping_address',
+                    'meta_value' => $value['meta_value'],
+                ]);
+            }
         }
     }
 

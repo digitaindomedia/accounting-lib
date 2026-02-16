@@ -43,4 +43,9 @@ class PurchaseReceivedProduct extends Model
         $qtyBsRetur = $this->qty - $qtyRetur;
         return $qtyBsRetur;
     }
+
+    public function items()
+    {
+        return $this->hasMany(PurchaseReceivedProductItem::class, 'receive_product_id');
+    }
 }

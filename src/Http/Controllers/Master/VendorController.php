@@ -79,7 +79,7 @@ class VendorController extends Controller
     public function show(Request $request)
     {
         $id = $request->id;
-        $data = $this->vendorRepo->findOne($id,[],['coa']);
+        $data = $this->vendorRepo->findOne($id,[],['coa','vendor_meta']);
         if($data)
         {
             $this->data['status'] = true;

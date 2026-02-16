@@ -13,6 +13,10 @@ class Product extends Model
     protected $guarded = [];
     public $timestamps = false;
 
+    protected $casts = [
+        'is_identity_tracking' => 'boolean',
+    ];
+
     protected $appends = ['images'];
 
     public static $rules = [
@@ -107,6 +111,11 @@ class Product extends Model
         });
 
         return $res;
+    }
+
+    public function usesIdentityTracking(): bool
+    {
+        return (bool) $this->is_identity_tracking;
     }
 
 

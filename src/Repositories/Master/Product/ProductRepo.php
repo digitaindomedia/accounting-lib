@@ -95,6 +95,8 @@ class ProductRepo extends ElequentRepository
             'coa_id' => !empty($request->coa_id) ? $request->coa_id : '0',
             'coa_biaya_id' => !empty($request->coa_biaya_id) ? $request->coa_biaya_id : '0',
             'type_price' => '',
+            'is_identity_tracking' => $request->boolean('is_identity_tracking'),
+            'identity_label' => $request->identity_label,
             'updated_by' => $request->user_id,
             'updated_at' => date('Y-m-d H:i:s'),
         );

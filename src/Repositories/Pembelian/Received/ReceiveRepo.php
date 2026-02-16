@@ -9,10 +9,12 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Enums\TransactionType;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedMeta;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProduct;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProductItem;
 use Icso\Accounting\Models\Pembelian\Retur\PurchaseReturProduct;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -116,6 +118,9 @@ class ReceiveRepo extends ElequentRepository
                 foreach ($products as $item) {
                     $item = (object)$item;
 
+                    $qty = $item->qty;
+                    $product = Product::find($item->product_id);
+
                     $this->validateOrderQty($item->order_product_id, $item->qty);
 
                     $detailHpp = $this->calculateHppAndTax($item->order_product_id, $item->qty);
@@ -140,6 +145,64 @@ class ReceiveRepo extends ElequentRepository
                         'tax_type'          => $detailHpp['tax_type'],
                         'discount_type'     => $detailHpp['discount_type'],
                     ]);
+
+                    $identityItems = isset($item->identity_items)
+                        ? (array) $item->identity_items
+                        : [];
+
+                    $isIdentityTracking = $product && $product->usesIdentityTracking();
+
+                    if ($isIdentityTracking) {
+
+                        if (empty($identityItems)) {
+
+                        }
+
+                        $qty = collect($identityItems)->sum('qty');
+
+                    } else {
+                        $qty = $item->qty;
+                    }
+
+                    if ($isIdentityTracking) {
+
+                        $usedIdentity = [];
+
+                        foreach ($identityItems as $idItem) {
+
+                            if (empty($idItem->identity_value)) {
+                                throw new Exception("{$product->identity_label} tidak boleh kosong");
+                            }
+
+                            if ($idItem->qty <= 0) {
+                                throw new Exception("Qty {$product->identity_label} harus lebih dari 0");
+                            }
+
+                            if (in_array($idItem->identity_value, $usedIdentity)) {
+                                throw new Exception("{$product->identity_label} duplikat: {$idItem->identity_value}");
+                            }
+
+                            $usedIdentity[] = $idItem->identity_value;
+                        }
+                    }
+
+                    if ($isIdentityTracking) {
+
+                        foreach ($identityItems as $idItem) {
+
+                            PurchaseReceivedProductItem::create([
+                                'receive_product_id' => $resItem->id,
+                                'product_id'         => $item->product_id,
+                                'warehouse_id'       => $request->warehouse_id,
+                                'identity_value'     => $idItem->identity_value,
+                                'qty'                => $idItem->qty,
+                                'qty_left'           => $idItem->qty,
+                                'status'             => StatusEnum::OPEN,
+                                'created_at'         => now(),
+                                'updated_at'         => now(),
+                            ]);
+                        }
+                    }
 
                     $reqInv = new Request();
                     $reqInv->coa_id = $detailHpp['coa_id'] ?: 0;

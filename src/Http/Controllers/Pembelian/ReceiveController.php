@@ -85,7 +85,7 @@ class ReceiveController extends Controller
     }
 
     public function show(Request $request){
-        $res = $this->purchaseReceivedRepo->findOne($request->id,array(),['vendor', 'order', 'warehouse','receiveproduct', 'receiveproduct.product','receiveproduct.orderproduct','receiveproduct.tax','receiveproduct.unit']);
+        $res = $this->purchaseReceivedRepo->findOne($request->id,array(),['vendor', 'order', 'warehouse','receiveproduct','receiveproduct.items', 'receiveproduct.product','receiveproduct.orderproduct','receiveproduct.tax','receiveproduct.unit']);
         if($res){
             if(!empty($res->receiveproduct))
             {

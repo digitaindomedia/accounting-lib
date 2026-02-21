@@ -120,6 +120,13 @@ class DeliveryRepo extends ElequentRepository
                 $deliveryId = $id;
                 $this->deleteAdditional($deliveryId);
             }
+            if(!empty($request->shipping_address)){
+                SalesDeliveryMeta::create([
+                    'delivery_id' => $deliveryId,
+                    'meta_key' => 'shipping_address',
+                    'meta_value' => $request->shipping_address
+                ]);
+            }
 
             // 2. Process Products
             $products = is_array($request->deliveryproduct)

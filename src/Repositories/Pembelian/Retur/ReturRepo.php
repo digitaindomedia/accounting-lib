@@ -8,6 +8,7 @@ use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
 use Icso\Accounting\Models\Pembelian\Retur\PurchaseRetur;
 use Icso\Accounting\Models\Pembelian\Retur\PurchaseReturMeta;
@@ -19,6 +20,7 @@ use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Services\IdentityStockService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\TransactionsCode;
@@ -105,7 +107,7 @@ class ReturRepo extends ElequentRepository
         $userId = $request->user_id;
         $id = $request->id;
         $inventoryRepo = new InventoryRepo(new Inventory());
-
+        $identityService = new IdentityStockService();
         // Prepare Header Data
         $data = $this->gatherHeaderData($request);
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
@@ -138,10 +140,38 @@ class ReturRepo extends ElequentRepository
             if (!empty($products)) {
                 foreach ($products as $item) {
                     $item = (object)$item;
+                    $product = Product::find($item->product_id);
+                    $isIdentity = $product && $product->usesIdentityTracking();
+
+                    $identityItems = isset($item->identity_items)
+                        ? (array) $item->identity_items
+                        : [];
+
+                    // =============================================
+                    // === IDENTITY STOCK : HITUNG QTY RETUR ========
+                    // =============================================
+                    if ($isIdentity) {
+
+                        if (empty($identityItems)) {
+                            throw new Exception(
+                                "Produk {$product->item_name} wajib memilih {$product->identity_label}"
+                            );
+                        }
+
+                        $qty = collect($identityItems)->sum('qty');
+
+                        if ($qty <= 0) {
+                            throw new Exception("Qty retur {$product->item_name} tidak valid");
+                        }
+
+                    } else {
+                        $qty = $item->qty;
+                    }
+
 
                     // Save Detail
                     $resItem = PurchaseReturProduct::create([
-                        'qty'               => $item->qty,
+                        'qty'               => $qty,
                         'product_id'        => $item->product_id,
                         'unit_id'           => $item->unit_id,
                         'tax_id'            => $item->tax_id ?? 0,
@@ -158,13 +188,24 @@ class ReturRepo extends ElequentRepository
                         'retur_id'          => $returId,
                     ]);
 
+                    if ($isIdentity) {
+                        $identityService->consume(
+                            collect($identityItems)->map(function ($row) {
+                                return [
+                                    'identity_item_id' => $row->identity_item_id,
+                                    'qty'              => $row->qty,
+                                ];
+                            })->toArray()
+                        );
+                    }
+
                     // Save Inventory Log (Outgoing)
                     $reqInv = new Request();
                     $reqInv->coa_id = $item->product->coa_id ?? 0; // Assuming frontend sends object, else fetch product
                     $reqInv->user_id = $userId;
                     $reqInv->inventory_date = $data['retur_date'];
                     $reqInv->transaction_code = TransactionsCode::RETUR_PEMBELIAN;
-                    $reqInv->qty_out = $item->qty;
+                    $reqInv->qty_out = $qty;
                     $reqInv->warehouse_id = $request->warehouse_id;
                     $reqInv->product_id = $item->product_id;
                     $reqInv->price = (float) Utility::remove_commas($item->hpp_price ?? 0);

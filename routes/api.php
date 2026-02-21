@@ -187,6 +187,7 @@ Route::group([
         Route::get('export-saldo-awal-excel', [InventoryController::class, 'exportStockAwal']);
         Route::get('export-saldo-awal-pdf', [InventoryController::class, 'exportStockAwalPdf']);
         Route::get('export-saldo-awal-csv', [InventoryController::class, 'exportStockAwalCsv']);
+        Route::get('identity', [\Icso\Accounting\Http\Controllers\Persediaan\IdentityStockController::class, 'search']);
     });
 
     Route::prefix('purchase-invoice')->group(function () {

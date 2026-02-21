@@ -21,7 +21,7 @@ class IdentityStockService
             $identity = PurchaseReceivedProductItem::lockForUpdate()
                 ->find($row['identity_item_id']);
 
-            if (!$identity || $identity->status !== 'OPEN') {
+            if (!$identity || $identity->status !== StatusEnum::OPEN) {
                 throw new Exception("Identity tidak tersedia");
             }
 
@@ -56,7 +56,7 @@ class IdentityStockService
             }
 
             $identity->qty_left += $row['qty'];
-            $identity->status = 'OPEN';
+            $identity->status = StatusEnum::OPEN;
 
             $identity->save();
         }
@@ -73,6 +73,7 @@ class IdentityStockService
             'product_id'         => $data['product_id'],
             'warehouse_id'       => $data['warehouse_id'],
             'identity_value'     => $data['identity_value'],
+            'expired_date'       => !empty($data['expired_date']) ? $data['expired_date'] : null,
             'qty'                => $data['qty'],
             'qty_left'           => $data['qty'],
             'status'             => StatusEnum::OPEN,

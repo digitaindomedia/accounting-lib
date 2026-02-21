@@ -104,7 +104,7 @@ class DeliveryController extends Controller
 
     public function show(Request $request): \Illuminate\Http\JsonResponse
     {
-        $res = $this->deliveryRepo->findOne($request->id,array(),['order', 'vendor', 'warehouse','deliveryproduct','deliveryproduct.unit','deliveryproduct.product','deliveryproduct.orderproduct']);
+        $res = $this->deliveryRepo->findOne($request->id,array(),['order', 'vendor', 'warehouse','deliveryproduct','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.product','deliveryproduct.orderproduct']);
         if($res){
             if(!empty($res->deliveryproduct)){
                 foreach ($res->deliveryproduct as $item){

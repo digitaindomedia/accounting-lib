@@ -120,17 +120,63 @@ class ReceiveRepo extends ElequentRepository
 
                     $qty = $item->qty;
                     $product = Product::find($item->product_id);
+                    $isIdentityTracking = $product->usesIdentityTracking();
 
-                    $this->validateOrderQty($item->order_product_id, $item->qty);
+                    // ---------- Identity Items ----------
+                    $identityItems = [];
 
-                    $detailHpp = $this->calculateHppAndTax($item->order_product_id, $item->qty);
+                    if (!empty($item->identities)) {
+                        // Laravel request -> object → convert ke array of object
+                        $identityItems = is_array($item->identities)
+                            ? $item->identities
+                            : json_decode(json_encode($item->identities));
+                    }
 
-                    $subtotal = Helpers::hitungSubtotal($item->qty, $item->buy_price, $item->discount, $item->discount_type);
+                    if ($isIdentityTracking && empty($identityItems)) {
+                        throw new Exception(
+                            "Produk {$product->item_name} wajib mengisi {$product->identity_label}"
+                        );
+                    }
+
+                    // ---------- Validasi Identity ----------
+                    $usedIdentity = [];
+                    $qty = 0;
+
+                    if ($isIdentityTracking) {
+                        foreach ($identityItems as $row) {
+
+                            $identityValue = trim($row['identity_value'] ?? '');
+                            $rowQty        = (float) ($row['qty'] ?? 0);
+
+                            if ($identityValue === '') {
+                                throw new Exception("{$product->identity_label} tidak boleh kosong");
+                            }
+
+                            if ($rowQty <= 0) {
+                                throw new Exception("Qty {$product->identity_label} harus > 0");
+                            }
+
+                            if (in_array($identityValue, $usedIdentity)) {
+                                throw new Exception("{$product->identity_label} duplikat: {$identityValue}");
+                            }
+
+                            $usedIdentity[] = $identityValue;
+                            $qty += $rowQty;
+                        }
+                    } else {
+                        $qty = (float) $item->qty;
+                    }
+
+                    $this->validateOrderQty($item->order_product_id, $qty);
+
+                    $detailHpp = $this->calculateHppAndTax($item->order_product_id, $qty);
+
+                    $subtotal = Helpers::hitungSubtotal($qty, $item->buy_price, $item->discount, $item->discount_type);
 
                     $resItem = PurchaseReceivedProduct::create([
                         'receive_id'        => $recId,
-                        'qty'               => $item->qty,
-                        'qty_left'          => $item->qty,
+                        'qty'               => $qty,
+                        'qty_left'          => $qty,
                         'product_id'        => $item->product_id,
                         'unit_id'           => $item->unit_id,
                         'order_product_id'  => $item->order_product_id,
@@ -146,57 +192,20 @@ class ReceiveRepo extends ElequentRepository
                         'discount_type'     => $detailHpp['discount_type'],
                     ]);
 
-                    $identityItems = isset($item->identity_items)
-                        ? (array) $item->identity_items
-                        : [];
 
-                    $isIdentityTracking = $product && $product->usesIdentityTracking();
 
                     if ($isIdentityTracking) {
-
-                        if (empty($identityItems)) {
-
-                        }
-
-                        $qty = collect($identityItems)->sum('qty');
-
-                    } else {
-                        $qty = $item->qty;
-                    }
-
-                    if ($isIdentityTracking) {
-
-                        $usedIdentity = [];
-
-                        foreach ($identityItems as $idItem) {
-
-                            if (empty($idItem->identity_value)) {
-                                throw new Exception("{$product->identity_label} tidak boleh kosong");
-                            }
-
-                            if ($idItem->qty <= 0) {
-                                throw new Exception("Qty {$product->identity_label} harus lebih dari 0");
-                            }
-
-                            if (in_array($idItem->identity_value, $usedIdentity)) {
-                                throw new Exception("{$product->identity_label} duplikat: {$idItem->identity_value}");
-                            }
-
-                            $usedIdentity[] = $idItem->identity_value;
-                        }
-                    }
-
-                    if ($isIdentityTracking) {
-
-                        foreach ($identityItems as $idItem) {
-
+                        foreach ($identityItems as $row) {
                             PurchaseReceivedProductItem::create([
                                 'receive_product_id' => $resItem->id,
                                 'product_id'         => $item->product_id,
                                 'warehouse_id'       => $request->warehouse_id,
-                                'identity_value'     => $idItem->identity_value,
-                                'qty'                => $idItem->qty,
-                                'qty_left'           => $idItem->qty,
+                                'identity_value'     => trim($row['identity_value']),
+                                'expired_date'       => !empty($row['expired_date'])
+                                    ? $row['expired_date']
+                                    : null,
+                                'qty'                => (float)$row['qty'],
+                                'qty_left'           => (float)$row['qty'],
                                 'status'             => StatusEnum::OPEN,
                                 'created_at'         => now(),
                                 'updated_at'         => now(),
@@ -209,7 +218,7 @@ class ReceiveRepo extends ElequentRepository
                     $reqInv->user_id = $userId;
                     $reqInv->inventory_date = $dataHeader['receive_date'];
                     $reqInv->transaction_code = TransactionsCode::PENERIMAAN;
-                    $reqInv->qty_in = $item->qty;
+                    $reqInv->qty_in = $qty;
                     $reqInv->warehouse_id = $request->warehouse_id;
                     $reqInv->product_id = $item->product_id;
                     $reqInv->price = $detailHpp['hpp_price'];
@@ -442,15 +451,32 @@ class ReceiveRepo extends ElequentRepository
 
     public function deleteAdditional($id)
     {
-        $find = PurchaseReceived::find($id);
-        if ($find) {
-            PurchaseReceivedProduct::where('receive_id', $id)->delete();
-            PurchaseReceivedMeta::where('receive_id', $id)->delete();
+        $find = PurchaseReceived::with('receiveproduct.items')->find($id);
+        if (!$find) return;
+
+        // 1. CEK: apakah identity sudah dipakai (qty_left < qty)
+        foreach ($find->receiveproduct as $rp) {
+            foreach ($rp->items ?? [] as $item) {
+                if ($item->qty_left < $item->qty) {
+                    throw new Exception(
+                        "Penerimaan tidak bisa dihapus karena {$item->identity_value} sudah digunakan"
+                    );
+                }
+            }
+        }
+
+
             Inventory::where('transaction_code', TransactionsCode::PENERIMAAN)
                 ->where('transaction_id', $id)->delete();
+            PurchaseReceivedProductItem::whereIn(
+                'receive_product_id',
+                $find->receiveproduct->pluck('id')
+            )->delete();
+            PurchaseReceivedProduct::where('receive_id', $id)->delete();
+            PurchaseReceivedMeta::where('receive_id', $id)->delete();
             JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PENERIMAAN, $id);
             OrderRepo::changeStatusPenerimaan($find->order_id);
-        }
+
     }
 
     public function getTotalReceived($id){

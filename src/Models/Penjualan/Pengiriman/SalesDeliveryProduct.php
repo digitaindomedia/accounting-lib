@@ -34,4 +34,12 @@ class SalesDeliveryProduct extends Model
     {
         return $this->belongsTo(SalesOrderProduct::class, 'order_product_id');
     }
+
+    public function items()
+    {
+        return $this->hasMany(
+            SalesDeliveryProductItem::class,
+            'delivery_product_id'
+        );
+    }
 }

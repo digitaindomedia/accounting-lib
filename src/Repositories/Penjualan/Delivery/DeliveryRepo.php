@@ -12,6 +12,7 @@ use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryMeta;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProduct;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProductItem;
 use Icso\Accounting\Models\Penjualan\Retur\SalesReturProduct;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -20,6 +21,7 @@ use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Services\IdentityStockService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\TransactionsCode;
@@ -63,7 +65,7 @@ class DeliveryRepo extends ElequentRepository
                     $query->where('order_no', 'like', '%' .$search. '%');
                 });
         })->orderBy('delivery_date','desc')
-            ->with(['vendor','order','warehouse','deliveryproduct.product','deliveryproduct.unit','deliveryproduct.tax'])
+            ->with(['vendor','order','warehouse','deliveryproduct.product','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.tax'])
             ->offset($page)->limit($perpage)->get();
     }
 
@@ -120,35 +122,111 @@ class DeliveryRepo extends ElequentRepository
             }
 
             // 2. Process Products
-            $products = is_array($request->deliveryproduct) ? $request->deliveryproduct : json_decode(json_encode($request->deliveryproduct));
+            $products = is_array($request->deliveryproduct)
+                ? $request->deliveryproduct
+                : json_decode(json_encode($request->deliveryproduct), true);
+            $identityService = new IdentityStockService();
 
             if (!empty($products)) {
-                foreach ($products as $item) {
-                    $item = (object)$item;
-                    $findProductOrder = SalesOrderProduct::find($item->order_product_id);
+                foreach ($products as $itemRaw) {
 
-                    if ($findProductOrder) {
-                        $sellPrice = $findProductOrder->price;
-                        $subtotal = Helpers::hitungSubtotal($item->qty, $sellPrice, $findProductOrder->discount, $findProductOrder->discount_type);
+                    $orderProductId = $itemRaw['order_product_id'];
+                    $findProductOrder = SalesOrderProduct::with('product')->find($orderProductId);
 
-                        // Save Detail
-                        SalesDeliveryProduct::create([
-                            'delivery_id'       => $deliveryId,
-                            'qty'               => $item->qty,
-                            'qty_left'          => $item->qty,
-                            'product_id'        => $item->product_id,
-                            'unit_id'           => $item->unit_id,
-                            'order_product_id'  => $item->order_product_id,
-                            'multi_unit'        => '0',
-                            'hpp_price'         => 0, // HPP is calculated during Posting/Inventory Log
-                            'sell_price'        => $sellPrice,
-                            'tax_id'            => $findProductOrder->tax_id,
-                            'tax_percentage'    => $findProductOrder->tax_percentage,
-                            'discount'          => $findProductOrder->discount,
-                            'subtotal'          => $subtotal,
-                            'tax_type'          => $findProductOrder->tax_type,
-                            'discount_type'     => $findProductOrder->discount_type,
-                        ]);
+                    if (!$findProductOrder) {
+                        continue;
+                    }
+
+                    $product     = $findProductOrder->product;
+                    $sellPrice   = $findProductOrder->price;
+                    $isIdentity  = $product && $product->usesIdentityTracking();
+
+                    // Ambil identity items (support 2 payload)
+                    $identityItems = $itemRaw['items']
+                        ?? $itemRaw['orderproduct']['items']
+                        ?? [];
+
+                    /** ===== VALIDASI ===== */
+                    if ($isIdentity && empty($identityItems)) {
+                        throw new Exception(
+                            "Produk {$product->item_name} wajib memilih {$product->identity_label}"
+                        );
+                    }
+
+                    $qty = 0;
+                    $usedIdentity = [];
+
+                    if ($isIdentity) {
+                        foreach ($identityItems as $row) {
+
+                            $identityValue = trim($row['identity_value'] ?? '');
+                            $rowQty = (float) ($row['qty'] ?? 0);
+
+                            if ($identityValue === '') {
+                                throw new Exception("{$product->identity_label} tidak boleh kosong");
+                            }
+
+                            if ($rowQty <= 0) {
+                                throw new Exception("Qty {$product->identity_label} harus > 0");
+                            }
+
+                            if (in_array($identityValue, $usedIdentity)) {
+                                throw new Exception("{$product->identity_label} duplikat: {$identityValue}");
+                            }
+
+                            $usedIdentity[] = $identityValue;
+                            $qty += $rowQty;
+                        }
+                    } else {
+                        $qty = (float) ($itemRaw['qty'] ?? 0);
+                    }
+
+                    if ($qty <= 0) {
+                        throw new Exception("Qty {$product->item_name} tidak valid");
+                    }
+
+                    $subtotal = Helpers::hitungSubtotal(
+                        $qty,
+                        $sellPrice,
+                        $findProductOrder->discount,
+                        $findProductOrder->discount_type
+                    );
+
+                    $deliveryProduct = SalesDeliveryProduct::create([
+                        'delivery_id'       => $deliveryId,
+                        'qty'               => $qty,
+                        'qty_left'          => $qty,
+                        'product_id'        => $itemRaw['product_id'],
+                        'unit_id'           => $itemRaw['unit_id'],
+                        'order_product_id'  => $orderProductId,
+                        'multi_unit'        => 0,
+                        'hpp_price'         => 0,
+                        'sell_price'        => $sellPrice,
+                        'tax_id'            => $findProductOrder->tax_id,
+                        'tax_percentage'    => $findProductOrder->tax_percentage,
+                        'discount'          => $findProductOrder->discount,
+                        'subtotal'          => $subtotal,
+                        'tax_type'          => $findProductOrder->tax_type,
+                        'discount_type'     => $findProductOrder->discount_type,
+                    ]);
+
+                    if ($isIdentity) {
+                        foreach ($identityItems as $row) {
+
+                            SalesDeliveryProductItem::create([
+                                'delivery_product_id' => $deliveryProduct->id,
+                                'product_id'        => $itemRaw['product_id'],
+                                'identity_item_id'    => (int) $row['identity_item_id'],
+                                'identity_value'      => $row['identity_value'],
+                                'qty'                 => (float) $row['qty']
+                            ]);
+                        }
+                        $identityService->consume(
+                            collect($identityItems)->map(fn ($row) => [
+                                'identity_item_id' => (int) $row['identity_item_id'],
+                                'qty'              => (float) $row['qty'],
+                            ])->toArray()
+                        );
                     }
                 }
             }

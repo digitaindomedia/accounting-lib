@@ -111,6 +111,7 @@ class DeliveryController extends Controller
                     $item->qty_delivered = $countDelivered;
                 }
             }
+            $res->shipping_address = $res->shippingAddress();
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
             $this->data['data'] = $res;

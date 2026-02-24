@@ -65,4 +65,11 @@ class SalesDelivery extends Model
 
         return $res;
     }
+
+    public function shippingAddress(): ?string
+    {
+        return SalesDeliveryMeta::where('delivery_id', $this->id)
+            ->where('meta_key', 'shipping_address')
+            ->value('meta_value');
+    }
 }

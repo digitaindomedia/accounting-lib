@@ -74,6 +74,11 @@ class SalesOrder extends Model
         return $resDelivery['order_product'];
     }
 
+    public function salesquotation()
+    {
+        return $this->belongsTo(SalesQuotation::class, 'quotation_id');
+    }
+
     public function getAttachmentsAttribute()
     {
         $baseUrl = url('storage/'.tenant()->id.'/app/public/');

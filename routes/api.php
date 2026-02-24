@@ -23,6 +23,7 @@ use Icso\Accounting\Http\Controllers\Pembelian\PaymentController;
 use Icso\Accounting\Http\Controllers\Pembelian\ReceiveController;
 use Icso\Accounting\Http\Controllers\Pembelian\RequestController;
 use Icso\Accounting\Http\Controllers\Pembelian\ReturController;
+use Icso\Accounting\Http\Controllers\Penjualan\SalesQuotationController;
 use Icso\Accounting\Http\Controllers\Persediaan\AdjustmentController;
 use Icso\Accounting\Http\Controllers\Persediaan\InventoryController;
 use Icso\Accounting\Http\Controllers\Persediaan\MutationController;
@@ -458,6 +459,14 @@ Route::group([
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'exportPdf']);
         Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'exportReportExcel']);
         Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\Penjualan\ReturController::class, 'exportReportPdf']);
+    });
+
+    Route::prefix('sales-quotation')->group(function () {
+        Route::get('get-all-list', [SalesQuotationController::class, 'getAllData']);
+        Route::get('find-by-id', [SalesQuotationController::class, 'show']);
+        Route::post('save-data', [SalesQuotationController::class, 'store']);
+        Route::delete('delete', [SalesQuotationController::class, 'deleteData']);
+        Route::delete('delete-all', [SalesQuotationController::class, 'deleteAll']);
     });
 
     Route::prefix('adjustment-stock')->group(function () {

@@ -9,7 +9,6 @@ use Icso\Accounting\Exports\SalesDeliveryReportDetail;
 use Icso\Accounting\Http\Requests\CreateSalesDeliveryRequest;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
-use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\ProductType;
 use Illuminate\Http\Request;

@@ -92,6 +92,7 @@ class SalesOrderRepo extends ElequentRepository
         $orderDate = !empty($request->order_date) ? Utility::changeDateFormat($request->order_date) : date('Y-m-d');
         $dateSend = $request->date_send;
         $vendorId = !empty($request->vendor_id) ? $request->vendor_id : '0';
+        $quotationId = !empty($request->quotation_id) ? $request->quotation_id : '0';
         $subtotal = !empty($request->subtotal) ? Utility::remove_commas($request->subtotal) : 0;
         $discount = !empty($request->discount) ? Utility::remove_commas($request->discount) : 0;
         $totalDiscount = !empty($request->total_discount) ? Utility::remove_commas($request->total_discount) : 0;
@@ -103,7 +104,7 @@ class SalesOrderRepo extends ElequentRepository
         $serviceType = !empty($request->service_type) ? $request->service_type : '';
         $serviceStartPeriode = !empty($request->service_start_period) ? $request->service_start_period : '';
         $serviceEndPeriode = !empty($request->service_start_period) ? $request->service_end_period : '';
-        $arrData = $this->preparedDataArray($orderNo, $orderDate,$userId,$note,$dateSend,$vendorId,$subtotal,$discount,$totalDiscount,$discountType,$taxType,$grandtotal,$serviceType,$serviceStartPeriode,$serviceEndPeriode);
+        $arrData = $this->preparedDataArray($orderNo, $orderDate,$userId,$note,$dateSend,$vendorId,$subtotal,$discount,$totalDiscount,$discountType,$taxType,$grandtotal,$serviceType,$serviceStartPeriode,$serviceEndPeriode,$quotationId);
         DB::beginTransaction();
         try {
             $isNewOrder = empty($id);
@@ -174,7 +175,7 @@ class SalesOrderRepo extends ElequentRepository
         return $res;
     }
 
-    public function preparedDataArray($orderNo, $orderDate, $userId, $note, $dateSend, $vendorId, $subtotal, $discount, $totalDiscount, $discountType, $taxType, $grandTotal, $serviceType, $serviceStartPeriode, $serviceEndPeriode)
+    public function preparedDataArray($orderNo, $orderDate, $userId, $note, $dateSend, $vendorId, $subtotal, $discount, $totalDiscount, $discountType, $taxType, $grandTotal, $serviceType, $serviceStartPeriode, $serviceEndPeriode, $quotationId=0)
     {
         return [
             'order_no' => $orderNo,
@@ -194,6 +195,7 @@ class SalesOrderRepo extends ElequentRepository
             'service_start_period' => $serviceStartPeriode ?: '',
             'service_end_period' => $serviceEndPeriode ?: '',
             'updated_by' => $userId,
+            'quotation_id' => $quotationId,
             'updated_at' => date('Y-m-d H:i:s')
         ];
     }

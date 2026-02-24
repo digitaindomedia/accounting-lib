@@ -131,7 +131,7 @@ class OrderController extends Controller
     }
 
     public function show(Request $request){
-        $res = $this->salesOrderRepo->findOne($request->id,array(),['orderproduct','ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+        $res = $this->salesOrderRepo->findOne($request->id,array(),['orderproduct','salesquotation','ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if($res){
            // $res->transactions = $this->salesOrderRepo->getTransaksi($request->id);
             $this->data['status'] = true;

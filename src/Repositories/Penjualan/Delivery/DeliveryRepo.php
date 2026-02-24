@@ -151,7 +151,7 @@ class DeliveryRepo extends ElequentRepository
                     // Ambil identity items (support 2 payload)
                     $identityItems = $itemRaw['items']
                         ?? $itemRaw['orderproduct']['items']
-                        ?? [];
+                        ?? $itemRaw['deliveryproduct']['items'] ?? [];
 
                     /** ===== VALIDASI ===== */
                     if ($isIdentity && empty($identityItems)) {
@@ -277,8 +277,32 @@ class DeliveryRepo extends ElequentRepository
 
     public function deleteAdditional($id)
     {
+        $identityService = new IdentityStockService();
+        $deliveryProducts = SalesDeliveryProduct::with('items')
+            ->where('delivery_id', $id)
+            ->get();
+
+        $itemsToRestore = [];
+        foreach ($deliveryProducts as $deliveryProduct) {
+            foreach ($deliveryProduct->items as $row) {
+                $identityItemId = (int) ($row->identity_item_id ?? 0);
+                $qty = (float) ($row->qty ?? 0);
+                if ($identityItemId > 0 && $qty > 0) {
+                    $itemsToRestore[] = [
+                        'identity_item_id' => $identityItemId,
+                        'qty' => $qty,
+                    ];
+                }
+            }
+        }
+
+        if (!empty($itemsToRestore)) {
+            $identityService->restore($itemsToRestore);
+        }
+
         InventoryRepo::deleteInventory(TransactionsCode::DELIVERY_ORDER, $id);
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::DELIVERY_ORDER, $id);
+        SalesDeliveryProductItem::whereIn('delivery_product_id', $deliveryProducts->pluck('id')->toArray())->delete();
         SalesDeliveryProduct::where('delivery_id', $id)->delete();
         SalesDeliveryMeta::where('delivery_id', $id)->delete();
     }

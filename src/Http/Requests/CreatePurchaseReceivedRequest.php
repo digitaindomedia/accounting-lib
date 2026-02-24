@@ -32,34 +32,34 @@ class CreatePurchaseReceivedRequest extends FormRequest
     public function rules()
     {
         $id = $this->input('id') ?? $this->route('id');
-        $receivedNo = $this->input('received_no');
+        $receivedNo = $this->input('receive_no');
         $table = (new PurchaseReceived())->getTable();
         $prefix = SettingRepo::getOptionValue(KeyNomor::NO_PENERIMAAN_PEMBELIAN);
         $rules = PurchaseReceived::$rules;
 
         if (empty($prefix)) {
-            $rules['received_no'] = [
+            $rules['receive_no'] = [
                 'required',
-                Rule::unique($table, 'received_no')->ignore($id),
+                Rule::unique($table, 'receive_no')->ignore($id),
             ];
         }
         elseif (empty($id)) {
             if (!empty($receivedNo)) {
                 // kalau user isi manual
-                $rules['received_no'] = [
-                    Rule::unique($table, 'received_no'),
+                $rules['receive_no'] = [
+                    Rule::unique($table, 'receive_no'),
                 ];
             } else {
                 // otomatis generate
-                $rules['received_no'] = ['nullable'];
+                $rules['receive_no'] = ['nullable'];
             }
         }
 
         // update + prefix tersedia → nomor wajib ada
         else {
-            $rules['received_no'] = [
+            $rules['receive_no'] = [
                 'required',
-                Rule::unique($table, 'received_no')->ignore($id),
+                Rule::unique($table, 'receive_no')->ignore($id),
             ];
         }
 
@@ -87,8 +87,8 @@ class CreatePurchaseReceivedRequest extends FormRequest
     public function messages()
     {
         return ['receive_date.required' => 'Tanggal Penerimaan Pembelian Masih Kosong',
-            'received_no.required' => 'Nomor penerimaan belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
-            'received_no.unique' => 'Nomor penerimaan sudah digunakan.',
+            'receive_no.required' => 'Nomor penerimaan belum bisa digenerate otomatis, silakan isi manual atau atur prefix nomor di pengaturan.',
+            'receive_no.unique' => 'Nomor penerimaan sudah digunakan.',
             'warehouse_id.required' => 'Nama Gudang Masih Belum dipilih',
             'order_id.required' => 'Order Pembelian Belum dipilih', 'receiveproduct.required' => 'Daftar barang yang akan diterima masih kosong', 'receiveproduct.*.qty.required' => 'Kuantitas barang masih kosong',
             'receiveproduct.*.qty.gt' => 'Kuantitas barang tidak boleh kurang dari 1'];

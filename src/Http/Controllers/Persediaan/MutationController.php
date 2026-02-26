@@ -112,7 +112,7 @@ class MutationController extends Controller
             return response()->json(['status' => false, 'message' => 'ID tidak ditemukan', 'data' => ''], 400);
         }
 
-        $res = $this->mutationRepo->findOne($id, [], ['fromwarehouse', 'mutation','towarehouse', 'mutationproduct', 'mutationproduct.product', 'mutationproduct.unit']);
+        $res = $this->mutationRepo->findOne($id, [], ['fromwarehouse', 'mutation','towarehouse', 'mutationproduct','salesquotation', 'mutationproduct.product', 'mutationproduct.unit']);
         if ($res) {
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';

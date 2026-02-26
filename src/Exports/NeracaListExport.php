@@ -4,6 +4,7 @@ namespace Icso\Accounting\Exports;
 
 use DateTime;
 use Hamcrest\Util;
+use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\SaldoAwal;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;

@@ -129,6 +129,7 @@ class MutationRepo extends ElequentRepository
             'from_warehouse_id' => $request->from_warehouse_id,
             'to_warehouse_id' => $request->to_warehouse_id ?? '0',
             'mutation_out_id' => $request->mutation_out_id ?? '0',
+            'quotation_id' => !empty($request->quotation_id) ? (int) $request->quotation_id : 0,
             'updated_by' => $userId,
             'updated_at' => date('Y-m-d H:i:s'),
         ];
@@ -180,7 +181,7 @@ class MutationRepo extends ElequentRepository
             foreach ($products as $item) {
                 $arrItem = [
                     'qty' => $item->qty,
-                    'price' => Utility::remove_commas($item->price),
+                    'price' => !empty($item->price) ? Utility::remove_commas($item->price) : 0,
                     'product_id' => $item->product_id,
                     'unit_id' => $item->unit_id,
                     'mutation_id' => $mutationId,

@@ -18,6 +18,7 @@ use Icso\Accounting\Models\Persediaan\StockAwal;
 use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Utils\Constants;
+use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
@@ -66,11 +67,13 @@ class InventoryController extends Controller
         $coaId = $request->coa_id;
         $data = $this->inventoryRepo->getAllDataStockAwalBy($search,$page, $perPage, array(StockAwal::getTableName().'.coa_id' => $coaId));
         $total = $this->inventoryRepo->getAllTotalDataStockAwalBy($search,array(StockAwal::getTableName().'.coa_id' => $coaId));
+        $hasMore = Helpers::hasMoreData($total,$page,$data);
         if(count($data) > 0) {
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
             $this->data['data'] = $data;
             $this->data['total'] = $total;
+            $this->data['has_more'] = $hasMore;
         } else {
             $this->data['status'] = false;
             $this->data['message'] = 'Data tidak ditemukan';

@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
+use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Repositories\Penjualan\Quotation\SalesQuotationRepository;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
@@ -23,8 +24,14 @@ class SalesQuotationController extends Controller
         $perpage = (int) $request->input('perpage', 10);
         $fromDate = $request->from_date;
         $untilDate = $request->until_date;
+        $where = [];
 
-        $res = $this->salesQuotationService->getAll($search, $page, $perpage, [], $fromDate, $untilDate);
+        // Dipakai untuk async selector di Sales Order agar quotation full-used (close) tidak muncul.
+        if ($request->boolean('for_sales_order')) {
+            $where[] = ['quotation_status', '!=', StatusEnum::CLOSE];
+        }
+
+        $res = $this->salesQuotationService->getAll($search, $page, $perpage, $where, $fromDate, $untilDate);
         $data = $res['data'] ?? [];
         $total = $res['total'] ?? 0;
 

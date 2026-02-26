@@ -4,6 +4,7 @@ namespace Icso\Accounting\Models\Persediaan;
 
 
 use Icso\Accounting\Models\Master\Warehouse;
+use Icso\Accounting\Models\Penjualan\Order\SalesQuotation;
 use Icso\Accounting\Traits\CreatedByName;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,5 +60,10 @@ class Mutation extends Model
         });
 
         return $res;
+    }
+
+    public function salesquotation()
+    {
+        return $this->belongsTo(SalesQuotation::class, 'quotation_id');
     }
 }

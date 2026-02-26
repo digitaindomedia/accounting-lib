@@ -7,6 +7,8 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
+use Icso\Accounting\Models\Penjualan\Order\SalesQuotation;
+use Icso\Accounting\Models\Penjualan\Order\SalesQuotationProduct;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProduct;
 use Icso\Accounting\Models\Penjualan\Spk\SalesSpkProduct;
@@ -92,7 +94,7 @@ class SalesOrderRepo extends ElequentRepository
         $orderDate = !empty($request->order_date) ? Utility::changeDateFormat($request->order_date) : date('Y-m-d');
         $dateSend = $request->date_send;
         $vendorId = !empty($request->vendor_id) ? $request->vendor_id : '0';
-        $quotationId = !empty($request->quotation_id) ? $request->quotation_id : '0';
+        $quotationId = !empty($request->quotation_id) ? (int) $request->quotation_id : 0;
         $subtotal = !empty($request->subtotal) ? Utility::remove_commas($request->subtotal) : 0;
         $discount = !empty($request->discount) ? Utility::remove_commas($request->discount) : 0;
         $totalDiscount = !empty($request->total_discount) ? Utility::remove_commas($request->total_discount) : 0;
@@ -108,10 +110,22 @@ class SalesOrderRepo extends ElequentRepository
         DB::beginTransaction();
         try {
             $isNewOrder = empty($id);
+            $existingOrder = null;
+
+            if (!$isNewOrder) {
+                $existingOrder = SalesOrder::with('orderproduct')->find($id);
+                if (empty($existingOrder)) {
+                    throw new \Exception('Sales order tidak ditemukan');
+                }
+
+                if (!empty($existingOrder->quotation_id)) {
+                    $this->restoreQuotationProductQtyLeft($existingOrder->quotation_id, $existingOrder->orderproduct);
+                }
+            }
+
             if ($isNewOrder) {
                 $res = $this->handleNewData($arrData,$orderType,$userId);
             } else {
-                //$orderIdOld = $this->findOne($id);
                 $res = $this->update($arrData, $id);
             }
             if ($res) {
@@ -131,6 +145,9 @@ class SalesOrderRepo extends ElequentRepository
                     $metas = $request->ordermeta;
                 }
                 $this->handleOrderProducts($products, $idOrder, $taxType);
+                if (!empty($quotationId)) {
+                    $this->syncQuotationProductQtyLeft($quotationId, $products);
+                }
                 $this->handleMetas($metas,$idOrder);
                 $this->handleFileUploads($request->file('files'), $idOrder, $userId);
                 DB::statement('SET FOREIGN_KEY_CHECKS=1');
@@ -304,6 +321,10 @@ class SalesOrderRepo extends ElequentRepository
         DB::beginTransaction();
         try
         {
+            $order = SalesOrder::with('orderproduct')->find($id);
+            if (!empty($order) && !empty($order->quotation_id)) {
+                $this->restoreQuotationProductQtyLeft($order->quotation_id, $order->orderproduct);
+            }
             $this->deleteAdditional($id);
             $this->deleteByWhere(array('id' => $id));
             DB::commit();
@@ -352,5 +373,147 @@ class SalesOrderRepo extends ElequentRepository
             }
         }
 
+    }
+
+    private function syncQuotationProductQtyLeft($quotationId, $orderProducts)
+    {
+        $requiredQtyByProduct = $this->sumQtyByProduct($orderProducts);
+        if (empty($requiredQtyByProduct)) {
+            $this->syncQuotationStatus($quotationId);
+            return;
+        }
+
+        foreach ($requiredQtyByProduct as $productId => $requiredQty) {
+            $rows = SalesQuotationProduct::where('quotation_id', $quotationId)
+                ->where('product_id', $productId)
+                ->where('qty_left', '>', 0)
+                ->orderBy('id')
+                ->get();
+
+            $availableQty = (float) $rows->sum('qty_left');
+            if ($availableQty < $requiredQty) {
+                throw new \Exception("Qty quotation tidak cukup untuk product_id {$productId}");
+            }
+
+            $remaining = $requiredQty;
+            foreach ($rows as $row) {
+                if ($remaining <= 0) {
+                    break;
+                }
+
+                $currentQtyLeft = (float) $row->qty_left;
+                if ($currentQtyLeft <= 0) {
+                    continue;
+                }
+
+                $used = min($remaining, $currentQtyLeft);
+                $row->qty_left = $currentQtyLeft - $used;
+                $row->save();
+                $remaining -= $used;
+            }
+        }
+
+        $this->syncQuotationStatus($quotationId);
+    }
+
+    private function restoreQuotationProductQtyLeft($quotationId, $orderProducts)
+    {
+        $restoreQtyByProduct = $this->sumQtyByProduct($orderProducts);
+        if (empty($restoreQtyByProduct)) {
+            $this->syncQuotationStatus($quotationId);
+            return;
+        }
+
+        foreach ($restoreQtyByProduct as $productId => $restoreQty) {
+            $rows = SalesQuotationProduct::where('quotation_id', $quotationId)
+                ->where('product_id', $productId)
+                ->orderBy('id')
+                ->get();
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            $remaining = $restoreQty;
+            foreach ($rows as $row) {
+                if ($remaining <= 0) {
+                    break;
+                }
+
+                $maxAdditional = (float) $row->qty - (float) $row->qty_left;
+                if ($maxAdditional <= 0) {
+                    continue;
+                }
+
+                $added = min($remaining, $maxAdditional);
+                $row->qty_left = (float) $row->qty_left + $added;
+                $row->save();
+                $remaining -= $added;
+            }
+        }
+
+        $this->syncQuotationStatus($quotationId);
+    }
+
+    private function sumQtyByProduct($products)
+    {
+        $result = [];
+        if (empty($products)) {
+            return $result;
+        }
+
+        foreach ($products as $item) {
+            $productId = (int) $this->readField($item, 'product_id', 0);
+            $qty = (float) Utility::remove_commas($this->readField($item, 'qty', 0));
+
+            if ($productId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            if (!isset($result[$productId])) {
+                $result[$productId] = 0;
+            }
+
+            $result[$productId] += $qty;
+        }
+
+        return $result;
+    }
+
+    private function readField($item, $field, $default = null)
+    {
+        if (is_array($item)) {
+            return $item[$field] ?? $default;
+        }
+
+        if (is_object($item)) {
+            return $item->{$field} ?? $default;
+        }
+
+        return $default;
+    }
+
+    private function syncQuotationStatus($quotationId)
+    {
+        $query = SalesQuotationProduct::where('quotation_id', $quotationId);
+        $hasRows = (clone $query)->exists();
+        if (!$hasRows) {
+            return;
+        }
+
+        $hasQtyLeft = (clone $query)->where('qty_left', '>', 0)->exists();
+        $hasConsumed = (clone $query)->whereColumn('qty_left', '<', 'qty')->exists();
+
+        $status = StatusEnum::OPEN;
+        if (!$hasQtyLeft) {
+            $status = StatusEnum::CLOSE;
+        } else if ($hasConsumed) {
+            $status = StatusEnum::PARSIAL;
+        }
+
+        SalesQuotation::where('id', $quotationId)->update([
+            'quotation_status' => $status,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
     }
 }

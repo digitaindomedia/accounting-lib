@@ -2,9 +2,11 @@
 
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
+use Icso\Accounting\Exports\SampleSalesPaymentExport;
 use Icso\Accounting\Exports\SalesPaymentExport;
 use Icso\Accounting\Exports\SalesPaymentReportDetailExport;
 use Icso\Accounting\Http\Requests\CreateSalesPaymentRequest;
+use Icso\Accounting\Imports\SalesPaymentImport;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentRepo;
@@ -291,6 +293,40 @@ class PaymentController extends Controller
 
     public function exportReportPdf(Request $request){
         return $this->exportReportAsFormat($request,'laporan-pembayaran-penjualan.pdf', 'pdf');
+    }
+
+    public function downloadSample(Request $request)
+    {
+        return Excel::download(new SampleSalesPaymentExport(), 'sample_pelunasan_penjualan.xlsx');
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+        ]);
+
+        $userId = $request->user_id;
+        $import = new SalesPaymentImport($userId);
+        Excel::import($import, $request->file('file'));
+
+        if ($errors = $import->getErrors()) {
+            return response()->json([
+                'status' => false,
+                'success' => $import->getSuccessCount(),
+                'messageError' => $errors,
+                'errors' => count($errors),
+                'imported' => $import->getTotalRows(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'success' => $import->getSuccessCount(),
+            'errors' => 0,
+            'message' => 'File berhasil import',
+            'imported' => $import->getTotalRows(),
+        ], 200);
     }
 
     private function exportReportAsFormat(Request $request, string $filename,string $type = 'excel')

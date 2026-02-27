@@ -426,6 +426,8 @@ Route::group([
         Route::get('get-all-list', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'getAllData']);
         Route::get('find-by-id', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'show']);
         Route::post('save-data', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'store']);
+        Route::get('download-sample', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'downloadSample']);
+        Route::post('import', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'import']);
         Route::delete('delete', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'destroy']);
         Route::delete('delete-all', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'deleteAll']);
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\PaymentController::class, 'export']);

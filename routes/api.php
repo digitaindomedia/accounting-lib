@@ -311,6 +311,8 @@ Route::group([
         Route::get('get-all-list', [PaymentController::class, 'getAllData']);
         Route::get('find-by-id', [PaymentController::class, 'show']);
         Route::post('save-data', [PaymentController::class, 'store']);
+        Route::get('download-sample', [PaymentController::class, 'downloadSample']);
+        Route::post('import', [PaymentController::class, 'import']);
         Route::delete('delete', [PaymentController::class, 'destroy']);
         Route::delete('delete-all', [PaymentController::class, 'deleteAll']);
         Route::get('export-excel', [PaymentController::class, 'export']);

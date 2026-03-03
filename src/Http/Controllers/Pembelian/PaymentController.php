@@ -2,9 +2,11 @@
 
 namespace Icso\Accounting\Http\Controllers\Pembelian;
 
+use Icso\Accounting\Exports\SamplePurchasePaymentExport;
 use Icso\Accounting\Exports\PurchasePaymentExport;
 use Icso\Accounting\Exports\PurchasePaymentReportDetailExport;
 use Icso\Accounting\Http\Requests\CreatePurchasePaymentRequest;
+use Icso\Accounting\Imports\PurchasePaymentImport;
 use Icso\Accounting\Repositories\Pembelian\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Pembelian\Payment\PaymentRepo;
 use Illuminate\Routing\Controller;
@@ -248,6 +250,40 @@ class PaymentController extends Controller
         $export = new PurchasePaymentExport($data);
         $pdf = PDF::loadView('accounting::purchase.purchase_payment_pdf', ['arrData' => $export->collection()]);
         return $pdf->download('pelunasan-pembelian.pdf');
+    }
+
+    public function downloadSample(Request $request)
+    {
+        return Excel::download(new SamplePurchasePaymentExport(), 'sample_pelunasan_pembelian.xlsx');
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+        ]);
+
+        $userId = $request->user_id;
+        $import = new PurchasePaymentImport($userId);
+        Excel::import($import, $request->file('file'));
+
+        if ($errors = $import->getErrors()) {
+            return response()->json([
+                'status' => false,
+                'success' => $import->getSuccessCount(),
+                'messageError' => $errors,
+                'errors' => count($errors),
+                'imported' => $import->getTotalRows()
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'success' => $import->getSuccessCount(),
+            'errors' => 0,
+            'message' => 'File berhasil import',
+            'imported' => $import->getTotalRows()
+        ], 200);
     }
 
     public function exportReportExcel(Request $request)

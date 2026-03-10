@@ -63,10 +63,16 @@ class LabaRugiController extends Controller
                 $prefix = str_repeat(' ', 4);
                 $data[] = [
                     'coa_name' => !empty($coa['coa_code']) ? $prefix . $coa['coa_name'] : $coa['coa_name'] ?? '',
-                    'saldo' => !empty($coa['saldo']) ? number_format($coa['saldo'], 2) : '0'
+                    'saldo' => $coa['saldo'] ?? 0
                 ];
             }
         }
+
+        $ebt = $labaRugiData['ebt'] ?? 0;
+        $data[] = [
+            'coa_name' => $ebt < 0 ? 'Rugi Bersih' : 'Laba Bersih',
+            'saldo' => abs($ebt)
+        ];
 
         return $data;
     }

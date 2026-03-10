@@ -7,6 +7,7 @@ use Icso\Accounting\Models\Akuntansi\Jurnal;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
 
 class CreateJurnalRequest extends FormRequest
 {
@@ -27,12 +28,25 @@ class CreateJurnalRequest extends FormRequest
      */
     public function rules()
     {
-        return Jurnal::$rules;
+        $id = $this->input('id') ?? $this->route('id');
+        $table = (new Jurnal())->getTable();
+        $rules = Jurnal::$rules;
+        $rules['jurnal_no'] = [
+            'required',
+            Rule::unique($table, 'jurnal_no')->ignore($id),
+        ];
+
+        return $rules;
     }
 
     public function messages()
     {
-        return ['jurnal_date.required' => 'Tanggal Jurnal Masih Kosong', 'jurnal_akun.required' => 'Akun Transaksi Masih Kosong'];
+        return [
+            'jurnal_date.required' => 'Tanggal Jurnal Masih Kosong',
+            'jurnal_akun.required' => 'Akun Transaksi Masih Kosong',
+            'jurnal_no.required' => 'Nomor Jurnal Masih Kosong',
+            'jurnal_no.unique' => 'Nomor Jurnal sudah digunakan',
+        ];
     }
 
     public function failedValidation(Validator $validator)

@@ -310,7 +310,7 @@ class DeliveryRepo extends ElequentRepository
     /**
      * Refactored Posting Jurnal with Balance Check
      */
-    public function postingJurnal($id)
+    public function postingJurnal($id, bool $skipInventoryLog = false, bool $preferExistingInventoryHpp = false)
     {
         // 1. Eager Load
         $find = $this->model->with(['deliveryproduct.product'])->find($id);
@@ -336,25 +336,36 @@ class DeliveryRepo extends ElequentRepository
             // Calculate HPP (Moving Average)
             // Note: This must handle the logic: Cost of goods LEAVING warehouse
             $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $find->delivery_date);
+            if ($preferExistingInventoryHpp) {
+                $invLog = Inventory::where([
+                    'transaction_code' => TransactionsCode::DELIVERY_ORDER,
+                    'transaction_sub_id' => $item->id
+                ])->first();
+                if ($invLog) {
+                    $hpp = (float) $invLog->nominal;
+                }
+            }
             $subtotalHpp = $hpp * $item->qty;
             $totalHppAll += $subtotalHpp;
 
-            // A. Log Inventory Transaction (Outgoing)
-            $reqInventory = new Request();
-            $reqInventory->coa_id = $coaSediaan;
-            $reqInventory->user_id = $find->created_by;
-            $reqInventory->inventory_date = $find->delivery_date;
-            $reqInventory->transaction_code = TransactionsCode::DELIVERY_ORDER;
-            $reqInventory->transaction_id = $find->id;
-            $reqInventory->transaction_sub_id = $item->id;
-            $reqInventory->qty_out = $item->qty;
-            $reqInventory->warehouse_id = $find->warehouse_id;
-            $reqInventory->product_id = $item->product_id;
-            $reqInventory->price = $hpp; // Store the HPP used
-            $reqInventory->note = $find->note;
-            $reqInventory->unit_id = $item->unit_id;
+            if (!$skipInventoryLog) {
+                // A. Log Inventory Transaction (Outgoing)
+                $reqInventory = new Request();
+                $reqInventory->coa_id = $coaSediaan;
+                $reqInventory->user_id = $find->created_by;
+                $reqInventory->inventory_date = $find->delivery_date;
+                $reqInventory->transaction_code = TransactionsCode::DELIVERY_ORDER;
+                $reqInventory->transaction_id = $find->id;
+                $reqInventory->transaction_sub_id = $item->id;
+                $reqInventory->qty_out = $item->qty;
+                $reqInventory->warehouse_id = $find->warehouse_id;
+                $reqInventory->product_id = $item->product_id;
+                $reqInventory->price = $hpp; // Store the HPP used
+                $reqInventory->note = $find->note;
+                $reqInventory->unit_id = $item->unit_id;
 
-            $inventoryRepo->store($reqInventory);
+                $inventoryRepo->store($reqInventory);
+            }
 
             // B. Prepare Credit Entry (Reduce Inventory Asset)
             // We credit the specific Product Inventory Account

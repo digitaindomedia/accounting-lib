@@ -216,6 +216,7 @@ class InvoiceRepo extends ElequentRepository
     private function processOrderProducts(Request $request, $idInvoice)
     {
         $orderId = $request->order_id ?? $request->input('order.id');
+        $requestTaxType = $request->tax_type ?? $request->input('order.tax_type', '');
 
         // If invoice is created from Sales Order (Service type), don't create new products
         // Just update the invoice_id on existing order products
@@ -246,7 +247,8 @@ class InvoiceRepo extends ElequentRepository
         foreach ($products as $item) {
             $item = (object)$item;
 
-            $taxType = $item->tax_type ?? '';
+            // Prioritize header/request tax_type for invoice consistency on edit.
+            $taxType = $requestTaxType ?: ($item->tax_type ?? '');
             $taxId = $item->tax_id ?? 0;
 
             // If item has original ID (from order), check if it already exists
@@ -264,14 +266,16 @@ class InvoiceRepo extends ElequentRepository
                     ->where('product_id', $item->product_id ?? 0)
                     ->first();
                 if ($originalProduct) {
-                    $taxType = $originalProduct->tax_type;
+                    if (empty($taxType)) {
+                        $taxType = $originalProduct->tax_type;
+                    }
                     $taxId = $originalProduct->tax_id;
                 }
             }
 
             // Fallback to request/order level tax_type if still empty
             if (empty($taxType)) {
-                $taxType = $request->input('order.tax_type', $request->tax_type ?? '');
+                $taxType = $requestTaxType;
             }
 
             // Create new orderproduct
@@ -403,7 +407,7 @@ class InvoiceRepo extends ElequentRepository
      * Refactored Main Posting Jurnal
      * Handles Regular Invoices (Service, Direct Sale, From Delivery)
      */
-    public function postingJurnal($idInvoice): void
+    public function postingJurnal($idInvoice, bool $skipInventoryLog = false, bool $preferExistingInventoryHpp = false): void
     {
         // 1. Eager Load
         $find = $this->model->with([
@@ -490,6 +494,15 @@ class InvoiceRepo extends ElequentRepository
                 // 2. COGS & Inventory (Only for Non-Service Items)
                 if ($find->invoice_type != ProductType::SERVICE && $item->product_id) {
                     $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $find->invoice_date);
+                    if ($preferExistingInventoryHpp) {
+                        $invLog = Inventory::where([
+                            'transaction_code' => TransactionsCode::INVOICE_PENJUALAN,
+                            'transaction_sub_id' => $item->id
+                        ])->first();
+                        if ($invLog) {
+                            $hpp = (float) $invLog->nominal;
+                        }
+                    }
                     $subtotalHpp = $hpp * $item->qty;
 
                     // Debit COGS
@@ -515,7 +528,9 @@ class InvoiceRepo extends ElequentRepository
                     ];
 
                     // Log Inventory
-                    $this->logInventory($find, $item, $hpp, $subtotalHpp, $inventoryRepo);
+                    if (!$skipInventoryLog) {
+                        $this->logInventory($find, $item, $hpp, $subtotalHpp, $inventoryRepo);
+                    }
                 }
             }
 

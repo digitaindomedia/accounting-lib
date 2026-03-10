@@ -4,9 +4,25 @@ namespace Icso\Accounting\Repositories\Persediaan\Inventory\Interface;
 
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\ProductConvertion;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProduct;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProduct;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Models\Persediaan\StockAwal;
+use Icso\Accounting\Enums\TypeEnum;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo as PurchaseInvoiceRepo;
+use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo as PurchaseReceiveRepo;
+use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo as SalesDeliveryRepo;
+use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo as SalesInvoiceRepo;
+use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\TransactionsCode;
+use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
@@ -189,6 +205,377 @@ class InventoryRepo extends ElequentRepository
             $total = $qtyIn - $qtyOut;
         }
         return $total;
+    }
+
+    /**
+     * Rebuild full inventory ledger from source transactions.
+     * Sequence:
+     * 1. Saldo awal
+     * 2. Penerimaan pembelian
+     * 3. Invoice pembelian tanpa penerimaan
+     * 4. Pengiriman penjualan
+     * 5. Invoice penjualan tanpa pengiriman
+     */
+    public function recalculateStock(?string $actorId = null): array
+    {
+        DB::beginTransaction();
+        try {
+            DB::statement('SET FOREIGN_KEY_CHECKS=0');
+            DB::table(Inventory::getTableName())->delete();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
+
+            $summary = [
+                'saldo_awal' => $this->rebuildFromStockAwal($actorId),
+                'penerimaan' => $this->rebuildFromPurchaseReceive($actorId),
+                'invoice_pembelian_tanpa_penerimaan' => $this->rebuildFromDirectPurchaseInvoice($actorId),
+                'pengiriman' => $this->rebuildFromSalesDelivery($actorId),
+                'invoice_penjualan_tanpa_pengiriman' => $this->rebuildFromDirectSalesInvoice($actorId),
+            ];
+            $journalSummary = $this->repostAccountingJournals();
+
+            DB::commit();
+            return [
+                'status' => true,
+                'summary' => $summary,
+                'journal_summary' => $journalSummary,
+                'total' => array_sum($summary),
+            ];
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            DB::statement('SET FOREIGN_KEY_CHECKS=1');
+            throw $e;
+        }
+    }
+
+    private function rebuildFromStockAwal(?string $actorId = null): int
+    {
+        $counter = 0;
+        StockAwal::orderBy('stock_date', 'asc')
+            ->orderBy('id', 'asc')
+            ->chunk(500, function ($rows) use (&$counter, $actorId) {
+                foreach ($rows as $row) {
+                    $req = new Request();
+                    $req->coa_id = $row->coa_id;
+                    $req->user_id = $this->resolveActorId($actorId, $row->created_by);
+                    $req->inventory_date = $row->stock_date;
+                    $req->transaction_code = TransactionsCode::SALDO_AWAL;
+                    $req->qty_in = $row->qty;
+                    $req->warehouse_id = $row->warehouse_id;
+                    $req->product_id = $row->product_id;
+                    $req->price = $row->nominal;
+                    $req->unit_id = $row->unit_id;
+                    $req->transaction_id = $row->id;
+                    $this->store($req);
+                    $counter++;
+                }
+            });
+        return $counter;
+    }
+
+    private function rebuildFromPurchaseReceive(?string $actorId = null): int
+    {
+        $counter = 0;
+        $receiveTable = (new PurchaseReceived())->getTable();
+        $receiveProductTable = (new PurchaseReceivedProduct())->getTable();
+        $productTable = Product::getTableName();
+
+        DB::table($receiveProductTable . ' as rp')
+            ->join($receiveTable . ' as r', 'r.id', '=', 'rp.receive_id')
+            ->leftJoin($productTable . ' as p', 'p.id', '=', 'rp.product_id')
+            ->select([
+                'rp.id as receive_product_id',
+                'rp.receive_id',
+                'rp.qty',
+                'rp.unit_id',
+                'rp.product_id',
+                'rp.hpp_price',
+                'p.coa_id as product_coa_id',
+                'r.receive_date',
+                'r.warehouse_id',
+                'r.note',
+                'r.created_by',
+            ])
+            ->orderBy('r.receive_date', 'asc')
+            ->orderBy('r.id', 'asc')
+            ->orderBy('rp.id', 'asc')
+            ->chunk(500, function ($rows) use (&$counter, $actorId) {
+                foreach ($rows as $row) {
+                    $req = new Request();
+                    $req->coa_id = $row->product_coa_id ?: 0;
+                    $req->user_id = $this->resolveActorId($actorId, $row->created_by);
+                    $req->inventory_date = $row->receive_date;
+                    $req->transaction_code = TransactionsCode::PENERIMAAN;
+                    $req->qty_in = (float) $row->qty;
+                    $req->warehouse_id = $row->warehouse_id;
+                    $req->product_id = $row->product_id;
+                    $req->price = (float) $row->hpp_price;
+                    $req->note = $row->note;
+                    $req->unit_id = $row->unit_id;
+                    $req->transaction_id = $row->receive_id;
+                    $req->transaction_sub_id = $row->receive_product_id;
+                    $this->store($req);
+                    $counter++;
+                }
+            });
+
+        return $counter;
+    }
+
+    private function rebuildFromDirectPurchaseInvoice(?string $actorId = null): int
+    {
+        $counter = 0;
+        $invoiceTable = (new PurchaseInvoicing())->getTable();
+        $orderProductTable = 'als_purchase_order_product';
+        $invoiceReceiveTable = 'als_purchase_invoice_receive';
+        $productTable = Product::getTableName();
+
+        DB::table($orderProductTable . ' as op')
+            ->join($invoiceTable . ' as i', 'i.id', '=', 'op.invoice_id')
+            ->leftJoin($invoiceReceiveTable . ' as ir', 'ir.invoice_id', '=', 'i.id')
+            ->leftJoin($productTable . ' as p', 'p.id', '=', 'op.product_id')
+            ->whereNull('ir.id')
+            ->where('op.product_id', '!=', 0)
+            ->where('op.qty', '>', 0)
+            ->orderBy('i.invoice_date', 'asc')
+            ->orderBy('i.id', 'asc')
+            ->orderBy('op.id', 'asc')
+            ->select([
+                'i.id as invoice_id',
+                'i.invoice_date',
+                'i.warehouse_id',
+                'i.note',
+                'i.created_by',
+                'op.id as order_product_id',
+                'op.product_id',
+                'op.unit_id',
+                'op.qty',
+                'op.price',
+                'op.tax_id',
+                'op.tax_type',
+                'op.tax_percentage',
+                'op.subtotal',
+                'p.coa_id as product_coa_id',
+            ])
+            ->chunk(500, function ($rows) use (&$counter, $actorId) {
+                foreach ($rows as $row) {
+                    $hpp = (float) $row->price;
+                    if (!empty($row->tax_id) && $row->tax_type == TypeEnum::TAX_TYPE_INCLUDE && (float) $row->qty != 0.0) {
+                        $pembagi = ((float) $row->tax_percentage + 100) / 100;
+                        if ($pembagi != 0.0) {
+                            $subtotalHpp = (float) $row->subtotal / $pembagi;
+                            $hpp = $subtotalHpp / (float) $row->qty;
+                        }
+                    }
+
+                    $req = new Request();
+                    $req->coa_id = $row->product_coa_id ?: 0;
+                    $req->user_id = $this->resolveActorId($actorId, $row->created_by);
+                    $req->inventory_date = $row->invoice_date;
+                    $req->transaction_code = TransactionsCode::INVOICE_PEMBELIAN;
+                    $req->qty_in = (float) $row->qty;
+                    $req->warehouse_id = $row->warehouse_id;
+                    $req->product_id = $row->product_id;
+                    $req->price = $hpp;
+                    $req->note = $row->note;
+                    $req->unit_id = $row->unit_id;
+                    $req->transaction_id = $row->invoice_id;
+                    $req->transaction_sub_id = $row->order_product_id;
+                    $this->store($req);
+                    $counter++;
+                }
+            });
+
+        return $counter;
+    }
+
+    private function rebuildFromSalesDelivery(?string $actorId = null): int
+    {
+        $counter = 0;
+        $deliveryTable = (new SalesDelivery())->getTable();
+        $deliveryProductTable = (new SalesDeliveryProduct())->getTable();
+        $productTable = Product::getTableName();
+
+        DB::table($deliveryProductTable . ' as dp')
+            ->join($deliveryTable . ' as d', 'd.id', '=', 'dp.delivery_id')
+            ->leftJoin($productTable . ' as p', 'p.id', '=', 'dp.product_id')
+            ->where('dp.product_id', '!=', 0)
+            ->where('dp.qty', '>', 0)
+            ->orderBy('d.delivery_date', 'asc')
+            ->orderBy('d.id', 'asc')
+            ->orderBy('dp.id', 'asc')
+            ->select([
+                'd.id as delivery_id',
+                'd.delivery_date',
+                'd.warehouse_id',
+                'd.note',
+                'd.created_by',
+                'dp.id as delivery_product_id',
+                'dp.product_id',
+                'dp.unit_id',
+                'dp.qty',
+                'p.coa_id as product_coa_id',
+            ])
+            ->chunk(500, function ($rows) use (&$counter, $actorId) {
+                foreach ($rows as $row) {
+                    $hpp = $this->movingAverageByDate($row->product_id, $row->unit_id, $row->delivery_date);
+
+                    $req = new Request();
+                    $req->coa_id = $row->product_coa_id ?: 0;
+                    $req->user_id = $this->resolveActorId($actorId, $row->created_by);
+                    $req->inventory_date = $row->delivery_date;
+                    $req->transaction_code = TransactionsCode::DELIVERY_ORDER;
+                    $req->qty_out = (float) $row->qty;
+                    $req->warehouse_id = $row->warehouse_id;
+                    $req->product_id = $row->product_id;
+                    $req->price = (float) $hpp;
+                    $req->note = $row->note;
+                    $req->unit_id = $row->unit_id;
+                    $req->transaction_id = $row->delivery_id;
+                    $req->transaction_sub_id = $row->delivery_product_id;
+                    $this->store($req);
+                    $counter++;
+                }
+            });
+
+        return $counter;
+    }
+
+    private function rebuildFromDirectSalesInvoice(?string $actorId = null): int
+    {
+        $counter = 0;
+        $invoiceTable = (new SalesInvoicing())->getTable();
+        $orderProductTable = (new SalesOrderProduct())->getTable();
+        $invoiceDeliveryTable = 'als_sales_invoice_delivery';
+        $productTable = Product::getTableName();
+
+        DB::table($orderProductTable . ' as op')
+            ->join($invoiceTable . ' as i', 'i.id', '=', 'op.invoice_id')
+            ->leftJoin($invoiceDeliveryTable . ' as idv', 'idv.invoice_id', '=', 'i.id')
+            ->leftJoin($productTable . ' as p', 'p.id', '=', 'op.product_id')
+            ->whereNull('idv.id')
+            ->where('i.invoice_type', '!=', ProductType::SERVICE)
+            ->where('op.product_id', '!=', 0)
+            ->where('op.qty', '>', 0)
+            ->orderBy('i.invoice_date', 'asc')
+            ->orderBy('i.id', 'asc')
+            ->orderBy('op.id', 'asc')
+            ->select([
+                'i.id as invoice_id',
+                'i.invoice_date',
+                'i.warehouse_id',
+                'i.note',
+                'i.created_by',
+                'op.id as order_product_id',
+                'op.product_id',
+                'op.unit_id',
+                'op.qty',
+                'p.coa_id as product_coa_id',
+            ])
+            ->chunk(500, function ($rows) use (&$counter, $actorId) {
+                foreach ($rows as $row) {
+                    $hpp = $this->movingAverageByDate($row->product_id, $row->unit_id, $row->invoice_date);
+
+                    $req = new Request();
+                    $req->coa_id = $row->product_coa_id ?: 0;
+                    $req->user_id = $this->resolveActorId($actorId, $row->created_by);
+                    $req->inventory_date = $row->invoice_date;
+                    $req->transaction_code = TransactionsCode::INVOICE_PENJUALAN;
+                    $req->qty_out = (float) $row->qty;
+                    $req->warehouse_id = $row->warehouse_id;
+                    $req->product_id = $row->product_id;
+                    $req->price = (float) $hpp;
+                    $req->note = $row->note;
+                    $req->unit_id = $row->unit_id;
+                    $req->transaction_id = $row->invoice_id;
+                    $req->transaction_sub_id = $row->order_product_id;
+                    $this->store($req);
+                    $counter++;
+                }
+            });
+
+        return $counter;
+    }
+
+    private function resolveActorId(?string $actorId, $fallbackUserId): string
+    {
+        if (!empty($actorId)) {
+            return (string) $actorId;
+        }
+        if (!empty($fallbackUserId)) {
+            return (string) $fallbackUserId;
+        }
+        return '0';
+    }
+
+    private function repostAccountingJournals(): array
+    {
+        $summary = [
+            'penerimaan' => 0,
+            'invoice_pembelian' => 0,
+            'invoice_pembelian_skipped_non_purchase' => 0,
+            'invoice_pembelian_skipped_invalid_detail' => 0,
+            'pengiriman' => 0,
+            'invoice_penjualan' => 0,
+            'invoice_penjualan_pos_skipped' => 0,
+        ];
+
+        $purchaseReceiveRepo = new PurchaseReceiveRepo(new PurchaseReceived());
+        PurchaseReceived::orderBy('receive_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $purchaseReceiveRepo) {
+            foreach ($rows as $row) {
+                JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PENERIMAAN, $row->id);
+                $purchaseReceiveRepo->postingJurnal($row->id);
+                $summary['penerimaan']++;
+            }
+        });
+
+        $purchaseInvoiceRepo = new PurchaseInvoiceRepo(new PurchaseInvoicing());
+        PurchaseInvoicing::orderBy('invoice_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $purchaseInvoiceRepo) {
+            foreach ($rows as $row) {
+                if ($row->input_type !== InputType::PURCHASE) {
+                    $summary['invoice_pembelian_skipped_non_purchase']++;
+                    continue;
+                }
+
+                $hasReceived = DB::table('als_purchase_invoice_receive')->where('invoice_id', $row->id)->exists();
+                $hasOrderProduct = DB::table('als_purchase_order_product')->where('invoice_id', $row->id)->exists();
+                $hasOrderFallback = !empty($row->order_id)
+                    ? DB::table('als_purchase_order_product')->where('order_id', $row->order_id)->exists()
+                    : false;
+
+                if (!$hasReceived && !$hasOrderProduct && !$hasOrderFallback) {
+                    $summary['invoice_pembelian_skipped_invalid_detail']++;
+                    continue;
+                }
+
+                JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PEMBELIAN, $row->id);
+                $purchaseInvoiceRepo->postingJurnal($row->id);
+                $summary['invoice_pembelian']++;
+            }
+        });
+
+        $salesDeliveryRepo = new SalesDeliveryRepo(new SalesDelivery());
+        SalesDelivery::orderBy('delivery_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $salesDeliveryRepo) {
+            foreach ($rows as $row) {
+                JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::DELIVERY_ORDER, $row->id);
+                $salesDeliveryRepo->postingJurnal($row->id, true, true);
+                $summary['pengiriman']++;
+            }
+        });
+
+        $salesInvoiceRepo = new SalesInvoiceRepo(new SalesInvoicing());
+        SalesInvoicing::orderBy('invoice_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $salesInvoiceRepo) {
+            foreach ($rows as $row) {
+                if ($row->input_type == InputType::POS) {
+                    $summary['invoice_penjualan_pos_skipped']++;
+                    continue;
+                }
+                JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PENJUALAN, $row->id);
+                $salesInvoiceRepo->postingJurnal($row->id, true, true);
+                $summary['invoice_penjualan']++;
+            }
+        });
+
+        return $summary;
     }
 
     public function movingAverageByDate($productId, $unitId, $date)

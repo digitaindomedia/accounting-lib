@@ -3,7 +3,7 @@
 @foreach ($rows as $row)
 
     <br><br>
-    <h3>Nama Produk: {{ $row['product']->product_name }}</h3>
+    <h3>Nama Produk: {{ $row['product']->item_name }} - {{ $row['product']->item_code }}</h3>
 
     <table border="1" style="width: 100%; border-collapse: collapse">
         <thead>
@@ -27,7 +27,7 @@
             <td></td><td></td>
             <td></td><td></td>
             <td><strong>{{ $row['saldo_awal_qty'] }}</strong></td>
-            <td><strong>{{ number_format($row['saldo_awal_nilai'], 0, ',', '.') }}</strong></td>
+            <td><strong>{{ number_format($row['saldo_awal_nilai'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</strong></td>
         </tr>
 
         @foreach ($row['details'] as $d)
@@ -35,12 +35,12 @@
                 <td>{{ $d->inventory_date }}</td>
                 <td>{{ $d->transaction_no }}</td>
                 <td>{{ $d->transaction_name }}</td>
-                <td>{{ $d->qty_in }}</td>
-                <td>{{ number_format($d->value_in,0,',','.') }}</td>
-                <td>{{ $d->qty_out }}</td>
-                <td>{{ number_format($d->value_out,0,',','.') }}</td>
-                <td>{{ $d->saldo_qty }}</td>
-                <td>{{ number_format($d->saldo_nilai,0,',','.') }}</td>
+                <td>{{ number_format($d->qty_in,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($d->nominal,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($d->qty_out,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($d->nominal,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($d->saldo_qty,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($d->saldo_nilai,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             </tr>
         @endforeach
         </tbody>

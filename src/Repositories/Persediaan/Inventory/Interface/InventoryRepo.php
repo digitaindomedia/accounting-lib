@@ -350,6 +350,8 @@ class InventoryRepo extends ElequentRepository
                 'op.unit_id',
                 'op.qty',
                 'op.price',
+                'op.discount',
+                'op.discount_type',
                 'op.tax_id',
                 'op.tax_type',
                 'op.tax_percentage',
@@ -359,12 +361,26 @@ class InventoryRepo extends ElequentRepository
             ->chunk(500, function ($rows) use (&$counter, $actorId) {
                 foreach ($rows as $row) {
                     $hpp = (float) $row->price;
-                    if (!empty($row->tax_id) && $row->tax_type == TypeEnum::TAX_TYPE_INCLUDE && (float) $row->qty != 0.0) {
-                        $pembagi = ((float) $row->tax_percentage + 100) / 100;
-                        if ($pembagi != 0.0) {
-                            $subtotalHpp = (float) $row->subtotal / $pembagi;
-                            $hpp = $subtotalHpp / (float) $row->qty;
+                    $qty = (float) $row->qty;
+                    if ($qty != 0.0) {
+                        $subtotalHpp = $qty * (float) $row->price;
+
+                        if ((float) $row->discount > 0) {
+                            if ($row->discount_type == TypeEnum::DISCOUNT_TYPE_PERCENT) {
+                                $subtotalHpp -= ((float) $row->discount / 100) * $subtotalHpp;
+                            } else {
+                                $subtotalHpp -= (float) $row->discount;
+                            }
                         }
+
+                        if (!empty($row->tax_id) && $row->tax_type == TypeEnum::TAX_TYPE_INCLUDE) {
+                            $pembagi = ((float) $row->tax_percentage + 100) / 100;
+                            if ($pembagi != 0.0) {
+                                $subtotalHpp = $subtotalHpp / $pembagi;
+                            }
+                        }
+
+                        $hpp = $subtotalHpp / $qty;
                     }
 
                     $req = new Request();

@@ -507,6 +507,8 @@ Route::group([
         Route::get('get-all-list', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'getAllData']);
         Route::get('find-by-id', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'show']);
         Route::post('save-data', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'store']);
+        Route::get('download-sample-saldo-awal', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'downloadSampleSaldoAwal']);
+        Route::post('import-saldo-awal', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'importSaldoAwal']);
         Route::delete('delete', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'delete']);
         Route::delete('delete-all', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'deleteAll']);
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseOrderController::class, 'export']);

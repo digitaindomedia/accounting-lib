@@ -5,7 +5,9 @@ namespace Icso\Accounting\Http\Controllers\AsetTetap\Pembelian;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\PurchaseOrderAsetTetapExport;
 use Icso\Accounting\Exports\PurchaseOrderAsetTetapReportExport;
+use Icso\Accounting\Exports\SampleSaldoAwalAsetTetapExport;
 use Icso\Accounting\Http\Requests\CreatePurchaseOrderAsetTetapRequest;
+use Icso\Accounting\Imports\SaldoAwalAsetTetapImport;
 use Icso\Accounting\Repositories\AsetTetap\Pembelian\OrderRepo;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\TransactionsCode;
@@ -222,5 +224,39 @@ class PurchaseOrderController extends Controller
 
     public function exportReportPdf(Request $request){
         return $this->exportReportAsFormat($request,'laporan-order-pembelian-aset-tetap.pdf', 'pdf');
+    }
+
+    public function downloadSampleSaldoAwal(Request $request)
+    {
+        return Excel::download(new SampleSaldoAwalAsetTetapExport(), 'sample_saldo_awal_aset_tetap.xlsx');
+    }
+
+    public function importSaldoAwal(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+            'user_id' => 'required',
+        ]);
+
+        $import = new SaldoAwalAsetTetapImport($request->user_id);
+        Excel::import($import, $request->file('file'));
+
+        if ($errors = $import->getErrors()) {
+            return response()->json([
+                'status' => false,
+                'success' => $import->getSuccessCount(),
+                'messageError' => $errors,
+                'errors' => count($errors),
+                'imported' => $import->getTotalRows()
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'success' => $import->getSuccessCount(),
+            'messageError' => [],
+            'errors' => 0,
+            'imported' => $import->getTotalRows()
+        ]);
     }
 }

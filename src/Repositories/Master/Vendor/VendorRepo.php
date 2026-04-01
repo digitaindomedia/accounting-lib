@@ -113,7 +113,7 @@ class VendorRepo extends ElequentRepository
             foreach ($arrVendorMeta as $value) {
                 VendorMeta::create([
                     'vendor_id' => $vendorId,
-                    'meta_key' => 'shipping_address',
+                    'meta_key' => $value['meta_key'],
                     'meta_value' => $value['meta_value'],
                 ]);
             }

@@ -18,10 +18,10 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
     public function findOne($id, $select_field = [])
     {
         if (is_array($select_field) && count($select_field)) {
-            return SalesQuotation::select($select_field)->where('id', $id)->with(['quotationproduct.product', 'quotationproduct.unit','quotationproduct'])->first();
+            return SalesQuotation::select($select_field)->where('id', $id)->with(['quotationproduct.product', 'quotationproduct.unit','quotationproduct.tax', 'quotationproduct','quotationproduct'])->first();
         }
 
-        return SalesQuotation::where('id', $id)->first();
+        return SalesQuotation::where('id', $id)->with(['quotationproduct.product', 'quotationproduct.unit', 'quotationproduct.tax', 'quotationproduct'])->first();
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [], $fromDate = null, $untilDate = null)
@@ -44,7 +44,7 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
             })
             ->when(empty($fromDate) && !empty($untilDate), function ($query) use ($untilDate) {
                 $query->whereDate('quotation_date', '<=', $untilDate);
-            })->with(['quotationproduct.product', 'quotationproduct.unit','quotationproduct'])
+            })->with(['quotationproduct.product', 'quotationproduct.unit','quotationproduct.tax','quotationproduct'])
             ->orderBy('quotation_date', 'desc');
 
         return $dataSet->offset($page)->limit($perpage)->get();
@@ -112,7 +112,7 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
     {
         $quotation = $this->findOne($id);
         if ($quotation) {
-            $quotation->load('quotationproduct.product', 'quotationproduct.unit');
+            $quotation->load('quotationproduct.product', 'quotationproduct.unit', 'quotationproduct.tax');
         }
         return $quotation;
     }
@@ -130,6 +130,11 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
                 'note' => $data['note'] ?? '',
                 'quotation_status' => $data['quotation_status'] ?? StatusEnum::OPEN,
                 'reason' => $data['reason'] ?? '',
+                'tax_type' => $data['tax_type'] ?? null,
+                'subtotal' => $data['subtotal'] ?? 0,
+                'dpp' => $data['dpp'] ?? 0,
+                'total_tax' => $data['total_tax'] ?? 0,
+                'grandtotal' => $data['grandtotal'] ?? 0,
                 'updated_by' => $data['updated_by'] ?? $userId,
             ];
 
@@ -149,12 +154,22 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
                 SalesQuotationProduct::where('quotation_id', $id)->delete();
 
                 foreach ($data['quotationproduct'] as $product) {
+                    $taxGroup = null;
+                    if (($product['tax_type'] ?? null) === 'multiple' && !empty($product['tax']['taxgroup'])) {
+                        $taxGroup = json_encode($product['tax']['taxgroup']);
+                    }
                     SalesQuotationProduct::create([
                         'quotation_id' => $id,
                         'product_id' => $product['product_id'],
                         'qty' => $product['qty'],
                         'qty_left' => $product['qty'], // Initialize qty_left with qty
+                        'price' => $product['price'] ?? 0,
+                        'tax_id' => !empty($product['tax_id']) && $product['tax_id'] !== '0' ? $product['tax_id'] : null,
+                        'tax_group' => $taxGroup,
+                        'tax_percentage' => $product['tax_percentage'] ?? 0,
+                        'tax_type' => $product['tax_type'] ?? null,
                         'unit_id' => $product['unit_id'] ?? null,
+                        'subtotal' => $product['subtotal'] ?? 0,
                         'note' => $product['note'] ?? null,
                         'multi_unit' => $product['multi_unit'] ?? 0,
                     ]);
@@ -207,7 +222,7 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
         DB::beginTransaction();
         try {
             SalesQuotationProduct::whereIn('quotation_id', $ids)->delete();
-            SalesQuotationMeta::where('quotation_id', $id)->delete();
+            SalesQuotationMeta::where('quotation_id', $ids)->delete();
             $result = $this->deleteAll($ids);
             DB::commit();
             return $result;

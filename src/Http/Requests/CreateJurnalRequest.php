@@ -31,10 +31,15 @@ class CreateJurnalRequest extends FormRequest
         $id = $this->input('id') ?? $this->route('id');
         $table = (new Jurnal())->getTable();
         $rules = Jurnal::$rules;
-        $rules['jurnal_no'] = [
-            'required',
-            Rule::unique($table, 'jurnal_no')->ignore($id),
-        ];
+        $rules['jurnal_no'] = filled($id)
+            ? [
+                'required',
+                Rule::unique($table, 'jurnal_no')->ignore($id),
+            ]
+            : [
+                'nullable',
+                Rule::unique($table, 'jurnal_no'),
+            ];
 
         return $rules;
     }

@@ -149,6 +149,7 @@ class Setting extends Controller
             SettingRepo::setOption(SettingEnum::COA_POTONGAN_PENJUALAN, $request->akunPotonganPenjualan['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_PENJUALAN, $request->akunPenjualan['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_RETUR_PENJUALAN, $request->akunReturPenjualan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_PRODUKSI_WIP, $request->akunProduksiWip['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PEMBELIAN_ASET_TETAP, $request->akunUangMukaPembelianAsetTetap['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_BEBAN_DIBAYAR_DIMUKA, $request->akunBebanDiBayarDiMuka['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_UTANG_LAIN_LAIN, $request->akunUtangLainLain['id'] ?? null, $userId);
@@ -190,6 +191,7 @@ class Setting extends Controller
         $akunPotonganPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_POTONGAN_PENJUALAN);
         $akunPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_PENJUALAN);
         $akunReturPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_RETUR_PENJUALAN);
+        $akunProduksiWip = SettingRepo::getOptionValue(SettingEnum::COA_PRODUKSI_WIP);
         $akunUangMukaPembelianAsetTetap = SettingRepo::getOptionValue(SettingEnum::COA_UANG_MUKA_PEMBELIAN_ASET_TETAP);
         $akunBebanDiBayarDiMuka = SettingRepo::getOptionValue(SettingEnum::COA_BEBAN_DIBAYAR_DIMUKA);
         $akunUtangLainLain = SettingRepo::getOptionValue(SettingEnum::COA_UTANG_LAIN_LAIN);
@@ -212,6 +214,7 @@ class Setting extends Controller
             'akunPotonganPenjualan' => Coa::where(array('id' => $akunPotonganPenjualan))->first(),
             'akunPenjualan' => Coa::where(array('id' => $akunPenjualan))->first(),
             'akunReturPenjualan' => Coa::where(array('id' => $akunReturPenjualan))->first(),
+            'akunProduksiWip' => Coa::where(array('id' => $akunProduksiWip))->first(),
             'akunUangMukaPembelianAsetTetap' => Coa::where(array('id' => $akunUangMukaPembelianAsetTetap))->first(),
             'akunBebanDiBayarDiMuka' => Coa::where(array('id' => $akunBebanDiBayarDiMuka))->first(),
             'akunUtangLainLain' => Coa::where(array('id' => $akunUtangLainLain))->first(),

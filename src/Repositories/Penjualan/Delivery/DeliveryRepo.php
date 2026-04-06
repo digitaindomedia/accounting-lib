@@ -22,6 +22,7 @@ use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Services\IdentityStockService;
+use Icso\Accounting\Services\AutoConsumeProductionService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\TransactionsCode;
@@ -238,6 +239,8 @@ class DeliveryRepo extends ElequentRepository
                 }
             }
 
+            $this->handleAutoConsumeForDelivery($deliveryId);
+
             // 3. Posting Jurnal (CRITICAL)
             // This calculates HPP, logs inventory, and creates Journals.
             // Throws Exception if unbalanced.
@@ -300,6 +303,7 @@ class DeliveryRepo extends ElequentRepository
             $identityService->restore($itemsToRestore);
         }
 
+        (new AutoConsumeProductionService())->deleteBySource('sales_delivery_auto', (int) $id);
         InventoryRepo::deleteInventory(TransactionsCode::DELIVERY_ORDER, $id);
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::DELIVERY_ORDER, $id);
         SalesDeliveryProductItem::whereIn('delivery_product_id', $deliveryProducts->pluck('id')->toArray())->delete();
@@ -393,6 +397,41 @@ class DeliveryRepo extends ElequentRepository
 
         // 5. Validate & Save Journal
         $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    private function handleAutoConsumeForDelivery(int $deliveryId): void
+    {
+        $delivery = $this->model->with(['deliveryproduct'])->find($deliveryId);
+        if (empty($delivery) || $delivery->deliveryproduct->isEmpty()) {
+            return;
+        }
+
+        $items = [];
+        foreach ($delivery->deliveryproduct as $item) {
+            if (empty($item->product_id) || empty($item->unit_id) || (float) $item->qty <= 0) {
+                continue;
+            }
+
+            $items[] = [
+                'product_id' => (int) $item->product_id,
+                'unit_id' => (int) $item->unit_id,
+                'qty' => (float) $item->qty,
+            ];
+        }
+
+        if (empty($items)) {
+            return;
+        }
+
+        (new AutoConsumeProductionService())->createFromSalesItems($items, [
+            'trigger' => 'delivery',
+            'source_type' => 'sales_delivery_auto',
+            'source_id' => (int) $delivery->id,
+            'transaction_date' => $delivery->delivery_date,
+            'warehouse_id' => (int) $delivery->warehouse_id,
+            'user_id' => (int) $delivery->created_by,
+            'note' => $delivery->note ?: 'Auto consume delivery ' . $delivery->delivery_no,
+        ]);
     }
 
     private function validateAndSaveJournal(array $entries, $deliveryModel)

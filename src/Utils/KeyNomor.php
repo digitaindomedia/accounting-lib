@@ -28,6 +28,8 @@ class KeyNomor
     public const NO_SPK = 'NO_SPK';
     public const NO_ADJUSTMENT_STOCK = 'NO_PENYESUAIAN';
     public const NO_PEMAKAIAN_STOCK = 'NO_PEMAKAIAN';
+    public const NO_BOM = 'NO_BOM';
+    public const NO_PRODUCTION_ORDER = 'NO_PRODUCTION_ORDER';
     public const NO_MUTATION = 'NO_MUTATION';
     public const NO_MUTATION_OUT = 'NO_MUTASI_KELUAR';
     public const NO_MUTATION_IN = 'NO_MUTASI_MASUK';

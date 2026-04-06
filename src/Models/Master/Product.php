@@ -2,6 +2,11 @@
 namespace Icso\Accounting\Models\Master;
 
 
+use Icso\Accounting\Models\Manufacturing\Bom;
+use Icso\Accounting\Models\Manufacturing\BomItem;
+use Icso\Accounting\Models\Manufacturing\ProductionOrder;
+use Icso\Accounting\Models\Manufacturing\ProductionOrderMaterial;
+use Icso\Accounting\Models\Manufacturing\ProductionOrderResult;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Models\Persediaan\StockAwal;
 use Icso\Accounting\Models\Persediaan\StockUsageProduct;
@@ -42,7 +47,17 @@ class Product extends Model
     public function canDelete()
     {
         // Check if there are associated comments
-        if ($this->productconvertion()->count() > 0 || $this->productstockusage()->count() > 0 || $this->stockawal()->count() > 0 || $this->inventory()->count() > 0) {
+        if (
+            $this->productconvertion()->count() > 0 ||
+            $this->productstockusage()->count() > 0 ||
+            $this->stockawal()->count() > 0 ||
+            $this->inventory()->count() > 0 ||
+            $this->manufacturedBoms()->count() > 0 ||
+            $this->bomItems()->count() > 0 ||
+            $this->productionOrders()->count() > 0 ||
+            $this->productionMaterials()->count() > 0 ||
+            $this->productionResults()->count() > 0
+        ) {
             return false; // Deletion not allowed
         }
 
@@ -99,6 +114,31 @@ class Product extends Model
     public function productmeta()
     {
         return $this->hasMany(ProductMeta::class, 'product_id');
+    }
+
+    public function manufacturedBoms(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Bom::class, 'product_id');
+    }
+
+    public function bomItems(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(BomItem::class, 'product_id');
+    }
+
+    public function productionOrders(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductionOrder::class, 'product_id');
+    }
+
+    public function productionMaterials(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductionOrderMaterial::class, 'product_id');
+    }
+
+    public function productionResults(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductionOrderResult::class, 'product_id');
     }
 
     public function getImagesAttribute()

@@ -29,6 +29,7 @@ use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\AutoConsumeProductionService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
@@ -133,6 +134,8 @@ class InvoiceRepo extends ElequentRepository
             $this->processOrderProducts($request, $invoiceId);
             $this->processDp($request, $invoiceId);
             $this->processDelivery($request, $invoiceId);
+
+            $this->handleAutoConsumeForDirectInvoice($invoiceId);
 
             // 3. Handle POS specific logic or Regular Posting
             if ($request->input_type == InputType::POS) {
@@ -396,6 +399,7 @@ class InvoiceRepo extends ElequentRepository
         }
 
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PENJUALAN, $id);
+        (new AutoConsumeProductionService())->deleteBySource('sales_invoice_auto', (int) $id);
         SalesInvoicingDp::where('invoice_id', $id)->delete();
         SalesInvoicingDelivery::where('invoice_id', $id)->delete();
         SalesOrderProduct::where('invoice_id', $id)->delete();
@@ -827,6 +831,44 @@ class InvoiceRepo extends ElequentRepository
         $reqInventory->note = $find->note;
         $reqInventory->unit_id = $item->unit_id;
         $inventoryRepo->store($reqInventory);
+    }
+
+    private function handleAutoConsumeForDirectInvoice(int $invoiceId): void
+    {
+        $invoice = $this->model->with(['orderproduct.product', 'invoicedelivery'])->find($invoiceId);
+        if (empty($invoice) || $invoice->orderproduct->isEmpty()) {
+            return;
+        }
+
+        if ($invoice->invoicedelivery->isNotEmpty()) {
+            return;
+        }
+
+        $items = [];
+        foreach ($invoice->orderproduct as $item) {
+            if (empty($item->product_id) || empty($item->unit_id) || (float) $item->qty <= 0) {
+                continue;
+            }
+            $items[] = [
+                'product_id' => (int) $item->product_id,
+                'unit_id' => (int) $item->unit_id,
+                'qty' => (float) $item->qty,
+            ];
+        }
+
+        if (empty($items)) {
+            return;
+        }
+
+        (new AutoConsumeProductionService())->createFromSalesItems($items, [
+            'trigger' => 'invoice',
+            'source_type' => 'sales_invoice_auto',
+            'source_id' => (int) $invoice->id,
+            'transaction_date' => $invoice->invoice_date,
+            'warehouse_id' => (int) $invoice->warehouse_id,
+            'user_id' => (int) $invoice->created_by,
+            'note' => $invoice->note ?: 'Auto consume invoice ' . $invoice->invoice_no,
+        ]);
     }
 
     private function validateAndSaveJournal(array $entries, $invoiceModel)

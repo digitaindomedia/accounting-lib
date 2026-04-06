@@ -15,6 +15,8 @@ use Icso\Accounting\Http\Controllers\Master\TaxController;
 use Icso\Accounting\Http\Controllers\Master\UnitController;
 use Icso\Accounting\Http\Controllers\Master\VendorController;
 use Icso\Accounting\Http\Controllers\Master\WarehouseController;
+use Icso\Accounting\Http\Controllers\Manufacturing\BomController;
+use Icso\Accounting\Http\Controllers\Manufacturing\ProductionOrderController;
 use Icso\Accounting\Http\Controllers\Pembelian\BastController;
 use Icso\Accounting\Http\Controllers\Pembelian\DpController;
 use Icso\Accounting\Http\Controllers\Pembelian\InvoiceController;
@@ -189,6 +191,25 @@ Route::group([
         Route::get('export-saldo-awal-pdf', [InventoryController::class, 'exportStockAwalPdf']);
         Route::get('export-saldo-awal-csv', [InventoryController::class, 'exportStockAwalCsv']);
         Route::get('identity', [\Icso\Accounting\Http\Controllers\Persediaan\IdentityStockController::class, 'search']);
+    });
+
+    Route::prefix('manufacturing')->group(function () {
+        Route::prefix('bom')->group(function () {
+            Route::get('get-all', [BomController::class, 'getAllData']);
+            Route::post('save-data', [BomController::class, 'store']);
+            Route::get('find-by-id', [BomController::class, 'show']);
+            Route::get('preview', [BomController::class, 'preview']);
+            Route::delete('delete-by-id', [BomController::class, 'destroy']);
+            Route::delete('delete-all', [BomController::class, 'deleteAll']);
+        });
+
+        Route::prefix('production-order')->group(function () {
+            Route::get('get-all', [ProductionOrderController::class, 'getAllData']);
+            Route::post('save-data', [ProductionOrderController::class, 'store']);
+            Route::get('find-by-id', [ProductionOrderController::class, 'show']);
+            Route::delete('delete-by-id', [ProductionOrderController::class, 'destroy']);
+            Route::delete('delete-all', [ProductionOrderController::class, 'deleteAll']);
+        });
     });
 
     Route::prefix('purchase-invoice')->group(function () {

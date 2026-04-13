@@ -4,6 +4,7 @@ namespace Icso\Accounting\Exports;
 
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\TransactionsCode;
@@ -12,13 +13,15 @@ use Maatwebsite\Excel\Concerns\FromView;
 
 class KartuStokExport implements FromView
 {
+    protected $search;
     protected $productId;
     protected $warehouseId;
     protected $fromDate;
     protected $untilDate;
 
-    public function __construct($productId, $warehouseId, $fromDate, $untilDate)
+    public function __construct($search, $productId, $warehouseId, $fromDate, $untilDate)
     {
+        $this->search = $search;
         $this->productId  = $productId;
         $this->warehouseId = $warehouseId;
         $this->fromDate    = $fromDate;
@@ -27,13 +30,17 @@ class KartuStokExport implements FromView
 
     public function view(): View
     {
+        $productRepo = new ProductRepo(new Product());
+
         // Jika productId diisi → hanya 1 produk
         if ($this->productId) {
             $products = Product::where('id', $this->productId)->get();
         }
         else {
             // Jika kosong → semua item
-            $products = Product::where('product_type', ProductType::ITEM)->get();
+            $products = $productRepo->getAllDataProduct($this->search, [
+                'product_type' => ProductType::ITEM
+            ])->get();
         }
 
         $result = [];

@@ -376,6 +376,7 @@ class InventoryController extends Controller
     {
         return Excel::download(
             new KartuStokExport(
+                $request->q,
                 $request->product_id,      // boleh kosong
                 $request->warehouse_id,
                 $request->from_date ?? date('Y-m-d'),

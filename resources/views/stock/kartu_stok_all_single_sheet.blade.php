@@ -36,9 +36,9 @@
                 <td>{{ $d->transaction_no }}</td>
                 <td>{{ $d->transaction_name }}</td>
                 <td>{{ number_format($d->qty_in,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($d->nominal,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($d->total_in,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 <td>{{ number_format($d->qty_out,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                <td>{{ number_format($d->nominal,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                <td>{{ number_format($d->total_out,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 <td>{{ number_format($d->saldo_qty,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 <td>{{ number_format($d->saldo_nilai,\Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
             </tr>

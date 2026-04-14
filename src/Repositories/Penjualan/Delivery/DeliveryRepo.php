@@ -66,7 +66,7 @@ class DeliveryRepo extends ElequentRepository
                     $query->where('order_no', 'like', '%' .$search. '%');
                 });
         })->orderBy('delivery_date','desc')
-            ->with(['vendor','order','warehouse','deliveryproduct.product','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.tax'])
+            ->with(['vendor','order','order.ordermeta','warehouse','deliveryproduct.product','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.tax'])
             ->offset($page)->limit($perpage)->get();
     }
 

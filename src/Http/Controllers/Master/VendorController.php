@@ -102,9 +102,14 @@ class VendorController extends Controller
             if($data)
             {
                 if($data->canDelete()){
-                    $data->delete();
-                    $this->data['status'] = true;
-                    $this->data['message'] = 'Data berhasil dihapus ';
+                    $deleted = $this->vendorRepo->destroy($id, $request->user_id);
+                    if ($deleted) {
+                        $this->data['status'] = true;
+                        $this->data['message'] = 'Data berhasil dihapus ';
+                    } else {
+                        $this->data['status'] = false;
+                        $this->data['message'] = 'Data gagal dihapus';
+                    }
                 } else {
                     $this->data['status'] = false;
                     $this->data['message'] = 'Data tidak bisa dihapus';

@@ -8,6 +8,7 @@ use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePayment;
 use Icso\Accounting\Repositories\Pembelian\Payment\PaymentRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ class PurchasePaymentImport implements ToCollection
     public function __construct($userId)
     {
         $this->userId = $userId;
-        $this->paymentRepo = new PaymentRepo(new PurchasePayment());
+        $this->paymentRepo = new PaymentRepo(new PurchasePayment(), app(ActivityLogService::class));
     }
 
     /**

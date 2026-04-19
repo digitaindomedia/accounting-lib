@@ -13,9 +13,11 @@ use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPaymentMeta;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -26,11 +28,13 @@ use Illuminate\Support\Facades\Log;
 class DpRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseDownPayment $model)
+    public function __construct(PurchaseDownPayment $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     // ... [Keep getAllDataBy, getAllTotalDataBy, getAllDataBetweenBy, getAllTotalDataBetweenBy as they are] ...
@@ -106,6 +110,10 @@ class DpRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['order', 'coa', 'order.vendor', 'tax', 'tax.taxgroup', 'tax.taxgroup.tax'])?->toArray();
+        }
 
         // Prepare Data
         $data = $this->gatherInputData($request);
@@ -114,15 +122,17 @@ class DpRepo extends ElequentRepository
         try {
             // 1. Save or Update Down Payment Record
             if (empty($id)) {
-                $data['created_at'] = date('Y-m-d H:i:s');
+                $data['created_at'] = now();
                 $data['created_by'] = $userId;
                 $data['dp_type'] = $request->dp_type;
                 $data['downpayment_status'] = StatusEnum::OPEN;
                 $res = $this->create($data);
                 $resId = $res->id;
+                $action = 'Tambah data uang muka pembelian dengan nomor ' . ($res->ref_no ?? $data['ref_no']);
             } else {
                 $this->update($data, $id);
                 $resId = $id;
+                $action = 'Edit data uang muka pembelian dengan nomor ' . $data['ref_no'];
                 // Cleanup old data before reposting
                 $this->deleteAdditional($resId);
             }
@@ -135,11 +145,24 @@ class DpRepo extends ElequentRepository
             $this->handleFileUploads($request->file('files'), $resId, $userId);
 
             DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => $action,
+                'model_type' => PurchaseDownPayment::class,
+                'model_id' => $resId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($resId, [], ['order', 'coa', 'order.vendor', 'tax', 'tax.taxgroup', 'tax.taxgroup.tax'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("DP Store Failed: " . $e->getMessage());
+            Log::error("[DpRepo][store] " . $e->getMessage());
             // It is often better to rethrow or return false depending on controller expectation.
             // Returning false implies a generic failure.
             return false;
@@ -351,15 +374,41 @@ class DpRepo extends ElequentRepository
 
     public function deleteData($id)
     {
+        return $this->destroy($id, (int) optional(request())->user_id);
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $dp = $this->findOne($id, [], ['order', 'coa', 'order.vendor', 'tax', 'tax.taxgroup', 'tax.taxgroup.tax']);
+        if (!$dp) {
+            return false;
+        }
+
+        $oldData = $dp->toArray();
+
         DB::beginTransaction();
         try {
             $this->deleteAdditional($id);
-            $this->delete($id);
+            parent::delete($id);
             DB::commit();
+
+            $refNo = $oldData['ref_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data uang muka pembelian dengan nomor ' . $refNo,
+                'model_type' => PurchaseDownPayment::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return true;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error("Delete DP Failed: " . $e->getMessage());
+            Log::error("[DpRepo][destroy] " . $e->getMessage());
             return false;
         }
     }
@@ -371,7 +420,7 @@ class DpRepo extends ElequentRepository
 
     public static function changeStatusUangMuka($idUangMuka, $statusUangMuka=StatusEnum::SELESAI)
     {
-        $instance = new self(new PurchaseDownPayment());
+        $instance = new self(new PurchaseDownPayment(), app(ActivityLogService::class));
         $instance->update(['downpayment_status' => $statusUangMuka], $idUangMuka);
     }
 }

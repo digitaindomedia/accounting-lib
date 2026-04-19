@@ -126,23 +126,19 @@ class DeliveryController extends Controller
     public function destroy(Request $request)
     {
         $id = $request->id;
-        DB::beginTransaction();
-        try
-        {
-            $find = $this->deliveryRepo->findOne($id);
-            $orderId = $find->order_id ?? null;
-
-            $this->deliveryRepo->deleteAdditional($id);
-            $this->deliveryRepo->delete($id);
-
-            $this->deliveryRepo->resetSalesOrderStatus($orderId);
-            DB::commit();
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = array();
+        try {
+            $deleted = $this->deliveryRepo->destroy($id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = array();
+            }
         }
         catch (\Exception $e) {
-            DB::rollback();
             Log::error($e->getMessage());
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
@@ -158,19 +154,20 @@ class DeliveryController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                DB::beginTransaction();
-                try
-                {
-                    $find = $this->deliveryRepo->findOne($id);
-                    $orderId = $find->order_id ?? null;
-                    $this->deliveryRepo->deleteAdditional($id);
-                    $this->deliveryRepo->delete($id);
-                    $this->deliveryRepo->resetSalesOrderStatus($orderId);
-                    DB::commit();
-                    $successDelete = $successDelete + 1;
+                $deliveryId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$deliveryId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+                try {
+                    $deleted = $this->deliveryRepo->destroy((int) $deliveryId, (int) $request->user_id);
+                    if ($deleted) {
+                        $successDelete = $successDelete + 1;
+                    } else {
+                        $failedDelete = $failedDelete + 1;
+                    }
                 }
                 catch (\Exception $e) {
-                    DB::rollback();
                     Log::error($e->getMessage());
                     $failedDelete = $failedDelete + 1;
                 }

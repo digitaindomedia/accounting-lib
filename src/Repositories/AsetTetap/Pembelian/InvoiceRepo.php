@@ -14,8 +14,10 @@ use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -25,11 +27,13 @@ use Illuminate\Support\Facades\Log;
 class InvoiceRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseInvoice $model)
+    public function __construct(PurchaseInvoice $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
@@ -86,8 +90,19 @@ class InvoiceRepo extends ElequentRepository
     public function store(Request $request, array $other = []): bool
     {
         $id = $request->id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], [
+                'order',
+                'order.aset_tetap_coa',
+                'order.downpayment',
+                'order.dari_akun_coa',
+                'order.akumulasi_penyusutan_coa',
+                'order.penyusutan_coa'
+            ])?->toArray();
+        }
         $invoiceNo = $request->invoice_no;
-        if(empty($receivedNo)){
+        if(empty($invoiceNo)){
             $invoiceNo = self::generateCodeTransaction(new PurchaseInvoice(),KeyNomor::NO_INVOICE_PEMBELIAN_ASET_TETAP,'invoice_no','invoice_date');
         }
         $invoiceDate = Utility::changeDateFormat($request->invoice_date);
@@ -176,6 +191,28 @@ class InvoiceRepo extends ElequentRepository
                 ReceiveRepo::changeStatusByOrderId($orderId,StatusEnum::SELESAI);
                 OrderRepo::changeStatus($orderId,StatusEnum::SELESAI);
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data invoice pembelian aset tetap dengan nomor ' . $invoiceNo
+                        : 'Edit data invoice pembelian aset tetap dengan nomor ' . $invoiceNo,
+                    'model_type' => PurchaseInvoice::class,
+                    'model_id' => $idInvoice,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idInvoice, [], [
+                        'order',
+                        'order.aset_tetap_coa',
+                        'order.downpayment',
+                        'order.dari_akun_coa',
+                        'order.akumulasi_penyusutan_coa',
+                        'order.penyusutan_coa'
+                    ])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             }
             else {
@@ -183,8 +220,7 @@ class InvoiceRepo extends ElequentRepository
             }
         }
         catch (\Exception $e) {
-            // Rollback Transaction
-            Log::error($e->getMessage());
+            Log::error('[AsetTetap\\Pembelian\\InvoiceRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -328,5 +364,53 @@ class InvoiceRepo extends ElequentRepository
         $res = PurchaseInvoice::findOrFail($id);
         $res->invoice_status = $status;
         $res->save();
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $invoice = $this->findOne($id, [], [
+            'order',
+            'order.aset_tetap_coa',
+            'order.downpayment',
+            'order.dari_akun_coa',
+            'order.akumulasi_penyusutan_coa',
+            'order.penyusutan_coa'
+        ]);
+        if (!$invoice) {
+            return false;
+        }
+
+        $oldData = $invoice->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $invoiceNo = $oldData['invoice_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data invoice pembelian aset tetap dengan nomor ' . $invoiceNo,
+                'model_type' => PurchaseInvoice::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[AsetTetap\\Pembelian\\InvoiceRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function delete($id)
+    {
+        return $this->destroy((int) $id, (int) request()->input('user_id'));
     }
 }

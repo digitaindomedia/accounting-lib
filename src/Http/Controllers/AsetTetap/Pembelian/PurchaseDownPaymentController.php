@@ -101,7 +101,7 @@ class PurchaseDownPaymentController extends Controller
     }
 
     public function delete(Request $request){
-        $res = $this->dpRepo->deleteData($request->id);
+        $res = $this->dpRepo->destroy((int) $request->id, (int) $request->user_id);
         if($res){
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus';
@@ -119,7 +119,13 @@ class PurchaseDownPaymentController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $res = $this->dpRepo->deleteData($id);
+                $downPaymentId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$downPaymentId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+
+                $res = $this->dpRepo->destroy((int) $downPaymentId, (int) $request->user_id);
                 if($res){
                     $successDelete = $successDelete + 1;
                 } else {

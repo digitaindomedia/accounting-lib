@@ -14,8 +14,10 @@ use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -26,11 +28,13 @@ use Illuminate\Support\Facades\Log;
 class AdjustmentRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(Adjustment $model)
+    public function __construct(Adjustment $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -78,9 +82,19 @@ class AdjustmentRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], [
+                'warehouse',
+                'coa_adjustment',
+                'adjustmentproduct',
+                'adjustmentproduct.product',
+                'adjustmentproduct.coa',
+                'adjustmentproduct.unit'
+            ])?->toArray();
+        }
         $arrData = $this->prepareAdjustmentData($request, $userId);
         DB::beginTransaction();
         try {
@@ -90,12 +104,34 @@ class AdjustmentRepo extends ElequentRepository
                 $idAdjustment = $this->handleProductsAndFiles($request, $res, $id);
                 $this->postingJurnal($idAdjustment);
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data adjustment persediaan dengan nomor ' . $arrData['ref_no']
+                        : 'Edit data adjustment persediaan dengan nomor ' . $arrData['ref_no'],
+                    'model_type' => Adjustment::class,
+                    'model_id' => $idAdjustment,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idAdjustment, [], [
+                        'warehouse',
+                        'coa_adjustment',
+                        'adjustmentproduct',
+                        'adjustmentproduct.product',
+                        'adjustmentproduct.coa',
+                        'adjustmentproduct.unit'
+                    ])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             } else {
                 return false;
             }
         } catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[AdjustmentRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -481,6 +517,49 @@ class AdjustmentRepo extends ElequentRepository
                 }
 
             }
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $adjustment = $this->findOne($id, [], [
+            'warehouse',
+            'coa_adjustment',
+            'adjustmentproduct',
+            'adjustmentproduct.product',
+            'adjustmentproduct.coa',
+            'adjustmentproduct.unit'
+        ]);
+        if (!$adjustment) {
+            return false;
+        }
+
+        $oldData = $adjustment->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $refNo = $oldData['ref_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data adjustment persediaan dengan nomor ' . $refNo,
+                'model_type' => Adjustment::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[AdjustmentRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 

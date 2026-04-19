@@ -104,7 +104,7 @@ class JurnalController extends Controller
             return response()->json(['status' => false, 'message' => 'ID tidak ditemukan', 'data' => ''], 400);
         }
 
-        $res = $this->jurnalRepo->delete($id);
+        $res = $this->jurnalRepo->destroy($id, (int) $request->input('user_id'));
         if ($res) {
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus ';
@@ -138,7 +138,7 @@ class JurnalController extends Controller
                 $canDelete = is_array($item) ? ($item['can_delete'] ?? false) : ($item->can_delete ?? false);
 
                 if ($itemId && $canDelete) {
-                    $res = $this->jurnalRepo->delete($itemId);
+                    $res = $this->jurnalRepo->destroy($itemId, (int) $request->input('user_id'));
                     if ($res) {
                         $successDelete++;
                     } else {

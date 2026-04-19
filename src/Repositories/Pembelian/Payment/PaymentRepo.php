@@ -15,8 +15,10 @@ use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -26,11 +28,13 @@ use Illuminate\Support\Facades\Log;
 class PaymentRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchasePayment $model)
+    public function __construct(PurchasePayment $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     // ... [Keep getAllDataBy and getAllTotalDataBy as they were] ...
@@ -79,6 +83,10 @@ class PaymentRepo extends ElequentRepository
     {
         $userId = $request->user_id;
         $id = $request->id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['vendor','payment_method','invoice','invoice.purchaseinvoice','invoiceretur','invoiceretur.retur'])?->toArray();
+        }
 
         // Prepare Header Data
         $data = $this->gatherHeaderData($request);
@@ -128,11 +136,26 @@ class PaymentRepo extends ElequentRepository
             $this->handleFileUploads($request->file('files'), $paymentId, $userId);
 
             DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => empty($id)
+                    ? 'Tambah data pelunasan pembelian dengan nomor ' . $data['payment_no']
+                    : 'Edit data pelunasan pembelian dengan nomor ' . $data['payment_no'],
+                'model_type' => PurchasePayment::class,
+                'model_id' => $paymentId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($paymentId, [], ['vendor','payment_method','invoice','invoice.purchaseinvoice','invoiceretur','invoiceretur.retur'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("Payment Store Error: " . $e->getMessage());
+            Log::error("[PaymentRepo][store] " . $e->getMessage());
             return false;
         }
     }
@@ -201,7 +224,7 @@ class PaymentRepo extends ElequentRepository
     }
 
     public static function postingJurnalPayment($idPayment){
-        $repo = new self(new PurchasePayment());
+        $repo = new self(new PurchasePayment(), app(ActivityLogService::class));
         $repo->postingJurnal($idPayment);
     }
 
@@ -349,6 +372,42 @@ class PaymentRepo extends ElequentRepository
                     ]);
                 }
             }
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $payment = $this->findOne($id, [], ['vendor','payment_method','invoice','invoice.purchaseinvoice','invoiceretur','invoiceretur.retur']);
+        if (!$payment) {
+            return false;
+        }
+
+        $oldData = $payment->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $paymentNo = $oldData['payment_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data pelunasan pembelian dengan nomor ' . $paymentNo,
+                'model_type' => PurchasePayment::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[PaymentRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 }

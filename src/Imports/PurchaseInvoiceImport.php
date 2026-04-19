@@ -15,6 +15,7 @@ use Icso\Accounting\Repositories\Master\Vendor\VendorRepo;
 use Icso\Accounting\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
@@ -38,7 +39,7 @@ class PurchaseInvoiceImport implements ToCollection
     {
         $this->userId = $userId;
         $this->orderType = $orderType;
-        $this->invoiceRepo = new InvoiceRepo(new PurchaseInvoicing());
+        $this->invoiceRepo = new InvoiceRepo(new PurchaseInvoicing(), app(ActivityLogService::class));
     }
 
     /**

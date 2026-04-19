@@ -11,9 +11,11 @@ use Icso\Accounting\Models\Pembelian\Permintaan\PurchaseRequest;
 use Icso\Accounting\Models\Pembelian\Permintaan\PurchaseRequestMeta;
 use Icso\Accounting\Models\Pembelian\Permintaan\PurchaseRequestProduct;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
@@ -23,11 +25,13 @@ use Illuminate\Support\Facades\Log;
 class RequestRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseRequest $model)
+    public function __construct(PurchaseRequest $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -112,9 +116,12 @@ class RequestRepo extends ElequentRepository
 
     public function store(Request $request, array $other = []): bool
     {
-        // Extract request data
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['requestproduct', 'requestproduct.unit', 'requestproduct.product', 'requestmeta'])?->toArray();
+        }
         $requestNo = $this->getRequestNo($request);
         $requestDate = $this->getRequestDate($request->request_date);
         $note = $request->note ?? '';
@@ -131,11 +138,26 @@ class RequestRepo extends ElequentRepository
                 $idRequest = $this->processRequest($request, $id, $res);
                 $this->processFiles($request, $idRequest);
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data permintaan pembelian dengan nomor ' . $requestNo
+                        : 'Edit data permintaan pembelian dengan nomor ' . $requestNo,
+                    'model_type' => PurchaseRequest::class,
+                    'model_id' => $idRequest,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idRequest, [], ['requestproduct', 'requestproduct.unit', 'requestproduct.product', 'requestmeta'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             }
             return false;
         } catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[RequestRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -240,17 +262,43 @@ class RequestRepo extends ElequentRepository
 
     public function delete($id): bool
     {
+        return $this->destroy($id, (int) optional(request())->user_id);
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $purchaseRequest = PurchaseRequest::find($id);
+        if (!$purchaseRequest) {
+            return false;
+        }
+
+        $oldData = $this->findOne($id, [], ['requestproduct', 'requestproduct.unit', 'requestproduct.product', 'requestmeta'])?->toArray();
+
         DB::beginTransaction();
         try
         {
             $this->deleteAdditional($id);
             $this->deleteByWhere(array('id' => $id));
             DB::commit();
+
+            $requestNo = $oldData['request_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data permintaan pembelian dengan nomor ' . $requestNo,
+                'model_type' => PurchaseRequest::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return true;
         }
-        catch (\Exception $e) {
-            Log::error($e->getMessage());
-            DB::rollback();
+        catch (\Throwable $e) {
+            Log::error('[RequestRepo][destroy] ' . $e->getMessage());
+            DB::rollBack();
             return false;
         }
     }
@@ -362,7 +410,7 @@ class RequestRepo extends ElequentRepository
 
     public static function changeStatusRequest($id)
     {
-        $reqRepo = new self(new PurchaseRequest());
+        $reqRepo = new self(new PurchaseRequest(), app(ActivityLogService::class));
         $find = $reqRepo->findOne($id);
         if(!empty($find)){
             $order = $reqRepo->findInUseInOrder($find->id);

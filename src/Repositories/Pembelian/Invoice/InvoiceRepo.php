@@ -28,11 +28,13 @@ use Icso\Accounting\Repositories\Pembelian\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -43,11 +45,13 @@ use Illuminate\Support\Facades\Log;
 class InvoiceRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseInvoicing $model)
+    public function __construct(PurchaseInvoicing $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
@@ -93,6 +97,10 @@ class InvoiceRepo extends ElequentRepository
     {
         $inventoryRepo = new InventoryRepo(new Inventory());
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($request->id)) {
+            $oldData = $this->findOne($request->id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray();
+        }
         $data = $this->gatherInputData($request);
 
         DB::beginTransaction();
@@ -120,6 +128,21 @@ class InvoiceRepo extends ElequentRepository
 
                 DB::commit();
                 DB::statement('SET FOREIGN_KEY_CHECKS=1');
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($request->id)
+                        ? 'Tambah data invoice pembelian dengan nomor ' . $data['invoice_no']
+                        : 'Edit data invoice pembelian dengan nomor ' . $data['invoice_no'],
+                    'model_type' => PurchaseInvoicing::class,
+                    'model_id' => $idInvoice,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idInvoice, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             } else {
                 return false;
@@ -127,7 +150,7 @@ class InvoiceRepo extends ElequentRepository
         } catch (Exception $e) {
             DB::rollBack();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
-            Log::error("Invoice Store Error: " . $e->getMessage() . " - Trace: " . $e->getTraceAsString());
+            Log::error("[InvoiceRepo][store] " . $e->getMessage() . " - Trace: " . $e->getTraceAsString());
             return false;
         }
     }
@@ -320,6 +343,42 @@ class InvoiceRepo extends ElequentRepository
         PurchaseInvoicingDp::where(array('invoice_id' => $id))->delete();
         PurchaseInvoicingMeta::where(array('invoice_id' => $id))->delete();
         Inventory::where('transaction_code','=',TransactionsCode::INVOICE_PEMBELIAN)->where('transaction_id','=',$id)->delete();
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $invoice = $this->findOne($id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+        if (!$invoice) {
+            return false;
+        }
+
+        $oldData = $invoice->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $invoiceNo = $oldData['invoice_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data invoice pembelian dengan nomor ' . $invoiceNo,
+                'model_type' => PurchaseInvoicing::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[InvoiceRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function postingJurnal($idInvoice): void
@@ -661,7 +720,7 @@ class InvoiceRepo extends ElequentRepository
 
     public static function changeStatusInvoice($idInvoice): void
     {
-        $invoiceRepo = new self(new PurchaseInvoicing());
+        $invoiceRepo = new self(new PurchaseInvoicing(), app(ActivityLogService::class));
         $paymentInvoiceRepo = new PaymentInvoiceRepo(new PurchasePaymentInvoice());
         $findInvoice = $invoiceRepo->findOne($idInvoice);
         $paid = $paymentInvoiceRepo->getAllPaymentByInvoiceId($idInvoice);

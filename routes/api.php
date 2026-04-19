@@ -6,6 +6,7 @@ use Icso\Accounting\Http\Controllers\Akuntansi\JurnalController;
 use Icso\Accounting\Http\Controllers\Akuntansi\LabaRugiController;
 use Icso\Accounting\Http\Controllers\Akuntansi\NeracaController;
 use Icso\Accounting\Http\Controllers\Akuntansi\SaldoAwalController;
+use Icso\Accounting\Http\Controllers\ActivityLogController;
 use Icso\Accounting\Http\Controllers\Master\CategoryController;
 use Icso\Accounting\Http\Controllers\Master\CoaController;
 use Icso\Accounting\Http\Controllers\Master\CountryController;
@@ -38,6 +39,9 @@ Route::group([
     'prefix'     => '/{tenant}',
     'middleware' => [InitializeTenancyByPath::class],
 ], function () {
+    Route::get('activity-log-get-all', [ActivityLogController::class, 'getAllData']);
+    Route::get('activity-log-find-by-id', [ActivityLogController::class, 'show']);
+
     Route::get('system-setting',[Setting::class, 'getSystemSetting']);
     Route::post('save-system-setting',[Setting::class, 'storeData']);
     Route::post('save-key-value-setting',[Setting::class, 'storeKeyValue']);

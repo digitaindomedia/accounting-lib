@@ -89,18 +89,18 @@ class PurchaseReceivedController extends Controller
     public function destroy(Request $request)
     {
         $id = $request->id;
-        DB::beginTransaction();
-        try
-        {
-            $this->purchaseReceiveRepo->deleteAdditional($id);
-            $this->purchaseReceiveRepo->delete($id);
-            DB::commit();
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = array();
-        }
-        catch (\Exception $e) {
-            DB::rollback();
+        try {
+            $deleted = $this->purchaseReceiveRepo->destroy((int) $id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = array();
+            }
+        } catch (\Exception $e) {
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
@@ -115,16 +115,20 @@ class PurchaseReceivedController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                DB::beginTransaction();
-                try
-                {
-                    $this->purchaseReceiveRepo->deleteAdditional($id);
-                    $this->purchaseReceiveRepo->delete($id);
-                    DB::commit();
-                    $successDelete = $successDelete + 1;
-                }
-                catch (\Exception $e) {
-                    DB::rollback();
+                try {
+                    $receiveId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                    if (!$receiveId) {
+                        $failedDelete = $failedDelete + 1;
+                        continue;
+                    }
+
+                    $deleted = $this->purchaseReceiveRepo->destroy((int) $receiveId, (int) $request->user_id);
+                    if ($deleted) {
+                        $successDelete = $successDelete + 1;
+                    } else {
+                        $failedDelete = $failedDelete + 1;
+                    }
+                } catch (\Exception $e) {
                     $failedDelete = $failedDelete + 1;
                 }
             }

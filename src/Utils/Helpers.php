@@ -10,6 +10,7 @@ use Icso\Accounting\Models\User;
 use Icso\Accounting\Models\UserInfo;
 use Icso\Accounting\Repositories\Master\TaxRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 
 class Helpers
 {
@@ -63,7 +64,7 @@ class Helpers
 
     public static function hitungTaxDpp($subtotal, $taxId, $taxType, $taxPercentage,$taxGroup=''): array|string
     {
-        $taxRepo = new TaxRepo(new Tax());
+        $taxRepo = new TaxRepo(new Tax(), app(ActivityLogService::class));
         $findTax = $taxRepo->findOne($taxId,array(),['taxgroup','taxgroup.tax']);
         $getData = "";
         if(!empty($findTax)){
@@ -313,7 +314,7 @@ class Helpers
 
     public static function getJsonTaxGroup($taxId)
     {
-        $taxRepo = new TaxRepo(new Tax());
+        $taxRepo = new TaxRepo(new Tax(), app(ActivityLogService::class));
         $jsonTaxGroup = "";
         $findTaxIsGroup = $taxRepo->findOne($taxId,array(),['taxgroup','taxgroup.tax']);
         if(!empty($findTaxIsGroup)){

@@ -7,8 +7,10 @@ use Icso\Accounting\Models\Penjualan\Spk\SalesSpk;
 use Icso\Accounting\Models\Penjualan\Spk\SalesSpkMeta;
 use Icso\Accounting\Models\Penjualan\Spk\SalesSpkProduct;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,11 +19,13 @@ use Illuminate\Support\Facades\Log;
 class SpkRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(SalesSpk $model)
+    public function __construct(SalesSpk $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
@@ -81,6 +85,11 @@ class SpkRepo extends ElequentRepository
     public function store(Request $request, array $other = []): bool
     {
         $id = $request->id;
+        $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id,array(),['vendor','order','spkproduct','spkproduct.orderproduct','spkproduct.product'])?->toArray();
+        }
         $spkNo = $request->spk_no;
         if(empty($spkNo)){
             $spkNo = self::generateCodeTransaction(new SalesSpk(),KeyNomor::NO_SPK,'spk_no','spk_date');
@@ -89,7 +98,6 @@ class SpkRepo extends ElequentRepository
         $orderId = $request->order_id;
         $vendorId = $request->vendor_id;
         $note = $request->note;
-        $userId = $request->user_id;
         $arrData = array(
             'spk_no' => $spkNo,
             'spk_date' => $spkDate,
@@ -97,7 +105,7 @@ class SpkRepo extends ElequentRepository
             'vendor_id' => $vendorId,
             'note' => $note,
             'updated_by' => $userId,
-            'updated_at' => date('Y-m-d H:i:s')
+            'updated_at' => now()
         );
         
         DB::beginTransaction();
@@ -105,11 +113,13 @@ class SpkRepo extends ElequentRepository
             if(empty($id)){
                 $arrData['reason'] = '';
                 $arrData['spk_status'] = StatusEnum::SELESAI;
-                $arrData['created_at'] = date('Y-m-d H:i:s');
+                $arrData['created_at'] = now();
                 $arrData['created_by'] = $userId;
                 $res = $this->create($arrData);
+                $action = 'Tambah data SPK penjualan dengan nomor ' . $spkNo;
             } else{
                 $res = $this->update($arrData, $id);
+                $action = 'Edit data SPK penjualan dengan nomor ' . $spkNo;
             }
             if($res){
                 if(!empty($id)){
@@ -149,6 +159,19 @@ class SpkRepo extends ElequentRepository
                     }
                 }
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => $action,
+                    'model_type' => SalesSpk::class,
+                    'model_id' => $idSpk,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idSpk,array(),['vendor','order','spkproduct','spkproduct.orderproduct','spkproduct.product'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             }
             else {
@@ -157,7 +180,7 @@ class SpkRepo extends ElequentRepository
             }
         }
         catch (\Exception $e){
-            Log::error($e->getMessage());
+            Log::error('[SpkRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -174,5 +197,41 @@ class SpkRepo extends ElequentRepository
     {
         $totalKirim = SalesSpkProduct::where(array('product_id' => $idProduct, 'spk_id' => $spkId))->sum('qty');
         return $totalKirim;
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $spk = $this->findOne($id,array(),['vendor','order','spkproduct','spkproduct.orderproduct','spkproduct.product']);
+        if (!$spk) {
+            return false;
+        }
+
+        $oldData = $spk->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $spkNo = $oldData['spk_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data SPK penjualan dengan nomor ' . $spkNo,
+                'model_type' => SalesSpk::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[SpkRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 }

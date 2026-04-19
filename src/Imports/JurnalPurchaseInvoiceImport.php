@@ -6,6 +6,7 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
@@ -27,7 +28,7 @@ class JurnalPurchaseInvoiceImport implements ToCollection
     public function __construct($userId)
     {
         $this->userId = $userId;
-        $this->invoiceRepo = new InvoiceRepo(new PurchaseInvoicing());
+        $this->invoiceRepo = new InvoiceRepo(new PurchaseInvoicing(), app(ActivityLogService::class));
     }
 
     public function collection(Collection $rows)

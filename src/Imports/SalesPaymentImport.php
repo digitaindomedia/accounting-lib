@@ -8,6 +8,7 @@ use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPayment;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ class SalesPaymentImport implements ToCollection
     public function __construct($userId)
     {
         $this->userId = $userId;
-        $this->paymentRepo = new PaymentRepo(new SalesPayment());
+        $this->paymentRepo = new PaymentRepo(new SalesPayment(), app(ActivityLogService::class));
     }
 
     /**

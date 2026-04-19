@@ -110,10 +110,14 @@ class ProductController extends Controller
             if($data)
             {
                 if($data->canDelete()){
-                    $this->productRepo->deleteAdditional($id);
-                    $data->delete();
-                    $this->data['status'] = true;
-                    $this->data['message'] = 'Data berhasil dihapus ';
+                    $deleted = $this->productRepo->destroy($id, $request->user_id);
+                    if ($deleted) {
+                        $this->data['status'] = true;
+                        $this->data['message'] = 'Data berhasil dihapus ';
+                    } else {
+                        $this->data['status'] = false;
+                        $this->data['message'] = 'Data gagal dihapus';
+                    }
                 } else {
                     $this->data['status'] = false;
                     $this->data['message'] = 'Data tidak bisa dihapus';

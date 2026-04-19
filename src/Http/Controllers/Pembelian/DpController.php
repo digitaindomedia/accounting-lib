@@ -83,7 +83,7 @@ class DpController extends Controller
 
     public function delete(Request $request)
     {
-        $res = $this->dpRepo->deleteData($request->id);
+        $res = $this->dpRepo->destroy($request->id, (int) $request->user_id);
         $this->data['status'] = (bool) $res;
         $this->data['message'] = $res ? 'Data berhasil dihapus' : 'Data gagal dihapus';
         return response()->json($this->data);
@@ -96,7 +96,12 @@ class DpController extends Controller
         $failedDelete = 0;
 
         foreach ($reqData as $id) {
-            $res = $this->dpRepo->deleteData($id);
+            $dpId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+            if (!$dpId) {
+                $failedDelete++;
+                continue;
+            }
+            $res = $this->dpRepo->destroy((int) $dpId, (int) $request->user_id);
             $res ? $successDelete++ : $failedDelete++;
         }
 

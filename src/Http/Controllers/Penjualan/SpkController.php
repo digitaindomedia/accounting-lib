@@ -133,18 +133,19 @@ class SpkController extends Controller
     public function destroy(Request $request)
     {
         $id = $request->id;
-        DB::beginTransaction();
-        try
-        {
-            $this->salesSpkRepo->deleteAdditional($id);
-            $this->salesSpkRepo->delete($id);
-            DB::commit();
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = array();
+        try {
+            $deleted = $this->salesSpkRepo->destroy($id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = array();
+            }
         }
         catch (\Exception $e) {
-            DB::rollback();
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
@@ -159,16 +160,20 @@ class SpkController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                DB::beginTransaction();
-                try
-                {
-                    $this->salesSpkRepo->deleteAdditional($id);
-                    $this->salesSpkRepo->delete($id);
-                    DB::commit();
-                    $successDelete = $successDelete + 1;
+                $spkId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$spkId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+                try {
+                    $deleted = $this->salesSpkRepo->destroy((int) $spkId, (int) $request->user_id);
+                    if ($deleted) {
+                        $successDelete = $successDelete + 1;
+                    } else {
+                        $failedDelete = $failedDelete + 1;
+                    }
                 }
                 catch (\Exception $e) {
-                    DB::rollback();
                     $failedDelete = $failedDelete + 1;
                 }
             }

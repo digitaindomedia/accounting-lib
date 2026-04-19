@@ -3,17 +3,23 @@ namespace Icso\Accounting\Repositories\Master;
 
 use Icso\Accounting\Models\Master\Unit;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class UnitRepo extends ElequentRepository
 {
 
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(Unit $model)
+    public function __construct(Unit $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
 
@@ -45,21 +51,89 @@ class UnitRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
+        $userId = $request->user_id;
+
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id)?->toArray();
+        }
+
         $arrData = array(
             'unit_name' => $request->unit_name,
             'unit_code' => $request->unit_code,
             'unit_description' => !empty($request->unit_description) ? $request->unit_description: '',
-            'updated_at' => date('Y-m-d H:i:s'),
-            'updated_by' => $request->user_id
+            'updated_at' => now(),
+            'updated_by' => $userId
         );
-        if(empty($id)) {
-            $arrData['created_at'] = date('Y-m-d H:i:s');
-            $arrData['created_by'] = $request->user_id;
-            return $this->create($arrData);
-        } else {
-            return $this->update($arrData,$id);
+
+        DB::beginTransaction();
+        try {
+            if(empty($id)) {
+                $arrData['created_at'] = now();
+                $arrData['created_by'] = $userId;
+                $result = $this->create($arrData);
+                $unitId = $result->id;
+                $action = 'Tambah data master satuan';
+            } else {
+                $this->update($arrData,$id);
+                $unitId = $id;
+                $action = 'Edit data master satuan';
+            }
+
+            DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => $action,
+                'model_type' => Unit::class,
+                'model_id' => $unitId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($unitId)?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[UnitRepo][store] ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $unit = Unit::find($id);
+        if (!$unit || !$unit->canDelete()) {
+            return false;
+        }
+
+        $oldData = $unit->toArray();
+
+        DB::beginTransaction();
+        try {
+            $unit->delete();
+            DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data master satuan dengan nama ' . $oldData['unit_name'],
+                'model_type' => Unit::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[UnitRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 }

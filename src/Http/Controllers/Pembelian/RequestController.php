@@ -95,7 +95,7 @@ class RequestController extends Controller
     }
 
     public function delete(Request $request){
-        $res = $this->requestRepo->delete($request->id);
+        $res = $this->requestRepo->destroy($request->id, (int) $request->user_id);
         if($res){
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus';
@@ -113,7 +113,12 @@ class RequestController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $res = $this->requestRepo->delete($id);
+                $requestId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$requestId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+                $res = $this->requestRepo->destroy((int) $requestId, (int) $request->user_id);
                 if($res){
                     $successDelete = $successDelete + 1;
                 } else {

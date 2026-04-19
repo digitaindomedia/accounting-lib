@@ -11,8 +11,10 @@ use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseReceiveMeta;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -22,11 +24,13 @@ use Illuminate\Support\Facades\Log;
 class ReceiveRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseReceive $model)
+    public function __construct(PurchaseReceive $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -84,6 +88,15 @@ class ReceiveRepo extends ElequentRepository
     public function store(Request $request, array $other = [])
     {
         $id = $request->id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], [
+                'order',
+                'order.aset_tetap_coa',
+                'order.akumulasi_penyusutan_coa',
+                'order.penyusutan_coa'
+            ])?->toArray();
+        }
         $receivedNo = $request->receive_no;
         if(empty($receivedNo)){
             $receivedNo = self::generateCodeTransaction(new PurchaseReceive(),KeyNomor::NO_PENERIMAAN_PEMBELIAN_ASET_TETAP,'receive_no','receive_date');
@@ -129,7 +142,6 @@ class ReceiveRepo extends ElequentRepository
                 if(!empty($uploadedFiles)) {
                     if (count($uploadedFiles) > 0) {
                         foreach ($uploadedFiles as $file) {
-                            // Handle each file as needed
                             $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
                             if ($resUpload) {
                                 $arrUpload = array(
@@ -143,12 +155,32 @@ class ReceiveRepo extends ElequentRepository
                     }
                 }
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data penerimaan pembelian aset tetap dengan nomor ' . $receivedNo
+                        : 'Edit data penerimaan pembelian aset tetap dengan nomor ' . $receivedNo,
+                    'model_type' => PurchaseReceive::class,
+                    'model_id' => $recId,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($recId, [], [
+                        'order',
+                        'order.aset_tetap_coa',
+                        'order.akumulasi_penyusutan_coa',
+                        'order.penyusutan_coa'
+                    ])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             }else {
                 return false;
             }
         }catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[AsetTetap\\Pembelian\\ReceiveRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -222,6 +254,47 @@ class ReceiveRepo extends ElequentRepository
                 $jurnalTransaksiRepo->create($arrJurnalKredit);
             }
 
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $receive = $this->findOne($id, [], [
+            'order',
+            'order.aset_tetap_coa',
+            'order.akumulasi_penyusutan_coa',
+            'order.penyusutan_coa'
+        ]);
+        if (!$receive) {
+            return false;
+        }
+
+        $oldData = $receive->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $receiveNo = $oldData['receive_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data penerimaan pembelian aset tetap dengan nomor ' . $receiveNo,
+                'model_type' => PurchaseReceive::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[AsetTetap\\Pembelian\\ReceiveRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 }

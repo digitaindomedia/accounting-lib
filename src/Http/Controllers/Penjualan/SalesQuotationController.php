@@ -112,7 +112,7 @@ class SalesQuotationController extends Controller
     public function deleteData(Request $request)
     {
         $id = $request->id;
-        $res = $this->salesQuotationService->delete($id);
+        $res = $this->salesQuotationService->deleteData($id);
 
         if ($res) {
             $this->data['status'] = true;
@@ -131,7 +131,7 @@ class SalesQuotationController extends Controller
         if (!is_array($ids)) {
             $ids = explode(',', $ids);
         }
-        $res = $this->salesQuotationService->deleteAll($ids);
+        $res = $this->salesQuotationService->deleteAllData($ids);
 
         if ($res) {
             $this->data['status'] = true;

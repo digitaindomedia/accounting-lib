@@ -8,6 +8,7 @@ use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\Master\Unit;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Illuminate\Database\Eloquent\Model;
 
 class PurchaseReceivedProduct extends Model
@@ -38,7 +39,7 @@ class PurchaseReceivedProduct extends Model
 
     public function getQtyBsReturAttribute()
     {
-        $purchaseReceivedRepo =  new ReceiveRepo(new PurchaseReceived());
+        $purchaseReceivedRepo =  new ReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
         $qtyRetur = $purchaseReceivedRepo->getQtyRetur($this->id);
         $qtyBsRetur = $this->qty - $qtyRetur;
         return $qtyBsRetur;

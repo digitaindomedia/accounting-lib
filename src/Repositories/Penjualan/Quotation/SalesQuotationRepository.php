@@ -8,13 +8,23 @@ use Icso\Accounting\Models\Penjualan\Order\SalesQuotation;
 use Icso\Accounting\Models\Penjualan\Order\SalesQuotationMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesQuotationProduct;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Exception;
 
 class SalesQuotationRepository implements SalesQuotationRepositoryInterface
 {
+    protected ActivityLogService $activityLog;
+
+    public function __construct(ActivityLogService $activityLog)
+    {
+        $this->activityLog = $activityLog;
+    }
+
     public function findOne($id, $select_field = [])
     {
         if (is_array($select_field) && count($select_field)) {
@@ -123,6 +133,10 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
         try {
             $id = $data['id'] ?? 0;
             $userId = $data['user_id'] ?? 0;
+            $oldData = null;
+            if (!empty($id)) {
+                $oldData = $this->find($id)?->toArray();
+            }
 
             $arrData = [
                 'quotation_no' => !empty($data['quotation_no']) ? $data['quotation_no'] : ElequentRepository::generateCodeTransaction(new SalesQuotation(), 'NO_QUOTATION_PENJUALAN','quotation_no','quotation_date'),
@@ -154,20 +168,17 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
                 SalesQuotationProduct::where('quotation_id', $id)->delete();
 
                 foreach ($data['quotationproduct'] as $product) {
-                    $taxGroup = null;
-                    if (($product['tax_type'] ?? null) === 'multiple' && !empty($product['tax']['taxgroup'])) {
-                        $taxGroup = json_encode($product['tax']['taxgroup']);
-                    }
+                    $normalizedTax = $this->normalizeProductTax($product);
                     SalesQuotationProduct::create([
                         'quotation_id' => $id,
                         'product_id' => $product['product_id'],
                         'qty' => $product['qty'],
                         'qty_left' => $product['qty'], // Initialize qty_left with qty
                         'price' => $product['price'] ?? 0,
-                        'tax_id' => !empty($product['tax_id']) && $product['tax_id'] !== '0' ? $product['tax_id'] : null,
-                        'tax_group' => $taxGroup,
-                        'tax_percentage' => $product['tax_percentage'] ?? 0,
-                        'tax_type' => $product['tax_type'] ?? null,
+                        'tax_id' => $normalizedTax['tax_id'],
+                        'tax_group' => $normalizedTax['tax_group'],
+                        'tax_percentage' => $normalizedTax['tax_percentage'],
+                        'tax_type' => $normalizedTax['tax_type'],
                         'unit_id' => $product['unit_id'] ?? null,
                         'subtotal' => $product['subtotal'] ?? 0,
                         'note' => $product['note'] ?? null,
@@ -177,6 +188,24 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
             }
             $this->handleFileUploads($data['files'] ?? [], $id, $userId);
             DB::commit();
+
+            $request = request();
+            if ($request instanceof Request) {
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($data['id'])
+                        ? 'Tambah data quotation penjualan dengan nomor ' . $arrData['quotation_no']
+                        : 'Edit data quotation penjualan dengan nomor ' . $arrData['quotation_no'],
+                    'model_type' => SalesQuotation::class,
+                    'model_id' => $id,
+                    'old_values' => $oldData,
+                    'new_values' => $this->find($id)?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+            }
+
             return $id;
         } catch (Exception $e) {
             DB::rollBack();
@@ -202,14 +231,56 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
         }
     }
 
+    private function normalizeProductTax(array $product): array
+    {
+        $taxType = $product['tax_type'] ?? '';
+        $taxGroup = null;
+
+        if ($taxType === 'multiple' && !empty($product['tax']['taxgroup'])) {
+            $taxGroup = json_encode($product['tax']['taxgroup']);
+        }
+
+        return [
+            // Keep quotation products aligned with the rest of the sales flow:
+            // empty tax is stored as 0, not null.
+            'tax_id' => !empty($product['tax_id']) ? $product['tax_id'] : 0,
+            'tax_group' => $taxGroup,
+            'tax_percentage' => $product['tax_percentage'] ?? 0,
+            'tax_type' => $taxType,
+        ];
+    }
+
     public function deleteData($id)
     {
+        $quotation = $this->find($id);
+        if (!$quotation) {
+            return false;
+        }
+
+        $oldData = $quotation->toArray();
+
         DB::beginTransaction();
         try {
             SalesQuotationProduct::where('quotation_id', $id)->delete();
             SalesQuotationMeta::where('quotation_id', $id)->delete();
             $result = $this->delete($id);
             DB::commit();
+
+            $request = request();
+            if ($result && $request instanceof Request) {
+                $this->activityLog->log([
+                    'user_id' => (int) ($request->user_id ?? 0),
+                    'action' => 'Hapus data quotation penjualan dengan nomor ' . ($oldData['quotation_no'] ?? ''),
+                    'model_type' => SalesQuotation::class,
+                    'model_id' => $id,
+                    'old_values' => $oldData,
+                    'new_values' => null,
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+            }
+
             return $result;
         } catch (Exception $e) {
             DB::rollBack();
@@ -222,7 +293,7 @@ class SalesQuotationRepository implements SalesQuotationRepositoryInterface
         DB::beginTransaction();
         try {
             SalesQuotationProduct::whereIn('quotation_id', $ids)->delete();
-            SalesQuotationMeta::where('quotation_id', $ids)->delete();
+            SalesQuotationMeta::whereIn('quotation_id', $ids)->delete();
             $result = $this->deleteAll($ids);
             DB::commit();
             return $result;

@@ -22,9 +22,11 @@ use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Pembelian\Order\OrderRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -35,11 +37,13 @@ use Illuminate\Support\Facades\Log;
 class ReceiveRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseReceived $model)
+    public function __construct(PurchaseReceived $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -95,6 +99,10 @@ class ReceiveRepo extends ElequentRepository
         $inventoryRepo = new InventoryRepo(new Inventory());
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['vendor', 'order', 'warehouse','receiveproduct','receiveproduct.items', 'receiveproduct.product','receiveproduct.orderproduct','receiveproduct.tax','receiveproduct.unit'])?->toArray();
+        }
 
         $dataHeader = $this->gatherHeaderData($request);
 
@@ -238,11 +246,26 @@ class ReceiveRepo extends ElequentRepository
             $this->handleFileUploads($request->file('files'), $recId, $userId);
 
             DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => empty($id)
+                    ? 'Tambah data penerimaan pembelian dengan nomor ' . $dataHeader['receive_no']
+                    : 'Edit data penerimaan pembelian dengan nomor ' . $dataHeader['receive_no'],
+                'model_type' => PurchaseReceived::class,
+                'model_id' => $recId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($recId, [], ['vendor', 'order', 'warehouse','receiveproduct','receiveproduct.items', 'receiveproduct.product','receiveproduct.orderproduct','receiveproduct.tax','receiveproduct.unit'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("Receive Store Error: " . $e->getMessage());
+            Log::error("[ReceiveRepo][store] " . $e->getMessage());
             return false;
         }
     }
@@ -479,6 +502,42 @@ class ReceiveRepo extends ElequentRepository
 
     }
 
+    public function destroy(int $id, int $userId): bool
+    {
+        $receive = $this->findOne($id, [], ['vendor', 'order', 'warehouse','receiveproduct','receiveproduct.items', 'receiveproduct.product','receiveproduct.orderproduct','receiveproduct.tax','receiveproduct.unit']);
+        if (!$receive) {
+            return false;
+        }
+
+        $oldData = $receive->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $receiveNo = $oldData['receive_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data penerimaan pembelian dengan nomor ' . $receiveNo,
+                'model_type' => PurchaseReceived::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[ReceiveRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public function getTotalReceived($id){
         $find = $this->findOne($id,array(),['receiveproduct']);
         $total = 0;
@@ -566,7 +625,7 @@ class ReceiveRepo extends ElequentRepository
 
     public static function changeStatusPenerimaanById($id,$status= StatusEnum::SELESAI)
     {
-        $instance = new self(new PurchaseReceived());
+        $instance = new self(new PurchaseReceived(), app(ActivityLogService::class));
         $instance->update(['receive_status' => $status], $id);
     }
 }

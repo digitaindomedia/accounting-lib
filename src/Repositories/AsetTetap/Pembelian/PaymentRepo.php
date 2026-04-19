@@ -14,9 +14,11 @@ use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\AsetTetap\Penjualan\SalesInvoiceRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -26,11 +28,13 @@ use Illuminate\Support\Facades\Log;
 class PaymentRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchasePayment $model)
+    public function __construct(PurchasePayment $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
@@ -90,7 +94,6 @@ class PaymentRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $paymentMethod = $request->payment_method_id;
         $paymentDate = !empty($request->payment_date) ? Utility::changeDateFormat($request->payment_date) : date('Y-m-d');
         $paymentNo = $request->payment_no;
@@ -107,6 +110,20 @@ class PaymentRepo extends ElequentRepository
         $note = !empty($request->note) ? $request->note : '';
         $total = Utility::remove_commas($request->total);
         $id = $request->id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], [
+                'payment_method',
+                'sales_invoice',
+                'sales_invoice.asettetap',
+                'invoice',
+                'invoice.order',
+                'invoice.order.aset_tetap_coa',
+                'invoice.order.dari_akun_coa',
+                'invoice.order.akumulasi_penyusutan_coa',
+                'invoice.order.penyusutan_coa'
+            ])?->toArray();
+        }
 
         $arrData = array(
             'payment_date' => $paymentDate,
@@ -166,7 +183,6 @@ class PaymentRepo extends ElequentRepository
                 if(!empty($uploadedFiles)) {
                     if (count($uploadedFiles) > 0) {
                         foreach ($uploadedFiles as $file) {
-                            // Handle each file as needed
                             $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
                             if ($resUpload) {
                                 $arrUpload = array(
@@ -180,13 +196,38 @@ class PaymentRepo extends ElequentRepository
                     }
                 }
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data pembayaran pembelian aset tetap dengan nomor ' . $paymentNo
+                        : 'Edit data pembayaran pembelian aset tetap dengan nomor ' . $paymentNo,
+                    'model_type' => PurchasePayment::class,
+                    'model_id' => $idPayment,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idPayment, [], [
+                        'payment_method',
+                        'sales_invoice',
+                        'sales_invoice.asettetap',
+                        'invoice',
+                        'invoice.order',
+                        'invoice.order.aset_tetap_coa',
+                        'invoice.order.dari_akun_coa',
+                        'invoice.order.akumulasi_penyusutan_coa',
+                        'invoice.order.penyusutan_coa'
+                    ])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             }
             else {
                 return false;
             }
         } catch (\Exception $e){
-            Log::error($e->getMessage());
+            Log::error('[AsetTetap\\Pembelian\\PaymentRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -314,6 +355,52 @@ class PaymentRepo extends ElequentRepository
         }
         $total = $query->sum('total');
         return $total;
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $payment = $this->findOne($id, [], [
+            'payment_method',
+            'sales_invoice',
+            'sales_invoice.asettetap',
+            'invoice',
+            'invoice.order',
+            'invoice.order.aset_tetap_coa',
+            'invoice.order.dari_akun_coa',
+            'invoice.order.akumulasi_penyusutan_coa',
+            'invoice.order.penyusutan_coa'
+        ]);
+        if (!$payment) {
+            return false;
+        }
+
+        $oldData = $payment->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $paymentNo = $oldData['payment_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data pembayaran pembelian aset tetap dengan nomor ' . $paymentNo,
+                'model_type' => PurchasePayment::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[AsetTetap\\Pembelian\\PaymentRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 
 }

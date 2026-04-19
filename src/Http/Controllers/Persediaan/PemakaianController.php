@@ -119,16 +119,18 @@ class PemakaianController extends Controller
             return response()->json(['status' => false, 'message' => 'ID tidak ditemukan', 'data' => ''], 400);
         }
 
-        DB::beginTransaction();
         try {
-            $this->pemakaianRepo->deleteAdditional($id);
-            $this->pemakaianRepo->delete($id);
-            DB::commit();
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = [];
+            $deleted = $this->pemakaianRepo->destroy((int) $id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = [];
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = [];
+            }
         } catch (\Exception $e) {
-            DB::rollback();
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = [];
@@ -148,14 +150,20 @@ class PemakaianController extends Controller
 
         if (count($reqData) > 0) {
             foreach ($reqData as $id) {
-                DB::beginTransaction();
                 try {
-                    $this->pemakaianRepo->deleteAdditional($id);
-                    $this->pemakaianRepo->delete($id);
-                    DB::commit();
-                    $successDelete++;
+                    $pemakaianId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                    if (!$pemakaianId) {
+                        $failedDelete++;
+                        continue;
+                    }
+
+                    $deleted = $this->pemakaianRepo->destroy((int) $pemakaianId, (int) $request->user_id);
+                    if ($deleted) {
+                        $successDelete++;
+                    } else {
+                        $failedDelete++;
+                    }
                 } catch (\Exception $e) {
-                    DB::rollback();
                     $failedDelete++;
                 }
             }

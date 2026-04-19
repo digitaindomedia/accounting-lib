@@ -4,20 +4,26 @@ namespace Icso\Accounting\Repositories\Master\Vendor;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Master\VendorMeta;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Constants;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class VendorRepo extends ElequentRepository
 {
 
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(Vendor $model)
+    public function __construct(Vendor $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -56,13 +62,20 @@ class VendorRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
         $vendorPhoto = '';
+        $userId = $request->user_id;
         $vendorCode = $request->vendor_code;
+
         if(empty($vendorCode)) {
             $vendorCode = $this->autoGenerateCode($request->vendor_name);
         }
+
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['vendor_meta'])?->toArray();
+        }
+
         $arrData = array(
             'vendor_name' => $request->vendor_name,
             'vendor_code' => $vendorCode,
@@ -83,26 +96,88 @@ class VendorRepo extends ElequentRepository
             'aging_by' => !empty($request->aging_by) ? $request->aging_by : '',
             'vendor_email' => (!empty($request->vendor_email) ? $request->vendor_email : ''),
             'vendor_phone' => (!empty($request->vendor_phone) ? $request->vendor_phone : ''),
-            'updated_at' => date('Y-m-d H:i:s'),
-            'updated_by' => $request->user_id
+            'updated_at' => now(),
+            'updated_by' => $userId
         );
-        if(empty($id)) {
-            $arrData['vendor_photo'] = '';
-            $arrData['vendor_status'] = Constants::AKTIF;
-            $arrData['vendor_type'] = $request->vendor_type;
-            $arrData['created_by'] = $request->user_id;
-            $arrData['created_at'] = date('Y-m-d H:i:s');
 
-            $vendorId =  $this->create($arrData);
-            $this->insertVendorMeta($vendorId->id, $request->vendor_meta);
-            return $vendorId;
-        } else {
-            if(!empty($vendorPhoto)) {
-                $arrData['vendor_photo'] = $vendorPhoto;
+        DB::beginTransaction();
+        try {
+            if(empty($id)) {
+                $arrData['vendor_photo'] = '';
+                $arrData['vendor_status'] = Constants::AKTIF;
+                $arrData['vendor_type'] = $request->vendor_type;
+                $arrData['created_by'] = $userId;
+                $arrData['created_at'] = now();
+
+                $vendor = $this->create($arrData);
+                $vendorId = $vendor->id;
+                $this->insertVendorMeta($vendorId, $request->vendor_meta);
+                $action = 'Tambah data master vendor';
+            } else {
+                if(!empty($vendorPhoto)) {
+                    $arrData['vendor_photo'] = $vendorPhoto;
+                }
+                $this->update($arrData,$id);
+                $vendorId = $id;
+                $this->insertVendorMeta($id, $request->vendor_meta);
+                $action = 'Edit data master vendor';
             }
-            $updateRes =  $this->update($arrData,$id);
-            $this->insertVendorMeta($id, $request->vendor_meta);
-            return $updateRes;
+
+            DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => $action,
+                'model_type' => Vendor::class,
+                'model_id' => $vendorId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($vendorId, [], ['vendor_meta'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[VendorRepo][store] ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $vendor = Vendor::find($id);
+        if (!$vendor || !$vendor->canDelete()) {
+            return false;
+        }
+
+        $oldData = $this->findOne($id, [], ['vendor_meta'])?->toArray();
+
+        DB::beginTransaction();
+        try {
+            VendorMeta::where('vendor_id', $id)->delete();
+            $vendor->delete();
+            DB::commit();
+
+            $vendorName = $oldData['vendor_name'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data master vendor dengan nama ' . $vendorName,
+                'model_type' => Vendor::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[VendorRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 

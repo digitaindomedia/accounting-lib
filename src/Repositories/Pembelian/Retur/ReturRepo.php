@@ -19,10 +19,12 @@ use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Services\IdentityStockService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -33,11 +35,13 @@ use Illuminate\Support\Facades\Log;
 class ReturRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseRetur $model)
+    public function __construct(PurchaseRetur $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     // ... [Keep getAllDataBy and getAllTotalDataBy as they were] ...
@@ -106,6 +110,10 @@ class ReturRepo extends ElequentRepository
     {
         $userId = $request->user_id;
         $id = $request->id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['vendor','receive','returproduct','invoice','returproduct.receiveproduct','returproduct.orderproduct', 'returproduct.product','returproduct.tax','returproduct.tax.taxgroup','returproduct.tax.taxgroup.tax','returproduct.unit'])?->toArray();
+        }
         $inventoryRepo = new InventoryRepo(new Inventory());
         $identityService = new IdentityStockService();
         // Prepare Header Data
@@ -231,12 +239,27 @@ class ReturRepo extends ElequentRepository
 
             DB::commit();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => empty($id)
+                    ? 'Tambah data retur pembelian dengan nomor ' . $data['retur_no']
+                    : 'Edit data retur pembelian dengan nomor ' . $data['retur_no'],
+                'model_type' => PurchaseRetur::class,
+                'model_id' => $returId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($returId, [], ['vendor','receive','returproduct','invoice','returproduct.receiveproduct','returproduct.orderproduct', 'returproduct.product','returproduct.tax','returproduct.tax.taxgroup','returproduct.tax.taxgroup.tax','returproduct.unit'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
-            Log::error("Retur Store Error: " . $e->getMessage());
+            Log::error("[ReturRepo][store] " . $e->getMessage());
             return false;
         }
     }
@@ -434,5 +457,41 @@ class ReturRepo extends ElequentRepository
         Inventory::where('transaction_code', TransactionsCode::RETUR_PEMBELIAN)
             ->where('transaction_id', $idRetur)->delete();
         PurchasePaymentInvoice::where('retur_id', $idRetur)->delete();
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $retur = $this->findOne($id, [], ['vendor','receive','returproduct','invoice','returproduct.receiveproduct','returproduct.orderproduct', 'returproduct.product','returproduct.tax','returproduct.tax.taxgroup','returproduct.tax.taxgroup.tax','returproduct.unit']);
+        if (!$retur) {
+            return false;
+        }
+
+        $oldData = $retur->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $returNo = $oldData['retur_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data retur pembelian dengan nomor ' . $returNo,
+                'model_type' => PurchaseRetur::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[ReturRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 }

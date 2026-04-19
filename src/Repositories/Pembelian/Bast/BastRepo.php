@@ -10,9 +10,11 @@ use Icso\Accounting\Models\Pembelian\Bast\PurchaseBastMeta;
 use Icso\Accounting\Models\Pembelian\Bast\PurchaseBastProduct;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,11 +23,13 @@ use Illuminate\Support\Facades\Log;
 class BastRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseBast $model)
+    public function __construct(PurchaseBast $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
@@ -84,6 +88,11 @@ class BastRepo extends ElequentRepository
     public function store(Request $request, array $other = []): bool
     {
         $id = $request->id;
+        $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['vendor','order','bastproduct','bastproduct.orderproduct','bastproduct.tax'])?->toArray();
+        }
         $bastNo = $request->bast_no;
         if(empty($bastNo)){
             $bastNo = self::generateCodeTransaction(new PurchaseBast(),KeyNomor::NO_BAST,'bast_no','bast_date');
@@ -92,7 +101,6 @@ class BastRepo extends ElequentRepository
         $orderId = $request->order_id;
         $vendorId = $request->vendor_id;
         $note = $request->note;
-        $userId = $request->user_id;
         $arrData = array(
             'bast_no' => $bastNo,
             'bast_date' => $bastDate,
@@ -100,18 +108,20 @@ class BastRepo extends ElequentRepository
             'vendor_id' => $vendorId,
             'note' => $note,
             'updated_by' => $userId,
-            'updated_at' => date('Y-m-d H:i:s')
+            'updated_at' => now()
         );
         DB::beginTransaction();
         try {
             if(empty($id)){
                 $arrData['reason'] = '';
                 $arrData['bast_status'] = StatusEnum::OPEN;
-                $arrData['created_at'] = date('Y-m-d H:i:s');
+                $arrData['created_at'] = now();
                 $arrData['created_by'] = $userId;
                 $res = $this->create($arrData);
+                $action = 'Tambah data BAST pembelian dengan nomor ' . $bastNo;
             } else{
                 $res = $this->update($arrData, $id);
+                $action = 'Edit data BAST pembelian dengan nomor ' . $bastNo;
             }
             if($res){
                 if(!empty($id)){
@@ -160,6 +170,19 @@ class BastRepo extends ElequentRepository
                     }
                 }
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => $action,
+                    'model_type' => PurchaseBast::class,
+                    'model_id' => $idBast,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idBast, [], ['vendor','order','bastproduct','bastproduct.orderproduct','bastproduct.tax'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             }
             else {
@@ -167,7 +190,7 @@ class BastRepo extends ElequentRepository
             }
         }
         catch (\Exception $e){
-            Log::error($e->getMessage());
+            Log::error('[BastRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -223,5 +246,41 @@ class BastRepo extends ElequentRepository
     public function deleteAdditional($id)
     {
         PurchaseBastProduct::where(array('bast_id' => $id))->delete();
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $bast = $this->findOne($id, [], ['vendor','order','bastproduct','bastproduct.orderproduct','bastproduct.tax']);
+        if (!$bast) {
+            return false;
+        }
+
+        $oldData = $bast->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            $this->deleteByWhere(['id' => $id]);
+            DB::commit();
+
+            $bastNo = $oldData['bast_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data BAST pembelian dengan nomor ' . $bastNo,
+                'model_type' => PurchaseBast::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[BastRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 }

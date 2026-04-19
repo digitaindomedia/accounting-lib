@@ -14,8 +14,10 @@ use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -25,11 +27,13 @@ use Illuminate\Support\Facades\Log;
 class PemakaianRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(StockUsage $model)
+    public function __construct(StockUsage $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -79,6 +83,17 @@ class PemakaianRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], [
+                'warehouse',
+                'coa_stock',
+                'stockusageproduct',
+                'stockusageproduct.product',
+                'stockusageproduct.coa',
+                'stockusageproduct.unit'
+            ])?->toArray();
+        }
         $arrData = $this->prepareData($request,$userId);
 
         DB::beginTransaction();
@@ -99,12 +114,34 @@ class PemakaianRepo extends ElequentRepository
                 $this->handleFileUploads($request->file('files'), $idUsage, $userId);
 
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data pemakaian persediaan dengan nomor ' . $arrData['ref_no']
+                        : 'Edit data pemakaian persediaan dengan nomor ' . $arrData['ref_no'],
+                    'model_type' => StockUsage::class,
+                    'model_id' => $idUsage,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idUsage, [], [
+                        'warehouse',
+                        'coa_stock',
+                        'stockusageproduct',
+                        'stockusageproduct.product',
+                        'stockusageproduct.coa',
+                        'stockusageproduct.unit'
+                    ])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             } else {
                 return false;
             }
         } catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[PemakaianRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -289,6 +326,49 @@ class PemakaianRepo extends ElequentRepository
                     }
                 }
             }
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $usage = $this->findOne($id, [], [
+            'warehouse',
+            'coa_stock',
+            'stockusageproduct',
+            'stockusageproduct.product',
+            'stockusageproduct.coa',
+            'stockusageproduct.unit'
+        ]);
+        if (!$usage) {
+            return false;
+        }
+
+        $oldData = $usage->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $refNo = $oldData['ref_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data pemakaian persediaan dengan nomor ' . $refNo,
+                'model_type' => StockUsage::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[PemakaianRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 }

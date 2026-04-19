@@ -20,11 +20,13 @@ use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Services\IdentityStockService;
 use Icso\Accounting\Services\AutoConsumeProductionService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -34,11 +36,13 @@ use Illuminate\Support\Facades\Log;
 class DeliveryRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(SalesDelivery $model)
+    public function __construct(SalesDelivery $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     // ... [Keep getAllDataBy, getAllTotalDataBy as original] ...
@@ -103,6 +107,10 @@ class DeliveryRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['order','order.ordermeta', 'vendor', 'warehouse','deliveryproduct','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.product','deliveryproduct.orderproduct'])?->toArray();
+        }
 
         // Prepare Data
         $data = $this->gatherHeaderData($request);
@@ -253,11 +261,26 @@ class DeliveryRepo extends ElequentRepository
             $this->handleFileUploads($request->file('files'), $deliveryId, $userId);
 
             DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => empty($id)
+                    ? 'Tambah data pengiriman penjualan dengan nomor ' . $data['delivery_no']
+                    : 'Edit data pengiriman penjualan dengan nomor ' . $data['delivery_no'],
+                'model_type' => SalesDelivery::class,
+                'model_id' => $deliveryId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($deliveryId, [], ['order','order.ordermeta', 'vendor', 'warehouse','deliveryproduct','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.product','deliveryproduct.orderproduct'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("Delivery Store Error: " . $e->getMessage());
+            Log::error("[DeliveryRepo][store] " . $e->getMessage());
             return false;
         }
     }
@@ -309,6 +332,44 @@ class DeliveryRepo extends ElequentRepository
         SalesDeliveryProductItem::whereIn('delivery_product_id', $deliveryProducts->pluck('id')->toArray())->delete();
         SalesDeliveryProduct::where('delivery_id', $id)->delete();
         SalesDeliveryMeta::where('delivery_id', $id)->delete();
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $delivery = $this->findOne($id, [], ['order','order.ordermeta', 'vendor', 'warehouse','deliveryproduct','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.product','deliveryproduct.orderproduct']);
+        if (!$delivery) {
+            return false;
+        }
+
+        $oldData = $delivery->toArray();
+        $orderId = $delivery->order_id ?? null;
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            $this->resetSalesOrderStatus($orderId);
+            DB::commit();
+
+            $deliveryNo = $oldData['delivery_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data pengiriman penjualan dengan nomor ' . $deliveryNo,
+                'model_type' => SalesDelivery::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[DeliveryRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
@@ -538,7 +599,7 @@ class DeliveryRepo extends ElequentRepository
 
     public static function changeStatusDelivery($idDelivery, $statusDelivery=StatusEnum::SELESAI)
     {
-        $instance = new self(new SalesDelivery());
+        $instance = new self(new SalesDelivery(), app(ActivityLogService::class));
         $instance->update(['delivery_status' => $statusDelivery], $idDelivery);
     }
 

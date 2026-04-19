@@ -67,7 +67,7 @@ class InvoiceController extends Controller
         $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
         $hasMore = Helpers::hasMoreData($total, $page, $data);
 
-        $salesDeliveryRepo = new DeliveryRepo(new SalesDelivery());
+        $salesDeliveryRepo = new DeliveryRepo(new SalesDelivery(), app(ActivityLogService::class));
 
         if (count($data) > 0) {
             $data = $this->processInvoiceData($data, $salesDeliveryRepo);
@@ -293,7 +293,7 @@ class InvoiceController extends Controller
     }
 
     public function show(Request $request){
-        $salesDeliveryRepo = new DeliveryRepo(new SalesDelivery());
+        $salesDeliveryRepo = new DeliveryRepo(new SalesDelivery(), app(ActivityLogService::class));
         $id = $request->id;
         $res = $this->invoiceRepo->findOne($id,array(),['vendor','warehouse','invoicemeta','invoicedelivery','invoicedelivery.delivery.warehouse','invoicedelivery.delivery.deliveryproduct','invoicedelivery.delivery.deliveryproduct.unit','invoicedelivery.delivery.deliveryproduct.product','invoicedelivery.delivery.deliveryproduct.tax','invoicedelivery.delivery.deliveryproduct.tax.taxgroup','invoicedelivery.delivery.deliveryproduct.tax.taxgroup.tax','order','order.ordermeta','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if($res){

@@ -5,8 +5,10 @@ use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\ProductCategory;
 use Icso\Accounting\Models\Master\ProductMeta;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Constants;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +18,13 @@ class ProductRepo extends ElequentRepository
 {
 
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(Product $model)
+    public function __construct(Product $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -70,8 +74,14 @@ class ProductRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
+        $userId = $request->user_id;
+        $oldData = null;
+
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['unit', 'categories', 'coa', 'coa_biaya', 'productconvertion'])->toArray();
+        }
+
         if(!empty($request->selling_price)) {
             $selling_price = Utility::remove_commas($request->selling_price);
         } else
@@ -97,28 +107,29 @@ class ProductRepo extends ElequentRepository
             'type_price' => '',
             'is_identity_tracking' => $request->boolean('is_identity_tracking'),
             'identity_label' => $request->identity_label,
-            'updated_by' => $request->user_id,
-            'updated_at' => date('Y-m-d H:i:s'),
+            'updated_by' => $userId,
+            'updated_at' => now(),
         );
         DB::beginTransaction();
         $res = '';
         try {
             if (empty($id)) {
-                $arrData['created_at'] = date('Y-m-d H:i:s');
-                $arrData['created_by'] = $request->user_id;
+                $arrData['created_at'] = now();
+                $arrData['created_by'] = $userId;
                 $arrData['product_type'] = $request->product_type;
                 $arrData['item_status'] = Constants::AKTIF;
                 $arrData['item_photo'] = '';
                 $res = $this->create($arrData);
+                $productId = $res->id;
+                $action = 'Tambah data master produk';
             } else {
                 $res = $this->update($arrData, $id);
+                $productId = $id;
+                $action = 'Edit data master produk';
             }
             if ($res) {
                 if (!empty($id)) {
-                    $productId = $id;
                     $this->deleteAdditional($id);
-                } else {
-                    $productId = $res->id;
                 }
                 if (!empty($request->category)) {
                     ProductCategory::create(array(
@@ -158,6 +169,19 @@ class ProductRepo extends ElequentRepository
                     $message = "Kouta penyimpanan Anda sudah penuh, beberapa gambar gagal disimpan";
                 }
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => $action,
+                    'model_type' => Product::class,
+                    'model_id' => $productId,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($productId, [], ['unit', 'categories', 'coa', 'coa_biaya', 'productconvertion'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return array('status' => true, 'message' => $message);
             } else {
                 return array('status' => false, 'message' => 'Data gagal disimpan');
@@ -167,6 +191,42 @@ class ProductRepo extends ElequentRepository
             Log::error($e->getMessage());
             DB::rollback();
             return array('status' => false, 'message' => 'Data gagal disimpan');
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $product = Product::find($id);
+        if (!$product || !$product->canDelete()) {
+            return false;
+        }
+
+        $oldData = $this->findOne($id, [], ['unit', 'categories', 'coa', 'coa_biaya', 'productconvertion'])?->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            $product->delete();
+            DB::commit();
+
+            $productName = $oldData['item_name'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data master produk dengan nama ' . $productName,
+                'model_type' => Product::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[ProductRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 

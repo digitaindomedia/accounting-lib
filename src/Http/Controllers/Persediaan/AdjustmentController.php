@@ -133,17 +133,18 @@ class AdjustmentController extends Controller
              return response()->json(['status' => false, 'message' => 'ID tidak valid', 'data' => []]);
         }
 
-        DB::beginTransaction();
         try {
-            $this->adjustmentRepo->deleteAdditional($id);
-            $this->adjustmentRepo->delete($id);
-            DB::commit();
-            
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = [];
+            $deleted = $this->adjustmentRepo->destroy($id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = [];
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = [];
+            }
         } catch (\Exception $e) {
-            DB::rollback();
             Log::error("Error deleting adjustment $id: " . $e->getMessage());
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
@@ -163,15 +164,20 @@ class AdjustmentController extends Controller
         $failedDelete = 0;
 
         foreach ($ids as $id) {
-            DB::beginTransaction();
+            $adjustmentId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+            if (!$adjustmentId) {
+                $failedDelete++;
+                continue;
+            }
             try {
-                $this->adjustmentRepo->deleteAdditional($id);
-                $this->adjustmentRepo->delete($id);
-                DB::commit();
-                $successDelete++;
+                $deleted = $this->adjustmentRepo->destroy((int) $adjustmentId, (int) $request->user_id);
+                if ($deleted) {
+                    $successDelete++;
+                } else {
+                    $failedDelete++;
+                }
             } catch (\Exception $e) {
-                DB::rollback();
-                Log::error("Error deleting adjustment $id in bulk: " . $e->getMessage());
+                Log::error("Error deleting adjustment $adjustmentId in bulk: " . $e->getMessage());
                 $failedDelete++;
             }
         }

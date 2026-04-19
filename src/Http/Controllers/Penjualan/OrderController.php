@@ -152,7 +152,7 @@ class OrderController extends Controller
             $this->data['message'] = "Data tidak bisa dihapus karena sudah ada uang muka";
             return response()->json($this->data);
         }
-        $res = $this->salesOrderRepo->delete($request->id);
+        $res = $this->salesOrderRepo->destroy($request->id, (int) $request->user_id);
         if($res){
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus';
@@ -170,12 +170,17 @@ class OrderController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $checkDp = $this->salesDpRepo->countByOrderId($id);
+                $orderId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$orderId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+                $checkDp = $this->salesDpRepo->countByOrderId($orderId);
                 if($checkDp > 0){
                     $failedDelete = $failedDelete + 1;
                     continue;
                 }
-                $res = $this->salesOrderRepo->delete($id);
+                $res = $this->salesOrderRepo->destroy((int) $orderId, (int) $request->user_id);
                 if($res){
                     $successDelete = $successDelete + 1;
                 } else {

@@ -14,10 +14,12 @@ use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProduct;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Pembelian\Request\RequestRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
@@ -27,11 +29,13 @@ use Illuminate\Support\Facades\Log;
 class OrderRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseOrder $model)
+    public function __construct(PurchaseOrder $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -120,6 +124,10 @@ class OrderRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['orderproduct','coa', 'ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit','purchaserequest'])?->toArray();
+        }
         $orderNo = $request->order_no ?: self::generateCodeTransaction(new PurchaseOrder(), KeyNomor::NO_ORDER_PEMBELIAN, 'order_no', 'order_date');
         $orderDate = Utility::changeDateFormat($request->order_date ?: date('Y-m-d'));
         $dateSend = $request->date_send;
@@ -143,19 +151,36 @@ class OrderRepo extends ElequentRepository
         try {
             if (empty($id)) {
                $res = $this->handleNewOrder($arrData, $userId,$orderType);
+               $orderId = $res->id;
+               $action = 'Tambah data order pembelian dengan nomor ' . $orderNo;
             } else {
                 $this->handleExistingOrder($arrData, $id, $requestId);
+                $orderId = $id;
+                $action = 'Edit data order pembelian dengan nomor ' . $orderNo;
             }
 
-            $this->processProducts( json_decode(json_encode($request->orderproduct)), $id ?? $res->id);
-            $this->handleFileUploads($request->file('files'), $userId, $id ?? $res->id);
+            $this->processProducts( json_decode(json_encode($request->orderproduct)), $orderId);
+            $this->handleFileUploads($request->file('files'), $userId, $orderId);
             if(!empty($request->request_id)){
                 RequestRepo::changeStatusRequest($request->request_id);
             }
             DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => $action,
+                'model_type' => PurchaseOrder::class,
+                'model_id' => $orderId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($orderId, [], ['orderproduct','coa', 'ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit','purchaserequest'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
         } catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[OrderRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -280,10 +305,21 @@ class OrderRepo extends ElequentRepository
     }
 
     public function delete($id){
+        return $this->destroy($id, (int) optional(request())->user_id);
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $find = $this->findOne($id,[],['orderproduct','coa', 'ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit','purchaserequest']);
+        if (!$find) {
+            return false;
+        }
+
+        $oldData = $find->toArray();
+
         DB::beginTransaction();
         try
         {
-            $find = $this->findOne($id);
             $idReq = $find->request_id;
             $this->deleteAdditional($id);
             $this->deleteByWhere(array('id' => $id));
@@ -291,11 +327,25 @@ class OrderRepo extends ElequentRepository
                 RequestRepo::changeStatusRequest($idReq);
             }
             DB::commit();
+
+            $orderNo = $oldData['order_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data order pembelian dengan nomor ' . $orderNo,
+                'model_type' => PurchaseOrder::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return true;
         }
-        catch (\Exception $e) {
-            Log::error($e->getMessage());
-            DB::rollback();
+        catch (\Throwable $e) {
+            Log::error('[OrderRepo][destroy] ' . $e->getMessage());
+            DB::rollBack();
             return false;
         }
     }
@@ -338,7 +388,7 @@ class OrderRepo extends ElequentRepository
 
     public static function changeStatusPenerimaan($idOrder)
     {
-        $orderRepo = new self(new PurchaseOrder());
+        $orderRepo = new self(new PurchaseOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($idOrder);
         $terima = $orderRepo->findInUseInPenerimaanById($find->id);
         if($terima['status_order_completed']){
@@ -418,7 +468,7 @@ class OrderRepo extends ElequentRepository
 
     public static function changeStatusOrderById($id,$statusOrder= StatusEnum::INVOICE)
     {
-        $orderRepo = new self(new PurchaseOrder());
+        $orderRepo = new self(new PurchaseOrder(), app(ActivityLogService::class));
         $arrUpdateStatus = array(
             'order_status' => $statusOrder
         );
@@ -427,7 +477,7 @@ class OrderRepo extends ElequentRepository
 
     public static function closeStatusOrderById($id)
     {
-        $orderRepo = new self(new PurchaseOrder());
+        $orderRepo = new self(new PurchaseOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($id);
         if(!empty($find)){
             if($find->order_status == StatusEnum::PENERIMAAN)

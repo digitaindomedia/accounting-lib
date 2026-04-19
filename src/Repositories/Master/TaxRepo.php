@@ -15,10 +15,13 @@ use Illuminate\Support\Facades\Log;
 class TaxRepo extends ElequentRepository
 {
     protected $model;
-    public function __construct(Tax $model)
+    protected ActivityLogService $activityLog;
+
+    public function __construct(Tax $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -100,7 +103,7 @@ class TaxRepo extends ElequentRepository
                         }
                     }
                 }
-                ActivityLogService::insertLog([
+                $this->activityLog->log([
                     'user_id'         => $userId,
                     'action'          => $action,
                     'model_type'      => Tax::class,
@@ -129,6 +132,42 @@ class TaxRepo extends ElequentRepository
     public function deleteTaxGroup($idTax){
         $res = TaxGroup::where(array('id_tax' => $idTax))->delete();
         return $res;
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $tax = Tax::find($id);
+        if (!$tax || !$tax->canDelete()) {
+            return false;
+        }
+
+        $oldData = $this->findOne($id, [], ['taxgroup', 'taxgroup.tax', 'purchasecoa', 'salescoa'])?->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteTaxGroup($id);
+            $tax->delete();
+            DB::commit();
+
+            $taxName = $oldData['tax_name'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data master pajak dengan nama ' . $taxName,
+                'model_type' => Tax::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[TaxRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 
     public static function getTaxId($taxPercentage)

@@ -111,7 +111,7 @@ class PurchaseOrderController extends Controller
     }
 
     public function delete(Request $request){
-        $res = $this->purchaseOrderRepo->delete($request->id);
+        $res = $this->purchaseOrderRepo->destroy((int) $request->id, (int) $request->user_id);
         if($res){
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil dihapus';
@@ -129,7 +129,13 @@ class PurchaseOrderController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $res = $this->purchaseOrderRepo->delete($id);
+                $purchaseOrderId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$purchaseOrderId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+
+                $res = $this->purchaseOrderRepo->destroy((int) $purchaseOrderId, (int) $request->user_id);
                 if($res){
                     $successDelete = $successDelete + 1;
                 } else {

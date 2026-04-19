@@ -13,9 +13,11 @@ use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownPaymentMeta;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -26,11 +28,13 @@ use Illuminate\Support\Facades\Log;
 class DpRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(SalesDownpayment $model)
+    public function __construct(SalesDownpayment $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     // ... [Keep getAllDataBy and getAllTotalDataBy as they were] ...
@@ -81,6 +85,10 @@ class DpRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['order', 'coa', 'order.vendor','tax','tax.taxgroup'])?->toArray();
+        }
 
         // Prepare Data
         $data = $this->gatherInputData($request);
@@ -97,10 +105,12 @@ class DpRepo extends ElequentRepository
                 $data['created_by'] = $userId;
                 $res = $this->create($data);
                 $resId = $res->id;
+                $action = 'Tambah data uang muka penjualan dengan nomor ' . ($res->ref_no ?? $data['ref_no']);
             } else {
                 $this->update($data, $id);
                 $resId = $id;
                 $this->deleteAdditional($resId);
+                $action = 'Edit data uang muka penjualan dengan nomor ' . $data['ref_no'];
             }
 
             // 2. Posting Jurnal (CRITICAL)
@@ -111,11 +121,24 @@ class DpRepo extends ElequentRepository
             $this->handleFileUploads($request->file('files'), $resId, $userId);
 
             DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => $action,
+                'model_type' => SalesDownpayment::class,
+                'model_id' => $resId,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($resId, [], ['order', 'coa', 'order.vendor','tax','tax.taxgroup'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("Sales DP Store Error: " . $e->getMessage());
+            Log::error("[SalesDpRepo][store] " . $e->getMessage());
             return false;
         }
     }
@@ -333,7 +356,43 @@ class DpRepo extends ElequentRepository
 
     public static function changeStatusUangMuka($idUangMuka, $statusUangMuka=StatusEnum::SELESAI)
     {
-        $instance = new self(new SalesDownpayment());
+        $instance = new self(new SalesDownpayment(), app(ActivityLogService::class));
         $instance->update(['downpayment_status' => $statusUangMuka], $idUangMuka);
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $dp = $this->findOne($id, [], ['order', 'coa', 'order.vendor','tax','tax.taxgroup']);
+        if (!$dp) {
+            return false;
+        }
+
+        $oldData = $dp->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $refNo = $oldData['ref_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data uang muka penjualan dengan nomor ' . $refNo,
+                'model_type' => SalesDownpayment::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[SalesDpRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 }

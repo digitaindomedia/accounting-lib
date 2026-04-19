@@ -9,8 +9,10 @@ use Icso\Accounting\Models\Persediaan\Mutation;
 use Icso\Accounting\Models\Persediaan\MutationMeta;
 use Icso\Accounting\Models\Persediaan\MutationProduct;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -21,11 +23,13 @@ use Illuminate\Support\Facades\Log;
 class MutationRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(Mutation $model)
+    public function __construct(Mutation $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -80,6 +84,18 @@ class MutationRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], [
+                'fromwarehouse',
+                'mutation',
+                'towarehouse',
+                'mutationproduct',
+                'salesquotation',
+                'mutationproduct.product',
+                'mutationproduct.unit'
+            ])?->toArray();
+        }
         $arrData = $this->prepareMutationData($request, $userId);
         DB::beginTransaction();
         try {
@@ -89,12 +105,35 @@ class MutationRepo extends ElequentRepository
                 $idAdjustment = $this->handleProductsAndFiles($request, $res, $id);
                 $this->updateStatusMutationOut($request, $idAdjustment);
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data mutasi persediaan dengan nomor ' . $arrData['ref_no']
+                        : 'Edit data mutasi persediaan dengan nomor ' . $arrData['ref_no'],
+                    'model_type' => Mutation::class,
+                    'model_id' => $idAdjustment,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idAdjustment, [], [
+                        'fromwarehouse',
+                        'mutation',
+                        'towarehouse',
+                        'mutationproduct',
+                        'salesquotation',
+                        'mutationproduct.product',
+                        'mutationproduct.unit'
+                    ])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             } else {
                 return false;
             }
         } catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[MutationRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -317,6 +356,50 @@ class MutationRepo extends ElequentRepository
                 }
                 $mutationOut->save();
             }
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $mutation = $this->findOne($id, [], [
+            'fromwarehouse',
+            'mutation',
+            'towarehouse',
+            'mutationproduct',
+            'salesquotation',
+            'mutationproduct.product',
+            'mutationproduct.unit'
+        ]);
+        if (!$mutation) {
+            return false;
+        }
+
+        $oldData = $mutation->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            $this->delete($id);
+            DB::commit();
+
+            $refNo = $oldData['ref_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data mutasi persediaan dengan nomor ' . $refNo,
+                'model_type' => Mutation::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[MutationRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 }

@@ -6,8 +6,10 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
 use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrderMeta;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +18,13 @@ use Illuminate\Support\Facades\Log;
 class OrderRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseOrder $model)
+    public function __construct(PurchaseOrder $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = []): mixed
@@ -72,6 +76,16 @@ class OrderRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], [
+                'aset_tetap_coa',
+                'dari_akun_coa',
+                'akumulasi_penyusutan_coa',
+                'penyusutan_coa',
+                'downpayment'
+            ])?->toArray();
+        }
         $asetNo = $request->no_aset;
         if(empty($asetNo)){
             $asetNo = self::generateCodeTransaction(new PurchaseOrder(),KeyNomor::NO_ORDER_PEMBELIAN_ASET_TETAP,'no_aset','aset_tetap_date');
@@ -107,42 +121,73 @@ class OrderRepo extends ElequentRepository
             'updated_by' => $userId,
             'updated_at' => date('Y-m-d H:i:s')
         );
-        if (empty($id)) {
-            $arrData['created_at'] = date('Y-m-d H:i:s');
-            $arrData['status_aset_tetap'] = StatusEnum::OPEN;
-            $arrData['created_by'] = $userId;
-            $arrData['reason'] = '';
-            $res = $this->create($arrData);
-        } else {
-            $res = $this->update($arrData, $id);
-        }
-        if($res){
-            if(!empty($id)){
-                $this->deleteAdditional($id);
-                $idAsetTetap = $id;
+        DB::beginTransaction();
+        try {
+            if (empty($id)) {
+                $arrData['created_at'] = date('Y-m-d H:i:s');
+                $arrData['status_aset_tetap'] = StatusEnum::OPEN;
+                $arrData['created_by'] = $userId;
+                $arrData['reason'] = '';
+                $res = $this->create($arrData);
             } else {
-                $idAsetTetap = $res->id;
+                $res = $this->update($arrData, $id);
             }
-            $fileUpload = new FileUploadService();
-            $uploadedFiles = $request->file('files');
-            if(!empty($uploadedFiles)) {
-                if (count($uploadedFiles) > 0) {
-                    foreach ($uploadedFiles as $file) {
-                        // Handle each file as needed
-                        $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
-                        if ($resUpload) {
-                            $arrUpload = array(
-                                'aset_tetap_id' => $idAsetTetap,
-                                'meta_key' => 'upload',
-                                'meta_value' => $resUpload
-                            );
-                            PurchaseOrderMeta::create($arrUpload);
+
+            if($res){
+                if(!empty($id)){
+                    $this->deleteAdditional($id);
+                    $idAsetTetap = $id;
+                } else {
+                    $idAsetTetap = $res->id;
+                }
+                $fileUpload = new FileUploadService();
+                $uploadedFiles = $request->file('files');
+                if(!empty($uploadedFiles)) {
+                    if (count($uploadedFiles) > 0) {
+                        foreach ($uploadedFiles as $file) {
+                            $resUpload = $fileUpload->upload($file, tenant(), $request->user_id);
+                            if ($resUpload) {
+                                $arrUpload = array(
+                                    'aset_tetap_id' => $idAsetTetap,
+                                    'meta_key' => 'upload',
+                                    'meta_value' => $resUpload
+                                );
+                                PurchaseOrderMeta::create($arrUpload);
+                            }
                         }
                     }
                 }
+
+                DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data order pembelian aset tetap dengan nomor ' . $asetNo
+                        : 'Edit data order pembelian aset tetap dengan nomor ' . $asetNo,
+                    'model_type' => PurchaseOrder::class,
+                    'model_id' => $idAsetTetap,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idAsetTetap, [], [
+                        'aset_tetap_coa',
+                        'dari_akun_coa',
+                        'akumulasi_penyusutan_coa',
+                        'penyusutan_coa',
+                        'downpayment'
+                    ])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
+                return true;
             }
-            return true;
-        } else {
+
+            DB::rollBack();
+            return false;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[AsetTetap\\Pembelian\\OrderRepo][store] ' . $e->getMessage());
             return false;
         }
     }
@@ -159,20 +204,50 @@ class OrderRepo extends ElequentRepository
         PurchaseOrderMeta::where(array('aset_tetap_id' => $id))->delete();
     }
 
-    public function delete($id)
+    public function destroy(int $id, int $userId): bool
     {
+        $purchaseOrder = $this->findOne($id, [], [
+            'aset_tetap_coa',
+            'dari_akun_coa',
+            'akumulasi_penyusutan_coa',
+            'penyusutan_coa',
+            'downpayment'
+        ]);
+        if (!$purchaseOrder) {
+            return false;
+        }
+
+        $oldData = $purchaseOrder->toArray();
+
         DB::beginTransaction();
-        try
-        {
+        try {
             $this->deleteAdditional($id);
             $this->deleteByWhere(array('id' => $id));
             DB::commit();
+
+            $noAset = $oldData['no_aset'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data order pembelian aset tetap dengan nomor ' . $noAset,
+                'model_type' => PurchaseOrder::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return true;
-        }
-        catch (\Exception $e) {
-            Log::error($e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('[AsetTetap\\Pembelian\\OrderRepo][destroy] ' . $e->getMessage());
             DB::rollback();
             return false;
         }
+    }
+
+    public function delete($id)
+    {
+        return $this->destroy((int) $id, (int) request()->input('user_id'));
     }
 }

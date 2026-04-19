@@ -5,18 +5,24 @@ use DateTime;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Constants;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CoaRepo extends ElequentRepository
 {
 
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(Coa $model)
+    public function __construct(Coa $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -49,8 +55,8 @@ class CoaRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
+        $userId = $request->user_id;
         $dokumen = "";
         $headcoa = $request->head_coa;
         $subheadcoa = $request->subhead_coa;
@@ -117,6 +123,11 @@ class CoaRepo extends ElequentRepository
             return false;
         } else
         {
+            $oldData = null;
+            if (!empty($id)) {
+                $oldData = $this->findOne($id)?->toArray();
+            }
+
             $arrData = array(
                 'coa_name' => $request->coa_name,
                 'coa_code' => $coa_code,
@@ -127,18 +138,46 @@ class CoaRepo extends ElequentRepository
                 'neraca' => $neraca,
                 'laba_rugi' => $laba_rugi,
                 'coa_category' => (!empty($request->coa_category) ? $request->coa_category : ''),
-                'updated_at' => date('Y-m-d H:i:s'),
-                'updated_by' => $request->user_id,
+                'updated_at' => now(),
+                'updated_by' => $userId,
                 'field_name' => (!empty($request->field_name) ? $request->field_name : ''),
                 'connect_db' => !empty($connect_db) ? $connect_db : 0,
             );
-            if (empty($id)) {
-                $arrData['coa_status'] = Constants::AKTIF;
-                $arrData['created_by'] = $request->user_id;
-                $arrData['created_at'] = date('Y-m-d H:i:s');
-                return $this->create($arrData);
-            } else {
-                return $this->update($arrData, $id);
+
+            DB::beginTransaction();
+            try {
+                if (empty($id)) {
+                    $arrData['coa_status'] = Constants::AKTIF;
+                    $arrData['created_by'] = $userId;
+                    $arrData['created_at'] = now();
+                    $result = $this->create($arrData);
+                    $coaId = $result->id;
+                    $action = 'Tambah data master coa dengan nama ' . $request->coa_name;
+                } else {
+                    $this->update($arrData, $id);
+                    $coaId = $id;
+                    $action = 'Edit data master coa dengan nama ' . $request->coa_name;
+                }
+
+                DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => $action,
+                    'model_type' => Coa::class,
+                    'model_id' => $coaId,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($coaId)?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
+                return true;
+            } catch (\Throwable $e) {
+                DB::rollBack();
+                Log::error('[CoaRepo][store] ' . $e->getMessage());
+                return false;
             }
         }
 
@@ -210,7 +249,7 @@ class CoaRepo extends ElequentRepository
 
     public function updateDate(Request $request)
     {
-        // TODO: Implement updateDate() method.
+        $oldData = $this->findOne($request->id)?->toArray();
         $arrData = array();
         if ($request->coa_level == '1') {
             $neraca = $request->neraca;
@@ -222,13 +261,13 @@ class CoaRepo extends ElequentRepository
                 'neraca' => $neraca,
                 'laba_rugi' => $laba_rugi,
                 'neraca_type' => $neracaType,
-                'updated_at' => date('Y-m-d H:i:s'),
+                'updated_at' => now(),
                 'updated_by' => $request->user_id
             );
         } else if ($request->coa_level == '2' || $request->coa_level == '3') {
             $arrData = array(
                 'coa_name' => $request->coa_name,
-                'updated_at' => date('Y-m-d H:i:s'),
+                'updated_at' => now(),
                 'updated_by' => $request->user_id
             );
             if(!empty($request->laba_rugi_type)){
@@ -239,14 +278,69 @@ class CoaRepo extends ElequentRepository
                 'coa_name' => $request->coa_name,
                 'coa_code' => $request->coa_code,
                 'coa_category' => (!empty($request->coa_category) ? $request->coa_category : ''),
-                'updated_at' => date('Y-m-d H:i:s'),
+                'updated_at' => now(),
                 'updated_by' => $request->user_id,
                 'field_name' => (!empty($request->field_name) ? $request->field_name : ''),
                 'connect_db' => $request->connect_db
             );
         }
-        $res = $this->update($arrData, $request->id);
-        return $res;
+        DB::beginTransaction();
+        try {
+            $res = $this->update($arrData, $request->id);
+            DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $request->user_id,
+                'action' => 'Edit data master coa dengan nama ' . $request->coa_name,
+                'model_type' => Coa::class,
+                'model_id' => $request->id,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($request->id)?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
+            return $res;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[CoaRepo][updateDate] ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $coa = Coa::find($id);
+        if (!$coa || !$coa->canDelete()) {
+            return false;
+        }
+
+        $oldData = $coa->toArray();
+
+        DB::beginTransaction();
+        try {
+            $coa->delete();
+            DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data master coa dengan nama ' . $oldData['coa_name'],
+                'model_type' => Coa::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[CoaRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
     }
 
     public function getChild($id, $fromDate, $untilDate,&$saldoTotal)

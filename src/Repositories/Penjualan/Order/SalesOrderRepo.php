@@ -13,9 +13,11 @@ use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProduct;
 use Icso\Accounting\Models\Penjualan\Spk\SalesSpkProduct;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,11 +26,13 @@ use Illuminate\Support\Facades\Log;
 class SalesOrderRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(SalesOrder $model)
+    public function __construct(SalesOrder $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -84,9 +88,12 @@ class SalesOrderRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['orderproduct','salesquotation','ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray();
+        }
         $orderNo = $request->order_no;
         if (empty($orderNo)) {
             $orderNo = self::generateCodeTransaction(new SalesOrder(), KeyNomor::NO_ORDER_PENJUALAN, 'order_no', 'order_date');
@@ -152,12 +159,27 @@ class SalesOrderRepo extends ElequentRepository
                 $this->handleFileUploads($request->file('files'), $idOrder, $userId);
                 DB::statement('SET FOREIGN_KEY_CHECKS=1');
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => $isNewOrder
+                        ? 'Tambah data order penjualan dengan nomor ' . $orderNo
+                        : 'Edit data order penjualan dengan nomor ' . $orderNo,
+                    'model_type' => SalesOrder::class,
+                    'model_id' => $idOrder,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($idOrder, [], ['orderproduct','salesquotation','ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             } else {
                 return false;
             }
         }catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[SalesOrderRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -318,27 +340,54 @@ class SalesOrderRepo extends ElequentRepository
     }
 
     public function delete($id){
+        return $this->destroy($id, (int) optional(request())->user_id);
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $order = $this->findOne($id, [], ['orderproduct','salesquotation','ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+        if (!$order) {
+            return false;
+        }
+
+        $oldData = $order->toArray();
+
         DB::beginTransaction();
         try
         {
-            $order = SalesOrder::with('orderproduct')->find($id);
-            if (!empty($order) && !empty($order->quotation_id)) {
-                $this->restoreQuotationProductQtyLeft($order->quotation_id, $order->orderproduct);
+            $orderModel = SalesOrder::with('orderproduct')->find($id);
+            if (!empty($orderModel) && !empty($orderModel->quotation_id)) {
+                $this->restoreQuotationProductQtyLeft($orderModel->quotation_id, $orderModel->orderproduct);
             }
             $this->deleteAdditional($id);
             $this->deleteByWhere(array('id' => $id));
             DB::commit();
+
+            $orderNo = $oldData['order_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data order penjualan dengan nomor ' . $orderNo,
+                'model_type' => SalesOrder::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return true;
         }
-        catch (\Exception $e) {
-            DB::rollback();
+        catch (\Throwable $e) {
+            Log::error('[SalesOrderRepo][destroy] ' . $e->getMessage());
+            DB::rollBack();
             return false;
         }
     }
 
     public static function changeStatusByDelivery($idOrder)
     {
-        $orderRepo = new self(new SalesOrder());
+        $orderRepo = new self(new SalesOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($idOrder);
         $delivery = $orderRepo->findInUseInDeliveryOrSpkById($idOrder);
         if($delivery['status_order_completed']){
@@ -355,7 +404,7 @@ class SalesOrderRepo extends ElequentRepository
 
     public static function changeStatusOrderById($id,$statusOrder= StatusEnum::INVOICE)
     {
-        $orderRepo = new self(new SalesOrder());
+        $orderRepo = new self(new SalesOrder(), app(ActivityLogService::class));
         $arrUpdateStatus = array(
             'order_status' => $statusOrder
         );
@@ -364,7 +413,7 @@ class SalesOrderRepo extends ElequentRepository
 
     public static function closeStatusOrderById($id)
     {
-        $orderRepo = new self(new SalesOrder());
+        $orderRepo = new self(new SalesOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($id);
         if(!empty($find)){
             if($find->order_status == StatusEnum::DELIVERY)

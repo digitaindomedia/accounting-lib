@@ -19,8 +19,10 @@ use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -31,11 +33,13 @@ use Illuminate\Support\Facades\Log;
 class ReturRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(SalesRetur $model)
+    public function __construct(SalesRetur $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     // ... [Keep getAllDataBy and getAllTotalDataBy as original] ...
@@ -104,6 +108,10 @@ class ReturRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id,array(),['vendor','delivery','returproduct','returproduct.product','returproduct.unit','returproduct.tax','returproduct.tax.taxgroup','returproduct.deliveryproduct','returproduct.deliveryproduct.product'])?->toArray();
+        }
 
         // Prepare Header
         $arrData = $this->gatherHeaderData($request);
@@ -170,11 +178,26 @@ class ReturRepo extends ElequentRepository
             $this->handleFileUploads($request->file('files'), $idRetur, $userId);
 
             DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => empty($id)
+                    ? 'Tambah data retur penjualan dengan nomor ' . $arrData['retur_no']
+                    : 'Edit data retur penjualan dengan nomor ' . $arrData['retur_no'],
+                'model_type' => SalesRetur::class,
+                'model_id' => $idRetur,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($idRetur,array(),['vendor','delivery','returproduct','returproduct.product','returproduct.unit','returproduct.tax','returproduct.tax.taxgroup','returproduct.deliveryproduct','returproduct.deliveryproduct.product'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize($request),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return true;
 
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("Sales Retur Store Error: " . $e->getMessage());
+            Log::error("[SalesReturRepo][store] " . $e->getMessage());
             return false;
         }
     }
@@ -464,6 +487,42 @@ class ReturRepo extends ElequentRepository
                     ]);
                 }
             }
+        }
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $retur = $this->findOne($id,array(),['vendor','delivery','returproduct','returproduct.product','returproduct.unit','returproduct.tax','returproduct.tax.taxgroup','returproduct.deliveryproduct','returproduct.deliveryproduct.product']);
+        if (!$retur) {
+            return false;
+        }
+
+        $oldData = $retur->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $returNo = $oldData['retur_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data retur penjualan dengan nomor ' . $returNo,
+                'model_type' => SalesRetur::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[SalesReturRepo][destroy] ' . $e->getMessage());
+            return false;
         }
     }
 }

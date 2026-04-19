@@ -116,4 +116,38 @@ class PaymentMethodRepo extends ElequentRepository
             return false;
         }
     }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $paymentMethod = PaymentMethod::find($id);
+        if (!$paymentMethod || !$paymentMethod->canDelete()) {
+            return false;
+        }
+
+        $oldData = $paymentMethod->toArray();
+
+        DB::beginTransaction();
+        try {
+            $paymentMethod->delete();
+            DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data master metode pembayaran dengan nama ' . $oldData['payment_name'],
+                'model_type' => PaymentMethod::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[PaymentMethodRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
+    }
 }

@@ -25,6 +25,7 @@ use Icso\Accounting\Repositories\Pembelian\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
 use Icso\Accounting\Repositories\Pembelian\Retur\ReturRepo;
 use Icso\Accounting\Services\Domain\Purchase\Invoice\InvoiceService;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
@@ -56,7 +57,7 @@ class InvoiceController extends Controller
         $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage,$where);
         $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
         $hasMore = Helpers::hasMoreData($total,$page,$data);
-        $purchaseReceivedRepo = new ReceiveRepo(new PurchaseReceived());
+        $purchaseReceivedRepo = new ReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
         if(count($data) > 0) {
             foreach ($data as $item) {
                 if(!empty($item->invoicereceived)){
@@ -214,7 +215,7 @@ class InvoiceController extends Controller
     }
 
     public function show(Request $request){
-        $purchaseReceivedRepo = new ReceiveRepo(new PurchaseReceived());
+        $purchaseReceivedRepo = new ReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
         $id = $request->id;
         $res = $this->invoiceRepo->findOne($id,array(),['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if($res){
@@ -300,7 +301,7 @@ class InvoiceController extends Controller
         $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
         $untilDate = !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth();
 
-        $vendorRepo = new VendorRepo(new Vendor());
+        $vendorRepo = new VendorRepo(new Vendor(), app(ActivityLogService::class));
         $where=array('vendor_type' => VendorType::SUPPLIER);
         if(!empty($vendorId)){
             $where[] = ['id','=',$vendorId];
@@ -398,18 +399,19 @@ class InvoiceController extends Controller
     public function destroy(Request $request)
     {
         $id = $request->id;
-        DB::beginTransaction();
-        try
-        {
-            $this->invoiceRepo->deleteAdditional($id);
-            $this->invoiceRepo->delete($id);
-            DB::commit();
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = array();
+        try {
+            $deleted = $this->invoiceRepo->destroy($id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = array();
+            }
         }
         catch (\Exception $e) {
-            DB::rollback();
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
@@ -424,16 +426,20 @@ class InvoiceController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                DB::beginTransaction();
-                try
-                {
-                    $this->invoiceRepo->deleteAdditional($id);
-                    $this->invoiceRepo->delete($id);
-                    DB::commit();
-                    $successDelete = $successDelete + 1;
+                $invoiceId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$invoiceId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+                try {
+                    $deleted = $this->invoiceRepo->destroy((int) $invoiceId, (int) $request->user_id);
+                    if ($deleted) {
+                        $successDelete = $successDelete + 1;
+                    } else {
+                        $failedDelete = $failedDelete + 1;
+                    }
                 }
                 catch (\Exception $e) {
-                    DB::rollback();
                     $failedDelete = $failedDelete + 1;
                 }
             }

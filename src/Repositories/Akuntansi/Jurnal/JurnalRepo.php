@@ -27,10 +27,12 @@ use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\JurnalType;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VarType;
@@ -43,11 +45,13 @@ class JurnalRepo extends ElequentRepository
 {
 
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(Jurnal $model)
+    public function __construct(Jurnal $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -100,9 +104,13 @@ class JurnalRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
-
         $id = $request->id;
+        $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['jurnal_akun', 'coa', 'jurnal_akun.coa', 'jurnal_meta'])?->toArray();
+        }
+
         $jurnalNo = $request->jurnal_no;
         if(empty($jurnalNo)){
             if($request->jurnal_type == JurnalType::JURNAL_UMUM){
@@ -116,12 +124,11 @@ class JurnalRepo extends ElequentRepository
             }
         }
         $jurnalDate = Utility::changeDateFormat($request->jurnal_date);
-        $userId = $request->user_id;
         $dokumen = '';
         $arrData = array(
             'jurnal_date' => $jurnalDate,
             'jurnal_no' => $jurnalNo,
-            'updated_at' => date('Y-m-d H:i:s'),
+            'updated_at' => now(),
             'updated_by' => $userId,
             'note' => (!empty($request->note) ? $request->note : ''),
             'jurnal_type' => $request->jurnal_type,
@@ -134,16 +141,18 @@ class JurnalRepo extends ElequentRepository
         DB::beginTransaction();
         try {
             if (empty($id)) {
-                $arrData['created_at'] = date('Y-m-d H:i:s');
+                $arrData['created_at'] = now();
                 $arrData['document'] = $dokumen;
                 $arrData['reason'] = '';
                 $arrData['created_by'] = $userId;
                 $res = $this->create($arrData);
+                $action = 'Tambah data jurnal dengan nomor ' . $jurnalNo;
             } else {
                 if (!empty($dokumen)) {
                     $arrData['document'] = $dokumen;
                 }
                 $res = $this->update($arrData,$id);
+                $action = 'Edit data jurnal dengan nomor ' . $jurnalNo;
             }
             if ($res) {
                 $jurnalId = '0';
@@ -183,6 +192,19 @@ class JurnalRepo extends ElequentRepository
 
 
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => $action,
+                    'model_type' => Jurnal::class,
+                    'model_id' => $jurnalId,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($jurnalId, [], ['jurnal_akun', 'coa', 'jurnal_akun.coa', 'jurnal_meta'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             }
             else {
@@ -197,22 +219,48 @@ class JurnalRepo extends ElequentRepository
         }
     }
 
-    public function delete($id)
+    public function destroy(int $id, int $userId): bool
     {
-        // TODO: Implement delete() method.
+        $jurnal = Jurnal::find($id);
+        if (!$jurnal) {
+            return false;
+        }
+
+        $oldData = $this->findOne($id, [], ['jurnal_akun', 'coa', 'jurnal_akun.coa', 'jurnal_meta'])?->toArray();
+
         DB::beginTransaction();
         try
         {
             $this->deleteAdditionalData($id);
             $this->deleteByWhere(array('id' => $id));
             DB::commit();
+
+            $jurnalNo = $oldData['jurnal_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data jurnal dengan nomor ' . $jurnalNo,
+                'model_type' => Jurnal::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return true;
         }
-        catch (\Exception $e) {
-            Log::error($e->getMessage());
-            DB::rollback();
+        catch (\Throwable $e) {
+            Log::error('[JurnalRepo][destroy] ' . $e->getMessage());
+            DB::rollBack();
             return false;
         }
+    }
+
+    public function delete($id)
+    {
+        // TODO: Implement delete() method.
+        return $this->destroy($id, (int) optional(request())->user_id);
     }
 
 
@@ -336,9 +384,9 @@ class JurnalRepo extends ElequentRepository
     {
         // TODO: Implement createDataSession() method.
         $salesInvoiceRepo = new InvoiceRepo(new SalesInvoicing());
-        $purchaseInvoiceRepo = new \Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo(new PurchaseInvoicing());
-        $salesPaymentRepo = new PaymentRepo(new SalesPayment());
-        $purchasePaymentRepo = new \Icso\Accounting\Repositories\Pembelian\Payment\PaymentRepo(new PurchasePayment());
+        $purchaseInvoiceRepo = new \Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo(new PurchaseInvoicing(), app(ActivityLogService::class));
+        $salesPaymentRepo = new PaymentRepo(new SalesPayment(), app(ActivityLogService::class));
+        $purchasePaymentRepo = new \Icso\Accounting\Repositories\Pembelian\Payment\PaymentRepo(new PurchasePayment(), app(ActivityLogService::class));
         $salesPaymentInvoiceRepo = new PaymentInvoiceRepo(new SalesPaymentInvoice());
         $purchasePaymentInvoiceRepo = new \Icso\Accounting\Repositories\Pembelian\Payment\PaymentInvoiceRepo(new PurchasePaymentInvoice());
         if($sess->var_kontak == VendorType::CUSTOMER) {

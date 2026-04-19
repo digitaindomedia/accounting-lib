@@ -12,8 +12,10 @@ use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseDownPaymentMeta;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
+use Icso\Accounting\Utils\RequestAuditHelper;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -23,11 +25,13 @@ use Illuminate\Support\Facades\Log;
 class DownPaymentRepo extends ElequentRepository
 {
     protected $model;
+    protected ActivityLogService $activityLog;
 
-    public function __construct(PurchaseDownPayment $model)
+    public function __construct(PurchaseDownPayment $model, ActivityLogService $activityLog)
     {
         parent::__construct($model);
         $this->model = $model;
+        $this->activityLog = $activityLog;
     }
 
     public function getAllDataBy($search, $page, $perpage, array $where = [])
@@ -78,9 +82,12 @@ class DownPaymentRepo extends ElequentRepository
 
     public function store(Request $request, array $other = [])
     {
-        // TODO: Implement store() method.
         $id = $request->id;
         $userId = $request->user_id;
+        $oldData = null;
+        if (!empty($id)) {
+            $oldData = $this->findOne($id, [], ['order', 'coa', 'tax', 'tax.taxgroup', 'tax.taxgroup.tax'])?->toArray();
+        }
         $refNo = $request->ref_no;
         if(empty($refNo)){
             $refNo = self::generateCodeTransaction(new PurchaseDownPayment(),KeyNomor::NO_UANG_MUKA_PEMBELIAN_ASET_TETAP,'ref_no','downpayment_date');
@@ -147,13 +154,28 @@ class DownPaymentRepo extends ElequentRepository
                     }
                 }
                 DB::commit();
+
+                $this->activityLog->log([
+                    'user_id' => $userId,
+                    'action' => empty($id)
+                        ? 'Tambah data uang muka pembelian aset tetap dengan nomor ' . $refNo
+                        : 'Edit data uang muka pembelian aset tetap dengan nomor ' . $refNo,
+                    'model_type' => PurchaseDownPayment::class,
+                    'model_id' => $resId,
+                    'old_values' => $oldData,
+                    'new_values' => $this->findOne($resId, [], ['order', 'coa', 'tax', 'tax.taxgroup', 'tax.taxgroup.tax'])?->toArray(),
+                    'request_payload' => RequestAuditHelper::sanitize($request),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
                 return true;
             } else {
                 DB::rollBack();
                 return false;
             }
         }catch (\Exception $e) {
-            Log::error($e->getMessage());
+            Log::error('[AsetTetap\\Pembelian\\DownPaymentRepo][store] ' . $e->getMessage());
             DB::rollBack();
             return false;
         }
@@ -256,20 +278,44 @@ class DownPaymentRepo extends ElequentRepository
         $find->save();
     }
 
-    public function deleteData($id)
+    public function destroy(int $id, int $userId): bool
     {
-        DB::beginTransaction();
-        try
-        {
-            $this->deleteAdditional($id);
-            $this->delete($id);
-            DB::commit();
-            return true;
+        $downPayment = $this->findOne($id, [], ['order', 'coa', 'tax', 'tax.taxgroup', 'tax.taxgroup.tax']);
+        if (!$downPayment) {
+            return false;
         }
-        catch (\Exception $e) {
-            Log::error($e->getMessage());
+
+        $oldData = $downPayment->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            $refNo = $oldData['ref_no'] ?? '';
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Hapus data uang muka pembelian aset tetap dengan nomor ' . $refNo,
+                'model_type' => PurchaseDownPayment::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => null,
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('[AsetTetap\\Pembelian\\DownPaymentRepo][destroy] ' . $e->getMessage());
             DB::rollback();
             return false;
         }
+    }
+
+    public function deleteData($id)
+    {
+        return $this->destroy((int) $id, (int) request()->input('user_id'));
     }
 }

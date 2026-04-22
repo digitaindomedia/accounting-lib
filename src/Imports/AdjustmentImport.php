@@ -12,6 +12,7 @@ use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Repositories\Persediaan\Adjustment\AdjustmentRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -29,7 +30,7 @@ class AdjustmentImport implements ToCollection
     private $successCount = 0;
     public function __construct($userId){
         $this->userId = $userId;
-        $this->adjustmentRepo = new AdjustmentRepo(new Adjustment());
+        $this->adjustmentRepo = new AdjustmentRepo(new Adjustment(), app(ActivityLogService::class));
         $this->inventoryRepo = new InventoryRepo(new Inventory());
     }
     /**

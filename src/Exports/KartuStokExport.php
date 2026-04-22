@@ -6,6 +6,7 @@ use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\TransactionsCode;
 use Illuminate\Contracts\View\View;
@@ -30,7 +31,7 @@ class KartuStokExport implements FromView
 
     public function view(): View
     {
-        $productRepo = new ProductRepo(new Product());
+        $productRepo = new ProductRepo(new Product(), app(ActivityLogService::class));
 
         // Jika productId diisi → hanya 1 produk
         if ($this->productId) {

@@ -23,6 +23,7 @@ use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Retur\ReturRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
@@ -330,7 +331,7 @@ class InvoiceController extends Controller
         $vendorId = $request->vendor_id;
         $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
         $untilDate = !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth();
-        $vendorRepo = new VendorRepo(new Vendor());
+        $vendorRepo = new VendorRepo(new Vendor(), app(ActivityLogService::class));
         $where=array('vendor_type' => VendorType::CUSTOMER);
         if(!empty($vendorId)){
             $where[] = ['id','=',$vendorId];

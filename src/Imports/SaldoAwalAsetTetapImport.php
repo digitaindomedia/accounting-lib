@@ -5,6 +5,7 @@ namespace Icso\Accounting\Imports;
 use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseOrder;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\AsetTetap\Pembelian\OrderRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ class SaldoAwalAsetTetapImport implements ToCollection
     public function __construct($userId)
     {
         $this->userId = $userId;
-        $this->orderRepo = new OrderRepo(new PurchaseOrder());
+        $this->orderRepo = new OrderRepo(new PurchaseOrder(), app(ActivityLogService::class));
     }
 
     public function collection(Collection $rows)

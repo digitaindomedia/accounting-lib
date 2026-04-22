@@ -6,6 +6,7 @@ namespace Icso\Accounting\Imports;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Pembelian\Permintaan\PurchaseRequest;
 use Icso\Accounting\Repositories\Pembelian\Request\RequestRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -22,7 +23,7 @@ class PurchaseRequestImport implements ToCollection
     public function __construct($userId)
     {
         $this->userId = $userId;
-        $this->reqRepo = new RequestRepo(new PurchaseRequest());
+        $this->reqRepo = new RequestRepo(new PurchaseRequest(), app(ActivityLogService::class));
     }
 
     /**

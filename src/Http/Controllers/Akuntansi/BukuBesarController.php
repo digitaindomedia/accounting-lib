@@ -12,6 +12,7 @@ use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Http\Request;
@@ -206,7 +207,7 @@ class BukuBesarController extends Controller
 
     private function calculateTotalAkun($coaId)
     {
-        $coaRepo = new CoaRepo(new Coa());
+        $coaRepo = new CoaRepo(new Coa(), app(ActivityLogService::class));
         $query = JurnalTransaksi::query()->where('coa_id', $coaId);
         $totalDebet = $query->sum('debet');
         $totalKredit = $query->sum('kredit');

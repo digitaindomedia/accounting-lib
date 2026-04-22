@@ -11,6 +11,7 @@ use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
 use Icso\Accounting\Repositories\Master\TaxRepo;
 use Icso\Accounting\Repositories\Master\Vendor\VendorRepo;
 use Icso\Accounting\Repositories\Pembelian\Order\OrderRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\VarType;
@@ -31,7 +32,7 @@ class PurchaseOrderImport implements ToCollection
     {
         $this->userId = $userId;
         $this->orderType = $orderType;
-        $this->orderRepo = new OrderRepo(new PurchaseOrder());
+        $this->orderRepo = new OrderRepo(new PurchaseOrder(), app(ActivityLogService::class));
     }
 
     public function collection(Collection $rows)

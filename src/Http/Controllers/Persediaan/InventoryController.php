@@ -17,6 +17,7 @@ use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Models\Persediaan\StockAwal;
 use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Constants;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\ProductType;
@@ -244,7 +245,7 @@ class InventoryController extends Controller
         $warehouseId = $request->warehouse_id;
         $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
         $untilDate = !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth();
-        $productRepo = new ProductRepo(new Product());
+        $productRepo = new ProductRepo(new Product(), app(ActivityLogService::class));
 
         $where=array('product_type' => ProductType::ITEM);
         if(!empty($productId)){
@@ -401,7 +402,7 @@ class InventoryController extends Controller
         $untilDate = $request->until_date ?? Utility::lastDateMonth();
 
         // === Ambil data produk ===
-        $productRepo = new ProductRepo(new Product());
+        $productRepo = new ProductRepo(new Product(), app(ActivityLogService::class));
 
         $where = ['product_type' => ProductType::ITEM];
         if (!empty($productId)) {

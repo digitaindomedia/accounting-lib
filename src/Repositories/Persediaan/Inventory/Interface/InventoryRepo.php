@@ -20,6 +20,7 @@ use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo as PurchaseInvoic
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo as PurchaseReceiveRepo;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo as SalesDeliveryRepo;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo as SalesInvoiceRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\InputType;
@@ -535,7 +536,7 @@ class InventoryRepo extends ElequentRepository
             'invoice_penjualan_pos_skipped' => 0,
         ];
 
-        $purchaseReceiveRepo = new PurchaseReceiveRepo(new PurchaseReceived());
+        $purchaseReceiveRepo = new PurchaseReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
         PurchaseReceived::orderBy('receive_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $purchaseReceiveRepo) {
             foreach ($rows as $row) {
                 JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PENERIMAAN, $row->id);
@@ -544,7 +545,7 @@ class InventoryRepo extends ElequentRepository
             }
         });
 
-        $purchaseInvoiceRepo = new PurchaseInvoiceRepo(new PurchaseInvoicing());
+        $purchaseInvoiceRepo = new PurchaseInvoiceRepo(new PurchaseInvoicing(), app(ActivityLogService::class));
         PurchaseInvoicing::orderBy('invoice_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $purchaseInvoiceRepo) {
             foreach ($rows as $row) {
                 if ($row->input_type !== InputType::PURCHASE) {
@@ -569,7 +570,7 @@ class InventoryRepo extends ElequentRepository
             }
         });
 
-        $salesDeliveryRepo = new SalesDeliveryRepo(new SalesDelivery());
+        $salesDeliveryRepo = new SalesDeliveryRepo(new SalesDelivery(), app(ActivityLogService::class));
         SalesDelivery::orderBy('delivery_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $salesDeliveryRepo) {
             foreach ($rows as $row) {
                 JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::DELIVERY_ORDER, $row->id);

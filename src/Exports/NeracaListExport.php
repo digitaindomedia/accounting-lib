@@ -10,6 +10,7 @@ use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
 use Icso\Accounting\Repositories\Utils\SettingRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Constants;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -44,7 +45,7 @@ class NeracaListExport implements FromCollection, WithHeadings, WithMapping, Sho
         $this->untilDate = $request->filter_date;
         $this->periode = $request->periode;
         $this->waktu = $request->waktu;
-        $this->coaRepo = new CoaRepo(new Coa());
+        $this->coaRepo = new CoaRepo(new Coa(), app(ActivityLogService::class));
     }
 
     public function collection()
@@ -188,4 +189,3 @@ class NeracaListExport implements FromCollection, WithHeadings, WithMapping, Sho
         return "";
     }
 }
-

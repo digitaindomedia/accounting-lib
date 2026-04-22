@@ -7,6 +7,7 @@ use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Repositories\Penjualan\Downpayment\DpRepo;
 use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Database\Eloquent\Model;
 
@@ -62,14 +63,14 @@ class SalesOrder extends Model
 
     public function getTotalDpAttribute()
     {
-        $salesDpRepo = new DpRepo(new SalesDownpayment());
+        $salesDpRepo = new DpRepo(new SalesDownpayment(), app(ActivityLogService::class));
         $getNominalDp = $salesDpRepo->getTotalUangMukaByOrderId($this->id);
         return $getNominalDp;
     }
 
     public function getAvailableDeliveryAttribute()
     {
-        $salesOrderRepo = new SalesOrderRepo(new SalesOrder());
+        $salesOrderRepo = new SalesOrderRepo(new SalesOrder(), app(ActivityLogService::class));
         $resDelivery = $salesOrderRepo->findInUseInDeliveryOrSpkById($this->id);
         return $resDelivery['order_product'];
     }

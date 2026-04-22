@@ -10,6 +10,7 @@ use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
 use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Master\WarehouseRepo;
 use Icso\Accounting\Repositories\Persediaan\Pemakaian\PemakaianRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -29,7 +30,7 @@ class PemakaianImport implements ToCollection
 
     public function __construct($userId)
     {
-        $this->pemakaianRepo = new PemakaianRepo(new StockUsage());
+        $this->pemakaianRepo = new PemakaianRepo(new StockUsage(), app(ActivityLogService::class));
         $this->userId = $userId;
     }
 

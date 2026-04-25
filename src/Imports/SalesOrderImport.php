@@ -10,6 +10,7 @@ use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Icso\Accounting\Repositories\Master\TaxRepo;
 use Icso\Accounting\Repositories\Master\Vendor\VendorRepo;
 use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
+use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\VarType;
 use Illuminate\Support\Collection;
@@ -32,7 +33,7 @@ class SalesOrderImport implements ToCollection
     {
         $this->userId = $userId;
         $this->orderType = $orderType;
-        $this->orderRepo = new SalesOrderRepo(new SalesOrder());
+        $this->orderRepo = new SalesOrderRepo(new SalesOrder(), app(ActivityLogService::class));
     }
 
 

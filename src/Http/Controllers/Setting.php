@@ -79,26 +79,21 @@ class Setting extends Controller
     public function storeKeyValue(Request $request) {
         DB::beginTransaction();
         try {
-            if(empty($request->meta_key)){
-                if(count($request->all()) > 0){
-                    foreach ($request->all() as $req){
-                        $metaKey = $req['meta_key'];
-                        $metaValue = $req['meta_value'];
-                        $userId = $req['user_id'];
-                        SettingRepo::setOption($metaKey,$metaValue, $userId);
-                    }
+            $payloads = !empty($request->meta_key) ? [$request->all()] : $request->all();
 
+            foreach ($payloads as $req) {
+                if (!is_array($req)) {
+                    continue;
                 }
-                else {
-                    $metaKey = $request->meta_key;
-                    $metaValue = $request->meta_value;
-                    $userId = $request->user_id;
-                    SettingRepo::setOption($metaKey,$metaValue, $userId);
+
+                $metaKey = $req['meta_key'] ?? null;
+                $metaValue = $req['meta_value'] ?? null;
+                $userId = $req['user_id'] ?? null;
+
+                if (empty($metaKey) || empty($userId)) {
+                    continue;
                 }
-            }else {
-                $metaKey = $request->meta_key;
-                $metaValue = $request->meta_value;
-                $userId = $request->user_id;
+
                 SettingRepo::setOption($metaKey,$metaValue, $userId);
             }
 

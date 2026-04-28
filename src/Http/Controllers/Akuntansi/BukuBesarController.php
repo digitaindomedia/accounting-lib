@@ -32,7 +32,7 @@ class BukuBesarController extends Controller
         $data = $this->getFilteredData($request);
         $total = $this->getFilteredTotal($request);
 
-        $arrData = $this->processData($data);
+        $arrData = $this->processData($data, $request, $total);
 
         return response()->json([
             'status' => true,
@@ -139,7 +139,7 @@ class BukuBesarController extends Controller
         return $this->jurnalTransaksiRepo->getAllTotalDataWithDateBy($search, $where, ['coa_id', 'asc', 'transaction_datetime', 'asc'], ['coa'], ['column' => 'transaction_date', 'range' => [$fromDate, $untilDate]]);
     }
 
-    private function processData($data)
+    private function processData($data, Request $request = null, $filteredTotal = null)
     {
         $arrData = [];
         if (count($data) > 0) {
@@ -180,6 +180,15 @@ class BukuBesarController extends Controller
                     'data' => $res
                 ];
             }
+        } elseif (($filteredTotal === null || $filteredTotal == 0) && !empty($request?->coa_id) && !empty($request?->from_date)) {
+            $coa = Coa::find($request->coa_id);
+            if (!empty($coa)) {
+                $arrData[] = [
+                    'saldo_awal' => $this->getSaldoAwalByDate($request->coa_id, $request->from_date),
+                    'coa' => $coa,
+                    'data' => collect()
+                ];
+            }
         }
         return $arrData;
     }
@@ -194,6 +203,21 @@ class BukuBesarController extends Controller
                             ->where('id', '<', $transactionId);
                     });
             });
+
+        $totalDebet = (clone $query)->sum('debet');
+        $totalKredit = (clone $query)->sum('kredit');
+
+        $coa = Coa::find($coaId);
+        if ($coa && $coa->coa_position == 'debet') {
+            return $totalDebet - $totalKredit;
+        }
+        return $totalKredit - $totalDebet;
+    }
+
+    private function getSaldoAwalByDate($coaId, $date)
+    {
+        $query = JurnalTransaksi::where('coa_id', $coaId)
+            ->where('transaction_date', '<', $date);
 
         $totalDebet = (clone $query)->sum('debet');
         $totalKredit = (clone $query)->sum('kredit');
@@ -222,7 +246,7 @@ class BukuBesarController extends Controller
     private function getExportData(Request $request)
     {
         $data = $this->getFilteredData($request);
-        return $this->processData($data);
+        return $this->processData($data, $request);
     }
 
 }

@@ -219,7 +219,7 @@ class MutationRepo extends ElequentRepository
         if (count($products) > 0) {
             foreach ($products as $item) {
                 $arrItem = [
-                    'qty' => $item->qty,
+                    'qty' => !empty($item->qty) ? Utility::remove_commas($item->qty) : 0,
                     'price' => !empty($item->price) ? Utility::remove_commas($item->price) : 0,
                     'product_id' => $item->product_id,
                     'unit_id' => $item->unit_id,

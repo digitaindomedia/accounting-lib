@@ -10,6 +10,7 @@ use Icso\Accounting\Enums\TransactionType;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Master\Product;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicingReceived;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedMeta;
@@ -79,7 +80,7 @@ class ReceiveRepo extends ElequentRepository
             $query->where($where);
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
             $query->whereBetween('receive_date', $whereBetween);
-        })->orderBy('receive_date','desc')->with(['vendor', 'order', 'warehouse','receiveproduct.product','receiveproduct.unit','receiveproduct.tax','receiveproduct.product.unit'])->offset($page)->limit($perpage)->get();
+        })->orderBy('receive_date','desc')->with(['vendor', 'order', 'warehouse','invoicereceived','receiveproduct.product','receiveproduct.unit','receiveproduct.tax','receiveproduct.product.unit'])->offset($page)->limit($perpage)->get();
     }
 
     public function getAllTotalDataBetweenBy($search, array $where = [], array $whereBetween=[])
@@ -477,6 +478,10 @@ class ReceiveRepo extends ElequentRepository
         $find = PurchaseReceived::with('receiveproduct.items')->find($id);
         if (!$find) return;
 
+        if (PurchaseInvoicingReceived::where('receive_id', $id)->exists()) {
+            throw new Exception("Penerimaan tidak bisa dihapus karena sudah digunakan pada invoice pembelian");
+        }
+
         // 1. CEK: apakah identity sudah dipakai (qty_left < qty)
         foreach ($find->receiveproduct as $rp) {
             foreach ($rp->items ?? [] as $item) {
@@ -498,7 +503,6 @@ class ReceiveRepo extends ElequentRepository
             PurchaseReceivedProduct::where('receive_id', $id)->delete();
             PurchaseReceivedMeta::where('receive_id', $id)->delete();
             JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PENERIMAAN, $id);
-            OrderRepo::changeStatusPenerimaan($find->order_id);
 
     }
 
@@ -510,11 +514,13 @@ class ReceiveRepo extends ElequentRepository
         }
 
         $oldData = $receive->toArray();
+        $orderId = $receive->order_id;
 
         DB::beginTransaction();
         try {
             $this->deleteAdditional($id);
             parent::delete($id);
+            OrderRepo::changeStatusPenerimaan($orderId);
             DB::commit();
 
             $receiveNo = $oldData['receive_no'] ?? '';

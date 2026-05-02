@@ -3,12 +3,16 @@
 namespace Icso\Accounting\Repositories\Persediaan\Mutation;
 
 
+use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Models\Persediaan\Mutation;
 use Icso\Accounting\Models\Persediaan\MutationMeta;
 use Icso\Accounting\Models\Persediaan\MutationProduct;
+use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
+use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
 use Icso\Accounting\Utils\KeyNomor;
@@ -103,7 +107,9 @@ class MutationRepo extends ElequentRepository
 
             if ($res) {
                 $idAdjustment = $this->handleProductsAndFiles($request, $res, $id);
+                $this->postingJurnal($idAdjustment);
                 $this->updateStatusMutationOut($request, $idAdjustment);
+                $this->updatePreviousMutationOutStatus($oldData, $request);
                 DB::commit();
 
                 $this->activityLog->log([
@@ -252,8 +258,119 @@ class MutationRepo extends ElequentRepository
     {
         MutationProduct::where(array('mutation_id' => $id))->delete();
         MutationMeta::where(array('mutation_id' => $id))->delete();
+        JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::MUTATION, $id);
         Inventory::where(array('transaction_code' => TransactionsCode::MUTATION, 'transaction_id' => $id))->delete();
 
+    }
+
+    public function postingJurnal($idMutation)
+    {
+        JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::MUTATION, $idMutation);
+        Inventory::where(array('transaction_code' => TransactionsCode::MUTATION, 'transaction_id' => $idMutation))->delete();
+
+        $jurnalTransaksiRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
+        $inventoryRepo = new InventoryRepo(new Inventory());
+        $find = $this->findOne($idMutation, [], [
+            'fromwarehouse',
+            'towarehouse',
+            'mutationproduct',
+            'mutationproduct.product',
+            'mutationproduct.unit'
+        ]);
+
+        if (empty($find) || empty($find->mutationproduct) || count($find->mutationproduct) == 0) {
+            return;
+        }
+
+        $mutationDate = $find->mutation_date;
+        $refNo = $find->ref_no;
+        $isMutationIn = $find->mutation_type == VarType::MUTATION_TYPE_IN;
+        $warehouseId = $isMutationIn ? $find->to_warehouse_id : $find->from_warehouse_id;
+
+        foreach ($find->mutationproduct as $item) {
+            $product = $item->product;
+            $coaId = !empty($product?->coa_id) ? $product->coa_id : 0;
+            $productName = !empty($product?->item_name) ? $product->item_name : '';
+            $noteProduct = !empty($productName) ? " dengan nama " . $productName : "";
+            $qty = !empty($item->qty) ? (float) $item->qty : 0;
+            $hpp = !empty($item->price) ? (float) Utility::remove_commas($item->price) : 0;
+
+            if ($hpp <= 0) {
+                $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $mutationDate);
+            }
+
+            $subtotal = $hpp * $qty;
+
+            $reqInventory = new Request();
+            $reqInventory->coa_id = $coaId;
+            $reqInventory->user_id = $find->created_by;
+            $reqInventory->inventory_date = $mutationDate;
+            $reqInventory->transaction_code = TransactionsCode::MUTATION;
+            $reqInventory->transaction_id = $find->id;
+            $reqInventory->transaction_sub_id = $item->id;
+            $reqInventory->warehouse_id = $warehouseId;
+            $reqInventory->product_id = $item->product_id;
+            $reqInventory->price = $hpp;
+            $reqInventory->note = $find->note;
+            $reqInventory->unit_id = $item->unit_id;
+
+            if ($isMutationIn) {
+                $reqInventory->qty_in = $qty;
+            } else {
+                $reqInventory->qty_out = $qty;
+            }
+
+            $inventoryRepo->store($reqInventory);
+
+            $note = !empty($find->note)
+                ? $find->note
+                : ($isMutationIn ? 'Mutasi Barang Masuk' : 'Mutasi Barang Keluar') . $noteProduct;
+
+            $debet = $isMutationIn ? $subtotal : 0;
+            $kredit = $isMutationIn ? 0 : $subtotal;
+            $jurnalTransaksiRepo->create($this->buildJournalRow($find, $item, $coaId, $refNo, $mutationDate, $debet, $kredit, $note));
+
+            $debet = $isMutationIn ? 0 : $subtotal;
+            $kredit = $isMutationIn ? $subtotal : 0;
+            $jurnalTransaksiRepo->create($this->buildJournalRow($find, $item, $coaId, $refNo, $mutationDate, $debet, $kredit, $note));
+        }
+    }
+
+    private function updatePreviousMutationOutStatus($oldData, Request $request): void
+    {
+        if (empty($oldData) || ($oldData['mutation_type'] ?? '') != VarType::MUTATION_TYPE_IN) {
+            return;
+        }
+
+        $oldMutationOutId = $oldData['mutation_out_id'] ?? 0;
+        $newMutationOutId = $request->mutation_type == VarType::MUTATION_TYPE_IN
+            ? ($request->mutation_out_id ?? 0)
+            : 0;
+
+        if (!empty($oldMutationOutId) && (int) $oldMutationOutId !== (int) $newMutationOutId) {
+            $this->updateStatusMutationOutOnDelete($oldMutationOutId);
+        }
+    }
+
+    private function buildJournalRow($mutation, $item, $coaId, $refNo, $mutationDate, $debet, $kredit, $note)
+    {
+        return [
+            'transaction_date' => $mutationDate,
+            'transaction_datetime' => $mutationDate . " " . date('H:i:s'),
+            'created_by' => $mutation->created_by,
+            'updated_by' => $mutation->created_by,
+            'transaction_code' => TransactionsCode::MUTATION,
+            'coa_id' => $coaId,
+            'transaction_id' => $mutation->id,
+            'transaction_sub_id' => $item->id,
+            'created_at' => date("Y-m-d H:i:s"),
+            'updated_at' => date("Y-m-d H:i:s"),
+            'transaction_no' => $refNo,
+            'transaction_status' => JurnalStatusEnum::OK,
+            'debet' => $debet,
+            'kredit' => $kredit,
+            'note' => $note,
+        ];
     }
 
     public function delete($id)
@@ -270,93 +387,67 @@ class MutationRepo extends ElequentRepository
 
     public function updateStatusMutationOutOnDelete($mutationOutId)
     {
-        $mutationOut = Mutation::find($mutationOutId);
-        if($mutationOut){
-            $mutationOutProducts = MutationProduct::where('mutation_id', $mutationOutId)->get();
-            
-            // Get all mutation IN related to this mutation OUT
-            $allMutationIn = Mutation::where('mutation_out_id', $mutationOutId)->get();
-            $allMutationInIds = $allMutationIn->pluck('id')->toArray();
-            
-            $allMutationInProducts = collect();
-            if(count($allMutationInIds) > 0){
-                 $allMutationInProducts = MutationProduct::whereIn('mutation_id', $allMutationInIds)->get();
-            }
-
-            $mutationOutProductsGrouped = $mutationOutProducts->groupBy('product_id')->map(function ($row) {
-                return $row->sum('qty');
-            });
-
-            $isAllReceived = true;
-            $totalQtyInAll = 0;
-
-            foreach($mutationOutProductsGrouped as $productId => $qtyOut){
-                $qtyIn = $allMutationInProducts->where('product_id', $productId)->sum('qty');
-                $totalQtyInAll += $qtyIn;
-                
-                if($qtyIn < $qtyOut){
-                    $isAllReceived = false;
-                }
-            }
-
-            if($isAllReceived && $totalQtyInAll > 0){
-                $mutationOut->status_mutation = StatusEnum::CLOSE;
-            } elseif ($totalQtyInAll > 0) {
-                $mutationOut->status_mutation = StatusEnum::PARSIAL;
-            } else {
-                $mutationOut->status_mutation = StatusEnum::OPEN;
-            }
-            $mutationOut->save();
-        }
+        $this->recalculateMutationOutStatus($mutationOutId);
     }
 
     public function updateStatusMutationOut($request, $currentMutationId)
     {
         if($request->mutation_type == VarType::MUTATION_TYPE_IN && !empty($request->mutation_out_id)){
-            $mutationOutId = $request->mutation_out_id;
-            $mutationOut = Mutation::find($mutationOutId);
-            if($mutationOut){
-                $mutationOutProducts = MutationProduct::where('mutation_id', $mutationOutId)->get();
-                
-                // Get all mutation IN related to this mutation OUT
-                $allMutationIn = Mutation::where('mutation_out_id', $mutationOutId)->get();
-                $allMutationInIds = $allMutationIn->pluck('id')->toArray();
-                
-                if(!in_array($currentMutationId, $allMutationInIds)){
-                    $allMutationInIds[] = $currentMutationId;
-                }
-                
-                $allMutationInProducts = collect();
-                if(count($allMutationInIds) > 0){
-                     $allMutationInProducts = MutationProduct::whereIn('mutation_id', $allMutationInIds)->get();
-                }
+            $this->recalculateMutationOutStatus($request->mutation_out_id);
+        }
+    }
 
-                $mutationOutProductsGrouped = $mutationOutProducts->groupBy('product_id')->map(function ($row) {
-                    return $row->sum('qty');
-                });
+    private function recalculateMutationOutStatus($mutationOutId): void
+    {
+        $mutationOut = Mutation::find($mutationOutId);
+        if (!$mutationOut) {
+            return;
+        }
 
-                $isAllReceived = true;
-                $totalQtyInAll = 0;
+        $mutationOutProducts = MutationProduct::where('mutation_id', $mutationOutId)->get();
+        $mutationInIds = Mutation::where('mutation_out_id', $mutationOutId)
+            ->where('mutation_type', VarType::MUTATION_TYPE_IN)
+            ->pluck('id')
+            ->toArray();
 
-                foreach($mutationOutProductsGrouped as $productId => $qtyOut){
-                    $qtyIn = $allMutationInProducts->where('product_id', $productId)->sum('qty');
-                    $totalQtyInAll += $qtyIn;
-                    
-                    if($qtyIn < $qtyOut){
-                        $isAllReceived = false;
-                    }
-                }
+        $mutationInProducts = collect();
+        if (count($mutationInIds) > 0) {
+            $mutationInProducts = MutationProduct::whereIn('mutation_id', $mutationInIds)->get();
+        }
 
-                if($isAllReceived && $totalQtyInAll > 0){
-                    $mutationOut->status_mutation = StatusEnum::CLOSE;
-                } elseif ($totalQtyInAll > 0) {
-                    $mutationOut->status_mutation = StatusEnum::PARSIAL;
-                } else {
-                    $mutationOut->status_mutation = StatusEnum::OPEN;
-                }
-                $mutationOut->save();
+        $mutationOutProductsGrouped = $mutationOutProducts->groupBy(function ($row) {
+            return $row->product_id . '-' . $row->unit_id;
+        })->map(function ($rows) {
+            return $rows->sum('qty');
+        });
+
+        $mutationInProductsGrouped = $mutationInProducts->groupBy(function ($row) {
+            return $row->product_id . '-' . $row->unit_id;
+        })->map(function ($rows) {
+            return $rows->sum('qty');
+        });
+
+        $isAllReceived = count($mutationOutProductsGrouped) > 0;
+        $totalQtyInAll = 0;
+
+        foreach ($mutationOutProductsGrouped as $key => $qtyOut) {
+            $qtyIn = $mutationInProductsGrouped->get($key, 0);
+            $totalQtyInAll += $qtyIn;
+
+            if ($qtyIn < $qtyOut) {
+                $isAllReceived = false;
             }
         }
+
+        if ($isAllReceived && $totalQtyInAll > 0) {
+            $mutationOut->status_mutation = StatusEnum::CLOSE;
+        } elseif ($totalQtyInAll > 0) {
+            $mutationOut->status_mutation = StatusEnum::PARSIAL;
+        } else {
+            $mutationOut->status_mutation = StatusEnum::OPEN;
+        }
+
+        $mutationOut->save();
     }
 
     public function destroy(int $id, int $userId): bool

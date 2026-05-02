@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Models\Pembelian\Penerimaan;
 
+use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Master\Warehouse;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicingReceived;
@@ -17,7 +18,7 @@ class PurchaseReceived extends Model
     protected $guarded = [];
     public $timestamps = false;
 
-    protected $appends = ['created_by_name','attachments'];
+    protected $appends = ['created_by_name','attachments','can_edit','can_delete'];
 
     public static $rules = [
         'receive_date' => 'required',
@@ -66,6 +67,29 @@ class PurchaseReceived extends Model
         });
 
         return $res;
+    }
+
+    public function getCanEditAttribute(): bool
+    {
+        return $this->receive_status === StatusEnum::OPEN && !$this->hasInvoiceLink();
+    }
+
+    public function getCanDeleteAttribute(): bool
+    {
+        return $this->getCanEditAttribute();
+    }
+
+    private function hasInvoiceLink(): bool
+    {
+        if ($this->relationLoaded('invoicereceived')) {
+            return $this->invoicereceived->isNotEmpty();
+        }
+
+        if (empty($this->id)) {
+            return false;
+        }
+
+        return PurchaseInvoicingReceived::where('receive_id', $this->id)->exists();
     }
 
 }

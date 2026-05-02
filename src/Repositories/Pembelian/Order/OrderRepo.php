@@ -390,6 +390,10 @@ class OrderRepo extends ElequentRepository
     {
         $orderRepo = new self(new PurchaseOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($idOrder);
+        if (empty($find)) {
+            return;
+        }
+
         $terima = $orderRepo->findInUseInPenerimaanById($find->id);
         if($terima['status_order_completed']){
             $arrData = array('order_status' => StatusEnum::PENERIMAAN);
@@ -398,6 +402,9 @@ class OrderRepo extends ElequentRepository
             $findTerima = PurchaseReceived::where(array('order_id' => $find->id))->count();
             if($findTerima> 0){
                 $arrData = array('order_status' => StatusEnum::PARSIAL_PENERIMAAN);
+                $orderRepo->update($arrData,$find->id);
+            } else {
+                $arrData = array('order_status' => StatusEnum::OPEN);
                 $orderRepo->update($arrData,$find->id);
             }
         }

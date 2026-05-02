@@ -10,6 +10,7 @@ use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
 use Icso\Accounting\Models\Persediaan\Adjustment;
+use Icso\Accounting\Models\Persediaan\Mutation;
 use Icso\Accounting\Models\Persediaan\StockUsage;
 
 class TransactionsCode
@@ -99,6 +100,13 @@ class TransactionsCode
                 $transactionNo = $findPemakaian->ref_no;
             }
             $transactionName = "PEMAKAIAN STOK";
+        }
+        else if($transactionCode == self::MUTATION){
+            $findMutation = Mutation::where(array('id' => $transactionId))->first();
+            if(!empty($findMutation)){
+                $transactionNo = $findMutation->ref_no;
+            }
+            $transactionName = "MUTASI GUDANG";
         }
         return array(
             'transaction_name' => $transactionName,

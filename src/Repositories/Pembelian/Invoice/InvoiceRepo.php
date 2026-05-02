@@ -157,7 +157,7 @@ class InvoiceRepo extends ElequentRepository
 
     public function gatherInputData(Request $request): array
     {
-        return [
+        $data = [
             'id' => $request->id,
             'invoice_no' => $request->invoice_no ?: self::generateCodeTransaction(new PurchaseInvoicing(), KeyNomor::NO_INVOICE_PEMBELIAN, 'invoice_no', 'invoice_date'),
             'invoice_date' => Utility::changeDateFormat($request->invoice_date),
@@ -180,6 +180,81 @@ class InvoiceRepo extends ElequentRepository
             'tax_total' => $request->tax_total ? Utility::remove_commas($request->tax_total) : '0',
             'grandtotal' => Utility::remove_commas($request->grandtotal),
         ];
+
+        return $this->normalizePurchaseTaxTotals($request, $data);
+    }
+
+    private function normalizePurchaseTaxTotals(Request $request, array $data): array
+    {
+        if ($data['input_type'] != InputType::PURCHASE || empty($request->orderproduct)) {
+            return $data;
+        }
+
+        $items = json_decode(json_encode($request->orderproduct));
+        if (empty($items) || !is_iterable($items)) {
+            return $data;
+        }
+
+        $hasTax = false;
+        $subtotal = 0;
+        $dppTotal = 0;
+        $taxTotal = 0;
+        $taxType = $data['tax_type'];
+
+        foreach ($items as $item) {
+            $lineSubtotal = (float) Utility::remove_commas($item->subtotal ?? 0);
+            $subtotal += $lineSubtotal;
+
+            if (empty($item->tax_id)) {
+                $dppTotal += $lineSubtotal;
+                continue;
+            }
+
+            $hasTax = true;
+            $lineTaxType = $item->tax_type ?? $taxType;
+            if (empty($lineTaxType)) {
+                $lineTaxType = TypeEnum::TAX_TYPE_INCLUDE;
+            }
+
+            $taxCalc = Helpers::hitungTaxDpp(
+                $lineSubtotal,
+                $item->tax_id,
+                $lineTaxType,
+                $item->tax_percentage ?? 0,
+                $item->tax_group ?? ''
+            );
+
+            if (!is_array($taxCalc)) {
+                $dppTotal += $lineSubtotal;
+                continue;
+            }
+
+            $lineTax = $taxCalc[TypeEnum::PPN] ?? 0;
+            if (($taxCalc[TypeEnum::TAX_SIGN] ?? '') == VarType::TAX_SIGN_PEMOTONG) {
+                $lineTax *= -1;
+            }
+
+            $dppTotal += $taxCalc[TypeEnum::DPP] ?? $lineSubtotal;
+            $taxTotal += $lineTax;
+        }
+
+        if (!$hasTax || ((float) $data['tax_total'] != 0 || (float) $data['dpp_total'] != 0)) {
+            return $data;
+        }
+
+        if (empty($taxType)) {
+            $data['tax_type'] = TypeEnum::TAX_TYPE_INCLUDE;
+            $taxType = $data['tax_type'];
+        }
+
+        $data['subtotal'] = $subtotal;
+        $data['dpp_total'] = $dppTotal;
+        $data['tax_total'] = $taxTotal;
+        $data['grandtotal'] = ($taxType == TypeEnum::TAX_TYPE_INCLUDE)
+            ? $subtotal - (float) $data['discount_total']
+            : $subtotal + $taxTotal - (float) $data['discount_total'];
+
+        return $data;
     }
 
     public function saveInvoice(array $data, ?string $id, string $userId)
@@ -227,7 +302,7 @@ class InvoiceRepo extends ElequentRepository
             'tax_id' => $item->tax_id ?? '0',
             'tax_percentage' => $item->tax_percentage ?? '0',
             'price' => $hargaBeli,
-            'tax_type' => $taxType,
+            'tax_type' => ($item->tax_type ?? '') ?: $taxType,
             'discount_type' => $item->discount_type ?? '',
             'discount' => $item->discount ? Utility::remove_commas($item->discount) : 0,
             'subtotal' => $total,
@@ -349,6 +424,10 @@ class InvoiceRepo extends ElequentRepository
     {
         $invoice = $this->findOne($id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if (!$invoice) {
+            return false;
+        }
+
+        if (PurchasePaymentInvoice::where('invoice_id', $id)->exists()) {
             return false;
         }
 
@@ -503,9 +582,18 @@ class InvoiceRepo extends ElequentRepository
 
         $dpResult = $this->getDownPaymentEntries($find->id, $settings['coa_utang'], $settings['coa_uang_muka']);
         $journalEntries = array_merge($journalEntries, $dpResult['entries']);
-        $totalDpNominal = $dpResult['total_nominal'];
 
-        $totalUtang = $find->grandtotal + $totalDpNominal + $find->discount_total;
+        $totalDebet = 0;
+        $totalKredit = 0;
+        foreach ($journalEntries as $entry) {
+            if ($entry['posisi'] == 'debet') {
+                $totalDebet += $entry['nominal'];
+            } else {
+                $totalKredit += $entry['nominal'];
+            }
+        }
+
+        $totalUtang = $totalDebet - $totalKredit;
 
         $journalEntries[] = [
             'coa_id' => $settings['coa_utang'],

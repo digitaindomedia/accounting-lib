@@ -194,7 +194,7 @@ class ProductRepo extends ElequentRepository
         }
     }
 
-    public function destroy(int $id, int $userId): bool
+    public function destroy(int $id, ?int $userId): bool
     {
         $product = Product::find($id);
         if (!$product || !$product->canDelete()) {

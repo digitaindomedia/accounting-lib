@@ -70,7 +70,19 @@ class DeliveryRepo extends ElequentRepository
                     $query->where('order_no', 'like', '%' .$search. '%');
                 });
         })->orderBy('delivery_date','desc')
-            ->with(['vendor','order','order.ordermeta','warehouse','deliveryproduct.product','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.tax'])
+            ->with([
+                'vendor',
+                'order',
+                'order.ordermeta',
+                'warehouse',
+                'deliveryproduct.product',
+                'deliveryproduct.product.productconvertion',
+                'deliveryproduct.product.productconvertion.unit',
+                'deliveryproduct.product.productconvertion.base_unit',
+                'deliveryproduct.items',
+                'deliveryproduct.unit',
+                'deliveryproduct.tax'
+            ])
             ->offset($page)->limit($perpage)->get();
     }
 

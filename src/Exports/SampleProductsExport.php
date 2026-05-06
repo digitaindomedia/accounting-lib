@@ -25,7 +25,8 @@ class SampleProductsExport implements FromArray, WithHeadings
                 'Status Harga(fix/off)',
                 'Satuan',
                 'Kategori',
-                'Kode Akun Sediaan'
+                'Kode Akun Sediaan',
+                'Konversi Satuan'
             ];
         }
         return [
@@ -42,9 +43,14 @@ class SampleProductsExport implements FromArray, WithHeadings
 
     public function array(): array
     {
-        // TODO: Implement array() method.
+        if($this->productType == ProductType::ITEM){
+            return [
+                ['BRG001', 'Nama Barang', 100, 'fix', 'PCS', 'Nama Kategori', '140.04', 'DUS=12 PCS;BOX=10 DUS'],
+            ];
+        }
+
         return [
-            ['kode item', 'nama Item', 100, 1, 'nama satuan', 'nama kategori', '140.04'],
+            ['JSA001', 'Nama Jasa', 100, 'fix', 'JAM', 'Nama Kategori', '510.01', '410.01'],
         ];
     }
 }

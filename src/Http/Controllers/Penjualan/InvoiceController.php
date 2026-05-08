@@ -134,7 +134,15 @@ class InvoiceController extends Controller
                 }
             }
             if ($item->invoice_type == ProductType::SERVICE) {
-                $item->orderproductservice = SalesOrderProduct::where(['order_id' => $item->order_id])->with(['tax', 'tax.taxgroup'])->get();
+                $item->orderproductservice = SalesOrderProduct::where(['order_id' => $item->order_id])->with([
+                    'unit',
+                    'product',
+                    'product.productconvertion',
+                    'product.productconvertion.unit',
+                    'product.productconvertion.base_unit',
+                    'tax',
+                    'tax.taxgroup'
+                ])->get();
             }
             $paid = $this->paymentInvoiceRepo->getAllPaymentByInvoiceId($item->id);
             $left_bill = $item->grandtotal - $paid;
@@ -193,7 +201,7 @@ class InvoiceController extends Controller
     public function store(CreateSalesInvoiceRequest $request){
         $res = $this->invoiceRepo->store($request);
         if($res){
-            $resData = $this->invoiceRepo->findOne($res,array(),['vendor','warehouse','invoicedelivery','invoicedelivery.delivery.warehouse','invoicedelivery.delivery.deliveryproduct','invoicedelivery.delivery.deliveryproduct.unit','invoicedelivery.delivery.deliveryproduct.product','invoicedelivery.delivery.deliveryproduct.tax','invoicedelivery.delivery.deliveryproduct.tax.taxgroup','invoicedelivery.delivery.deliveryproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+            $resData = $this->invoiceRepo->findOne($res,array(),$this->invoiceDetailRelations());
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil disimpan';
             $this->data['data'] = $resData;
@@ -296,7 +304,7 @@ class InvoiceController extends Controller
     public function show(Request $request){
         $salesDeliveryRepo = new DeliveryRepo(new SalesDelivery(), app(ActivityLogService::class));
         $id = $request->id;
-        $res = $this->invoiceRepo->findOne($id,array(),['vendor','warehouse','invoicemeta','invoicedelivery','invoicedelivery.delivery.warehouse','invoicedelivery.delivery.deliveryproduct','invoicedelivery.delivery.deliveryproduct.unit','invoicedelivery.delivery.deliveryproduct.product','invoicedelivery.delivery.deliveryproduct.tax','invoicedelivery.delivery.deliveryproduct.tax.taxgroup','invoicedelivery.delivery.deliveryproduct.tax.taxgroup.tax','order','order.ordermeta','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+        $res = $this->invoiceRepo->findOne($id,array(),$this->invoiceDetailRelations());
         if($res){
             if(!empty($res->invoicedelivery)){
                 foreach ($res->invoicedelivery as $item){
@@ -304,7 +312,15 @@ class InvoiceController extends Controller
                 }
             }
             if($res->invoice_type == ProductType::SERVICE){
-                $invProduct = SalesOrderProduct::where(array('order_id' => $res->order_id))->with(['tax','tax.taxgroup'])->get();
+                $invProduct = SalesOrderProduct::where(array('order_id' => $res->order_id))->with([
+                    'unit',
+                    'product',
+                    'product.productconvertion',
+                    'product.productconvertion.unit',
+                    'product.productconvertion.base_unit',
+                    'tax',
+                    'tax.taxgroup'
+                ])->get();
                 $res->orderproductservice = $invProduct;
             }
             $res->payment_list = $this->invoiceRepo->getPaymentList($id);
@@ -321,6 +337,42 @@ class InvoiceController extends Controller
             $this->data['message'] = 'Data tidak ditemukan';
         }
         return response()->json($this->data);
+    }
+
+    private function invoiceDetailRelations(): array
+    {
+        return [
+            'vendor',
+            'warehouse',
+            'invoicemeta',
+            'invoicedelivery',
+            'invoicedelivery.delivery.warehouse',
+            'invoicedelivery.delivery.deliveryproduct',
+            'invoicedelivery.delivery.deliveryproduct.unit',
+            'invoicedelivery.delivery.deliveryproduct.product',
+            'invoicedelivery.delivery.deliveryproduct.product.productconvertion',
+            'invoicedelivery.delivery.deliveryproduct.product.productconvertion.unit',
+            'invoicedelivery.delivery.deliveryproduct.product.productconvertion.base_unit',
+            'invoicedelivery.delivery.deliveryproduct.orderproduct',
+            'invoicedelivery.delivery.deliveryproduct.orderproduct.product',
+            'invoicedelivery.delivery.deliveryproduct.orderproduct.product.productconvertion',
+            'invoicedelivery.delivery.deliveryproduct.orderproduct.product.productconvertion.unit',
+            'invoicedelivery.delivery.deliveryproduct.orderproduct.product.productconvertion.base_unit',
+            'invoicedelivery.delivery.deliveryproduct.tax',
+            'invoicedelivery.delivery.deliveryproduct.tax.taxgroup',
+            'invoicedelivery.delivery.deliveryproduct.tax.taxgroup.tax',
+            'order',
+            'order.ordermeta',
+            'orderproduct',
+            'orderproduct.unit',
+            'orderproduct.product',
+            'orderproduct.product.productconvertion',
+            'orderproduct.product.productconvertion.unit',
+            'orderproduct.product.productconvertion.base_unit',
+            'orderproduct.tax',
+            'orderproduct.tax.taxgroup',
+            'orderproduct.tax.taxgroup.tax'
+        ];
     }
 
     public function kartuPiutang(Request $request)

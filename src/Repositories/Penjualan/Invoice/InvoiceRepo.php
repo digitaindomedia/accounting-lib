@@ -76,7 +76,27 @@ class InvoiceRepo extends ElequentRepository
                     $query->where('order_no', 'like', '%' .$search. '%');
                 });
         })->orderBy('invoice_date','desc')
-            ->with(['vendor','order','order.ordermeta','invoicedelivery.delivery.deliveryproduct.product'])
+            ->with([
+                'vendor',
+                'order',
+                'order.ordermeta',
+                'orderproduct.unit',
+                'orderproduct.product',
+                'orderproduct.product.productconvertion',
+                'orderproduct.product.productconvertion.unit',
+                'orderproduct.product.productconvertion.base_unit',
+                'invoicedelivery.delivery.warehouse',
+                'invoicedelivery.delivery.deliveryproduct.unit',
+                'invoicedelivery.delivery.deliveryproduct.product',
+                'invoicedelivery.delivery.deliveryproduct.product.productconvertion',
+                'invoicedelivery.delivery.deliveryproduct.product.productconvertion.unit',
+                'invoicedelivery.delivery.deliveryproduct.product.productconvertion.base_unit',
+                'invoicedelivery.delivery.deliveryproduct.orderproduct',
+                'invoicedelivery.delivery.deliveryproduct.orderproduct.product',
+                'invoicedelivery.delivery.deliveryproduct.orderproduct.product.productconvertion',
+                'invoicedelivery.delivery.deliveryproduct.orderproduct.product.productconvertion.unit',
+                'invoicedelivery.delivery.deliveryproduct.orderproduct.product.productconvertion.base_unit'
+            ])
             ->offset($page)->limit($perpage)->get();
     }
 

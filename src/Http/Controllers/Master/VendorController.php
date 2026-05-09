@@ -217,7 +217,7 @@ class VendorController extends Controller
         extract($params); // $search, $page, $categoryType
 
 
-        return $this->vendorRepo->getAllDataBy($search, $page, 100,array('vendor_type' => $vendorType));
+        return $this->vendorRepo->getAllDataBy($search, $page, 10000,array('vendor_type' => $vendorType));
     }
 
     public function export(Request $request)

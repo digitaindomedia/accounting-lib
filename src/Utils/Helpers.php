@@ -3,7 +3,6 @@
 namespace Icso\Accounting\Utils;
 
 
-use Exception;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\User;
@@ -236,18 +235,34 @@ class Helpers
 
     public static function formatDateExcel($excelDate)
     {
-
-        try {
-            $unix_date = ($excelDate - 25569) * 86400;
-            $excelDate = 25569 + ($unix_date / 86400);
-            $unix_date = ($excelDate - 25569) * 86400;
-            $res = gmdate("Y-m-d", $unix_date);
-        }
-        catch (Exception $exception){
-            $res = $excel_date;
+        if ($excelDate instanceof \DateTimeInterface) {
+            return $excelDate->format('Y-m-d');
         }
 
-        return $res;
+        if ($excelDate === null || $excelDate === '') {
+            return $excelDate;
+        }
+
+        if (is_numeric($excelDate)) {
+            $unixDate = ((float) $excelDate - 25569) * 86400;
+            return gmdate('Y-m-d', (int) $unixDate);
+        }
+
+        $date = trim((string) $excelDate);
+        $formats = ['Y-m-d', 'd/m/Y', 'd-m-Y', 'Y/m/d', 'm/d/Y', 'm-d-Y'];
+
+        foreach ($formats as $format) {
+            $parsedDate = \DateTimeImmutable::createFromFormat('!' . $format, $date);
+            $errors = \DateTimeImmutable::getLastErrors();
+
+            $hasNoParseErrors = $errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0);
+
+            if ($parsedDate !== false && $hasNoParseErrors) {
+                return $parsedDate->format('Y-m-d');
+            }
+        }
+
+        return $date;
     }
 
     public static function hasMoreData(int $total, int $page, $data): bool

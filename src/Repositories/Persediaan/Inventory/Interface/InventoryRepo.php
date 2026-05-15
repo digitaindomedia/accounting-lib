@@ -11,13 +11,17 @@ use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProduct;
+use Icso\Accounting\Models\Persediaan\Adjustment;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Models\Persediaan\StockAwal;
+use Icso\Accounting\Models\Persediaan\StockUsage;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo as PurchaseInvoiceRepo;
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo as PurchaseReceiveRepo;
+use Icso\Accounting\Repositories\Persediaan\Adjustment\AdjustmentRepo;
+use Icso\Accounting\Repositories\Persediaan\Pemakaian\PemakaianRepo;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo as SalesDeliveryRepo;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo as SalesInvoiceRepo;
 use Icso\Accounting\Services\ActivityLogService;
@@ -214,8 +218,10 @@ class InventoryRepo extends ElequentRepository
      * 1. Saldo awal
      * 2. Penerimaan pembelian
      * 3. Invoice pembelian tanpa penerimaan
-     * 4. Pengiriman penjualan
-     * 5. Invoice penjualan tanpa pengiriman
+     * 4. Adjustment persediaan
+     * 5. Pemakaian persediaan
+     * 6. Pengiriman penjualan
+     * 7. Invoice penjualan tanpa pengiriman
      */
     public function recalculateStock(?string $actorId = null): array
     {
@@ -229,10 +235,14 @@ class InventoryRepo extends ElequentRepository
                 'saldo_awal' => $this->rebuildFromStockAwal($actorId),
                 'penerimaan' => $this->rebuildFromPurchaseReceive($actorId),
                 'invoice_pembelian_tanpa_penerimaan' => $this->rebuildFromDirectPurchaseInvoice($actorId),
+                'adjustment' => $this->rebuildFromAdjustment(),
+                'pemakaian' => $this->rebuildFromStockUsage(),
                 'pengiriman' => $this->rebuildFromSalesDelivery($actorId),
                 'invoice_penjualan_tanpa_pengiriman' => $this->rebuildFromDirectSalesInvoice($actorId),
             ];
             $journalSummary = $this->repostAccountingJournals();
+            $journalSummary['adjustment'] = Adjustment::count();
+            $journalSummary['pemakaian'] = StockUsage::count();
 
             DB::commit();
             return [
@@ -399,6 +409,54 @@ class InventoryRepo extends ElequentRepository
                     $req->transaction_sub_id = $row->order_product_id;
                     $this->store($req);
                     $counter++;
+                }
+            });
+
+        return $counter;
+    }
+
+    private function rebuildFromAdjustment(): int
+    {
+        $counter = 0;
+        $adjustmentRepo = new AdjustmentRepo(new Adjustment(), app(ActivityLogService::class));
+
+        Adjustment::with('adjustmentproduct')
+            ->orderBy('adjustment_date', 'asc')
+            ->orderBy('id', 'asc')
+            ->chunk(200, function ($rows) use (&$counter, $adjustmentRepo) {
+                foreach ($rows as $row) {
+                    JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::ADJUSTMENT, $row->id);
+                    Inventory::where([
+                        'transaction_code' => TransactionsCode::ADJUSTMENT,
+                        'transaction_id' => $row->id,
+                    ])->delete();
+
+                    $adjustmentRepo->postingJurnal($row->id);
+                    $counter += $row->adjustmentproduct->count();
+                }
+            });
+
+        return $counter;
+    }
+
+    private function rebuildFromStockUsage(): int
+    {
+        $counter = 0;
+        $pemakaianRepo = new PemakaianRepo(new StockUsage(), app(ActivityLogService::class));
+
+        StockUsage::with('stockusageproduct')
+            ->orderBy('usage_date', 'asc')
+            ->orderBy('id', 'asc')
+            ->chunk(200, function ($rows) use (&$counter, $pemakaianRepo) {
+                foreach ($rows as $row) {
+                    JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PEMAKAIAN_STOCK, $row->id);
+                    Inventory::where([
+                        'transaction_code' => TransactionsCode::PEMAKAIAN_STOCK,
+                        'transaction_id' => $row->id,
+                    ])->delete();
+
+                    $pemakaianRepo->postingJurnal($row->id);
+                    $counter += $row->stockusageproduct->count();
                 }
             });
 

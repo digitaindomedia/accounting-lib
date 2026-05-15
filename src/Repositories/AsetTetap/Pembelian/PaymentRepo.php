@@ -10,6 +10,7 @@ use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseInvoice;
 use Icso\Accounting\Models\AsetTetap\Pembelian\PurchasePayment;
 use Icso\Accounting\Models\AsetTetap\Pembelian\PurchasePaymentMeta;
 use Icso\Accounting\Models\AsetTetap\Penjualan\SalesInvoice;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePayment as RegularPurchasePayment;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\AsetTetap\Penjualan\SalesInvoiceRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
@@ -150,7 +151,7 @@ class PaymentRepo extends ElequentRepository
             if ($res) {
                 if (!empty($id)) {
                     $idPayment = $id;
-                    $this->deleteAdditional($id);
+                    $this->deleteAdditional($id, $oldData['payment_no'] ?? null);
                 } else {
                     $idPayment = $res->id;
                 }
@@ -233,10 +234,50 @@ class PaymentRepo extends ElequentRepository
         }
     }
 
-    public function deleteAdditional($idPayment){
+    public function deleteAdditional($idPayment, ?string $previousPaymentNo = null){
+        $paymentNos = $this->getPaymentNosForJournalCleanup((int) $idPayment, $previousPaymentNo);
+
         PurchasePaymentMeta::where('payment_id','=',$idPayment)->delete();
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PELUNASAN_PEMBELIAN_ASET_TETAP, $idPayment);
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::PELUNASAN_PENJUALAN_ASET_TETAP, $idPayment);
+        $this->deleteLegacyPembelianJournal((int) $idPayment, $paymentNos);
+    }
+
+    private function getPaymentNosForJournalCleanup(int $idPayment, ?string $previousPaymentNo = null): array
+    {
+        $paymentNos = [];
+        if (!empty($previousPaymentNo)) {
+            $paymentNos[] = $previousPaymentNo;
+        }
+
+        $currentPaymentNo = PurchasePayment::where('id', $idPayment)->value('payment_no');
+        if (!empty($currentPaymentNo)) {
+            $paymentNos[] = $currentPaymentNo;
+        }
+
+        return array_values(array_unique($paymentNos));
+    }
+
+    private function deleteLegacyPembelianJournal(int $idPayment, array $paymentNos): void
+    {
+        if (count($paymentNos) === 0) {
+            return;
+        }
+
+        $regularPaymentNos = RegularPurchasePayment::where('id', $idPayment)
+            ->whereIn('payment_no', $paymentNos)
+            ->pluck('payment_no')
+            ->toArray();
+        $safePaymentNos = array_values(array_diff($paymentNos, $regularPaymentNos));
+
+        if (count($safePaymentNos) === 0) {
+            return;
+        }
+
+        JurnalTransaksi::where('transaction_code', TransactionsCode::PELUNASAN_PEMBELIAN)
+            ->where('transaction_id', $idPayment)
+            ->whereIn('transaction_no', $safePaymentNos)
+            ->delete();
     }
 
     public function postingJurnalPelunasanPembelian($idPayment)
@@ -276,7 +317,7 @@ class PaymentRepo extends ElequentRepository
                 'transaction_datetime' => $find->payment_date." ".date('H:i:s'),
                 'created_by' => $find->created_by,
                 'updated_by' => $find->created_by,
-                'transaction_code' => TransactionsCode::PELUNASAN_PEMBELIAN,
+                'transaction_code' => TransactionsCode::PELUNASAN_PEMBELIAN_ASET_TETAP,
                 'coa_id' => $coaKasBank,
                 'transaction_id' => $find->id,
                 'transaction_sub_id' => 0,
@@ -304,7 +345,7 @@ class PaymentRepo extends ElequentRepository
                 $coaKasBank = $find->payment_method->coa_id;
             }
             $namaAset = "";
-            if(!empty($find->invoice->order)){
+            if(!empty($find->sales_invoice->asettetap)){
                 $namaAset = " dengan nama aset ".$find->sales_invoice->asettetap->nama_aset;
             }
             $arrJurnalDebet = array(
@@ -357,6 +398,40 @@ class PaymentRepo extends ElequentRepository
         return $total;
     }
 
+    private function syncInvoiceStatusAfterDelete(PurchasePayment $payment): void
+    {
+        if (empty($payment->invoice_id)) {
+            return;
+        }
+
+        if ($payment->payment_type === InputType::PURCHASE) {
+            $invoice = PurchaseInvoice::where('id', $payment->invoice_id)->first();
+            if (empty($invoice)) {
+                return;
+            }
+
+            $remainingPayment = $this->getTotalPaymentByInvoice($payment->invoice_id, $payment->id);
+            $status = ((float) $remainingPayment >= (float) $invoice->total_tagihan)
+                ? StatusEnum::LUNAS
+                : StatusEnum::BELUM_LUNAS;
+            InvoiceRepo::changeStatus($payment->invoice_id, $status);
+            return;
+        }
+
+        if ($payment->payment_type === InputType::SALES) {
+            $salesInvoice = SalesInvoice::where('id', $payment->invoice_id)->first();
+            if (empty($salesInvoice)) {
+                return;
+            }
+
+            $remainingPayment = SalesInvoiceRepo::getTotalPayment($payment->invoice_id, $payment->id);
+            $status = ((float) $remainingPayment >= (float) $salesInvoice->price)
+                ? StatusEnum::LUNAS
+                : StatusEnum::BELUM_LUNAS;
+            SalesInvoiceRepo::changeStatus($payment->invoice_id, $status);
+        }
+    }
+
     public function destroy(int $id, int $userId): bool
     {
         $payment = $this->findOne($id, [], [
@@ -378,7 +453,8 @@ class PaymentRepo extends ElequentRepository
 
         DB::beginTransaction();
         try {
-            $this->deleteAdditional($id);
+            $this->deleteAdditional($id, $payment->payment_no);
+            $this->syncInvoiceStatusAfterDelete($payment);
             parent::delete($id);
             DB::commit();
 

@@ -10,6 +10,7 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Master\PaymentMethod;
+use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDelivery;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDp;
@@ -272,10 +273,11 @@ class InvoiceRepo extends ElequentRepository
 
             // Prioritize header/request tax_type for invoice consistency on edit.
             $taxType = $requestTaxType ?: ($item->tax_type ?? '');
-            $taxId = $item->tax_id ?? 0;
+            $taxId = $item->tax_id ?? ($item->tax->id ?? 0);
+            $taxPercentage = $item->tax_percentage ?? ($item->tax->tax_percentage ?? 0);
 
             // If item has original ID (from order), check if it already exists
-            if (isset($item->id)) {
+            if (!empty($item->id)) {
                 $existingProduct = SalesOrderProduct::find($item->id);
                 if ($existingProduct) {
                     // Update existing product with invoice_id
@@ -284,21 +286,32 @@ class InvoiceRepo extends ElequentRepository
                     continue;
                 }
 
-                // If not found, preserve original tax configuration
-                $originalProduct = SalesOrderProduct::where('order_id', $orderId)
-                    ->where('product_id', $item->product_id ?? 0)
-                    ->first();
-                if ($originalProduct) {
-                    if (empty($taxType)) {
-                        $taxType = $originalProduct->tax_type;
+                // If not found, preserve original tax configuration only for linked orders.
+                if (!empty($orderId)) {
+                    $originalProduct = SalesOrderProduct::where('order_id', $orderId)
+                        ->where('product_id', $item->product_id ?? 0)
+                        ->first();
+                    if ($originalProduct) {
+                        if (empty($taxType)) {
+                            $taxType = $originalProduct->tax_type;
+                        }
+                        if (empty($taxId)) {
+                            $taxId = $originalProduct->tax_id;
+                        }
+                        if (empty($taxPercentage)) {
+                            $taxPercentage = $originalProduct->tax_percentage;
+                        }
                     }
-                    $taxId = $originalProduct->tax_id;
                 }
             }
 
             // Fallback to request/order level tax_type if still empty
             if (empty($taxType)) {
                 $taxType = $requestTaxType;
+            }
+
+            if (!empty($taxId) && empty($taxPercentage)) {
+                $taxPercentage = Tax::whereKey($taxId)->value('tax_percentage') ?? 0;
             }
 
             // Create new orderproduct
@@ -308,7 +321,7 @@ class InvoiceRepo extends ElequentRepository
                 'product_id'        => $item->product_id ?? 0,
                 'unit_id'           => $item->unit_id ?? 0,
                 'tax_id'            => $taxId,
-                'tax_percentage'    => $item->tax_percentage ?? 0,
+                'tax_percentage'    => $taxPercentage,
                 'price'             => Utility::remove_commas($item->price ?? 0),
                 'tax_type'          => $taxType,
                 'discount_type'     => $item->discount_type ?? '',

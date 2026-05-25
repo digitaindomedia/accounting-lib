@@ -24,20 +24,20 @@
 <table>
     <thead>
     <tr>
-        <td style="text-align: center" colspan="5">Laporan Invoice Penjualan</td>
+        <td style="text-align: center" colspan="6">Laporan Invoice Penjualan</td>
     </tr>
     <tr>
-        <td style="text-align: center" colspan="5">
+        <td style="text-align: center" colspan="6">
             {{ \Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}}
             - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
     </tr>
     <tr>
-        <td style="text-align: center" colspan="5"></td>
+        <td style="text-align: center" colspan="6"></td>
     </tr>
     <tr>
         <th>Nomor Transaksi</th>
         <th>Tanggal</th>
-        <th>No Order</th>
+        <th>No Order/Pengiriman</th>
         <th>Nama Customer</th>
     </tr>
     </thead>
@@ -51,9 +51,14 @@
                 {{$post->invoice_date}}
             </td>
             <td>
-                {{
-                    !empty($post->order) ? $post->order->order_no : "-"
-                }}
+                @php
+                    $deliveryNos = !empty($post->invoicedelivery)
+                        ? $post->invoicedelivery->map(function ($item) {
+                            return !empty($item->delivery) ? $item->delivery->delivery_no : null;
+                        })->filter()->implode(', ')
+                        : '';
+                @endphp
+                {{ !empty($deliveryNos) ? $deliveryNos : (!empty($post->order) ? $post->order->order_no : "-") }}
             </td>
             <td>
                 {{ $post->vendor->vendor_company_name }}
@@ -61,20 +66,17 @@
         </tr>
         @php
             $arrTax = [];
-            $colspan = 0;
+            $colspan = 5;
         @endphp
+        <tr>
+            <td>Barang</td>
+            <td>Qty</td>
+            <td style="text-align: right">Harga</td>
+            <td style="text-align: right">HPP</td>
+            <td style="text-align: right">Diskon</td>
+            <td style="text-align: right">Subtotal</td>
+        </tr>
         @if(empty($post->order))
-            @php
-                $colspan = 5;
-            @endphp
-            <tr>
-                <td>Nama Item</td>
-                <td>Qty</td>
-                <td style="text-align: right">Harga</td>
-                <td style="text-align: right">Diskon</td>
-                <td>Pajak</td>
-                <td style="text-align: right">Subtotal</td>
-            </tr>
             @foreach ($post->orderproduct as $item)
                 @php
                     $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, $item->tax_group);
@@ -87,8 +89,8 @@
                         {{ !empty($item->unit) && !empty($item->unit->unit_code) ? $item->unit->unit_code : "" }}
                     </td>
                     <td style="text-align: right">{{ number_format($item->price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                    <td style="text-align: right">{{ number_format($item->hpp_price ?? 0, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                     <td style="text-align: right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
-                    <td>{{ $taxname }}</td>
                     <td style="text-align: right">{{ number_format($item->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
                 </tr>
                 @php
@@ -102,26 +104,7 @@
                 @endphp
             @endforeach
         @else
-            @php
-                $colspan = 3;
-            @endphp
-            <tr>
-                <td>No Penerimaan</td>
-                <td>Tanggal</td>
-                <td>Gudang</td>
-                <td style="text-align: right">Total</td>
-            </tr>
             @foreach ($post->invoicedelivery as $item)
-                @php
-                    $receiveRepo = new \Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo(new \Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery());
-                    $total = $receiveRepo->getTotalDelivery($item->id);
-                @endphp
-                <tr>
-                    <td>{{$item->delivery->delivery_no}}</td>
-                    <td>{{$item->delivery->delivery_date}}</td>
-                    <td>{{$item->delivery->warehouse->warehouse_name}}</td>
-                    <td style="text-align: right">{{ number_format($total, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                </tr>
                 @foreach($item->delivery->deliveryproduct as $val)
                     @php
                         $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($val->tax_id, $val->tax_percentage, $val->tax_group);
@@ -134,6 +117,17 @@
                             );
                         }
                     @endphp
+                    <tr>
+                        <td>{{ !empty($val->product) ? $val->product->item_name."(".$val->product->item_code.")" : "" }}</td>
+                        <td>
+                            {{ $val->qty }}
+                            {{ !empty($val->unit) && !empty($val->unit->unit_code) ? $val->unit->unit_code : "" }}
+                        </td>
+                        <td style="text-align: right">{{ number_format($val->sell_price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                        <td style="text-align: right">{{ number_format($val->hpp_price ?? 0, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                        <td style="text-align: right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($val->discount, $val->discount_type) }}</td>
+                        <td style="text-align: right">{{ number_format($val->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
+                    </tr>
                 @endforeach
             @endforeach
         @endif
@@ -164,6 +158,10 @@
         <tr>
             <td style="text-align: right" colspan="{{$colspan}}">Grand Total</td>
             <td style="text-align: right">{{number_format($post->grandtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
+        </tr>
+        <tr>
+            <td style="text-align: right" colspan="{{$colspan}}">Total HPP</td>
+            <td style="text-align: right">{{number_format($post->hpp_total ?? 0, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
         </tr>
         <tr>
             <td colspan="6"></td>

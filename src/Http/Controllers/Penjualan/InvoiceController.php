@@ -18,15 +18,18 @@ use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pembayaran\SalesPaymentInvoice;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Master\Vendor\VendorRepo;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
 use Icso\Accounting\Repositories\Penjualan\Invoice\InvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Penjualan\Retur\ReturRepo;
+use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Routing\Controller;
@@ -144,6 +147,7 @@ class InvoiceController extends Controller
                     'tax.taxgroup'
                 ])->get();
             }
+            $this->attachHppToInvoice($item);
             $paid = $this->paymentInvoiceRepo->getAllPaymentByInvoiceId($item->id);
             $left_bill = $item->grandtotal - $paid;
             if ($left_bill == 0) {
@@ -159,6 +163,99 @@ class InvoiceController extends Controller
         }
 
         return $data;
+    }
+
+    private function attachHppToInvoiceData($data)
+    {
+        foreach ($data as $invoice) {
+            $this->attachHppToInvoice($invoice);
+        }
+
+        return $data;
+    }
+
+    private function attachHppToInvoice($invoice): void
+    {
+        $inventoryRepo = new InventoryRepo(new Inventory());
+        $totalHpp = 0;
+
+        if (!empty($invoice->orderproduct)) {
+            foreach ($invoice->orderproduct as $item) {
+                $hpp = $this->getInvoiceProductHpp($invoice, $item, $inventoryRepo);
+                $hppTotal = $hpp * (float) ($item->qty ?? 0);
+                $item->hpp_price = $hpp;
+                $item->hpp_total = $hppTotal;
+                $item->subtotal_hpp = $hppTotal;
+                $totalHpp += $hppTotal;
+            }
+        }
+
+        if (!empty($invoice->invoicedelivery)) {
+            foreach ($invoice->invoicedelivery as $invoiceDelivery) {
+                if (empty($invoiceDelivery->delivery) || empty($invoiceDelivery->delivery->deliveryproduct)) {
+                    continue;
+                }
+
+                foreach ($invoiceDelivery->delivery->deliveryproduct as $item) {
+                    $hpp = $this->getDeliveryProductHpp($invoiceDelivery, $item, $inventoryRepo);
+                    $hppTotal = $hpp * (float) ($item->qty ?? 0);
+                    $item->hpp_price = $hpp;
+                    $item->hpp_total = $hppTotal;
+                    $item->subtotal_hpp = $hppTotal;
+                    $totalHpp += $hppTotal;
+                }
+            }
+        }
+
+        $invoice->hpp_total = $totalHpp;
+        $invoice->total_hpp = $totalHpp;
+    }
+
+    private function getInvoiceProductHpp($invoice, $item, InventoryRepo $inventoryRepo): float
+    {
+        if (empty($item->product_id) || empty($item->unit_id)) {
+            return 0;
+        }
+
+        $inventoryLog = Inventory::where([
+            'transaction_code' => TransactionsCode::INVOICE_PENJUALAN,
+            'transaction_id' => $invoice->id,
+            'transaction_sub_id' => $item->id
+        ])->first();
+
+        if ($inventoryLog) {
+            return (float) $inventoryLog->nominal;
+        }
+
+        return (float) $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $invoice->invoice_date);
+    }
+
+    private function getDeliveryProductHpp($invoiceDelivery, $item, InventoryRepo $inventoryRepo): float
+    {
+        $hpp = (float) ($item->hpp_price ?? 0);
+        if ($hpp > 0) {
+            return $hpp;
+        }
+
+        $inventoryLog = Inventory::where([
+            'transaction_code' => TransactionsCode::DELIVERY_ORDER,
+            'transaction_id' => $invoiceDelivery->delivery_id,
+            'transaction_sub_id' => $item->id
+        ])->first();
+
+        if ($inventoryLog) {
+            return (float) $inventoryLog->nominal;
+        }
+
+        if (empty($item->product_id) || empty($item->unit_id) || empty($invoiceDelivery->delivery)) {
+            return 0;
+        }
+
+        return (float) $inventoryRepo->movingAverageByDate(
+            $item->product_id,
+            $item->unit_id,
+            $invoiceDelivery->delivery->delivery_date
+        );
     }
 
     public function storeSaldoAwal(Request $request)
@@ -323,6 +420,7 @@ class InvoiceController extends Controller
                 ])->get();
                 $res->orderproductservice = $invProduct;
             }
+            $this->attachHppToInvoice($res);
             $res->payment_list = $this->invoiceRepo->getPaymentList($id);
             $getListDp = $this->invoiceRepo->getDpListBy($id);
             $res->has_dp = count($getListDp) > 0 ? true : false;
@@ -649,6 +747,7 @@ class InvoiceController extends Controller
         extract($params);
 
         $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage, $where);
+        $data = $this->attachHppToInvoiceData($data);
         if($type == 'excel'){
             return $this->downloadExcel($data, $params, $filename);
         } else {

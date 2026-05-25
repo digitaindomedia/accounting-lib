@@ -9,12 +9,23 @@ use Icso\Accounting\Exports\KartuStokExport;
 use Icso\Accounting\Exports\SampleStockAwalExport;
 use Icso\Accounting\Exports\StockAwalExport;
 use Icso\Accounting\Imports\StockAwalImport;
+use Icso\Accounting\Models\Akuntansi\Jurnal;
 use Icso\Accounting\Models\Akuntansi\SaldoAwal;
+use Icso\Accounting\Models\Manufacturing\ProductionOrder;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\ProductConvertion;
 use Icso\Accounting\Models\Master\Warehouse;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Retur\PurchaseRetur;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
+use Icso\Accounting\Models\Persediaan\Adjustment;
 use Icso\Accounting\Models\Persediaan\Inventory;
+use Icso\Accounting\Models\Persediaan\Mutation;
 use Icso\Accounting\Models\Persediaan\StockAwal;
+use Icso\Accounting\Models\Persediaan\StockUsage;
 use Icso\Accounting\Repositories\Master\Product\ProductRepo;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Services\ActivityLogService;
@@ -225,6 +236,7 @@ class InventoryController extends Controller
         $data = $this->inventoryRepo->getAllDataBy("",$page,$perPage,array('product_id' => $productId));
         $total = $this->inventoryRepo->getAllTotalDataBy("",array('product_id' => $productId));
         if(count($data) > 0) {
+            $this->appendTransactionInfoToInventory($data);
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
             $this->data['data'] = $data;
@@ -234,6 +246,132 @@ class InventoryController extends Controller
             $this->data['message'] = 'Data tidak ditemukan';
         }
         return response()->json($this->data);
+    }
+
+    private function appendTransactionInfoToInventory($inventories): void
+    {
+        $transactionReferences = $this->getInventoryTransactionReferences($inventories);
+
+        foreach ($inventories as $inventory) {
+            $referenceKey = $this->makeTransactionReferenceKey($inventory->transaction_code, $inventory->transaction_id);
+            $reference = $transactionReferences[$referenceKey] ?? [
+                'transaction_name' => '',
+                'transaction_no' => '',
+            ];
+
+            $inventory->transaction_name = $reference['transaction_name'];
+            $inventory->transaction_no = $reference['transaction_no'];
+        }
+    }
+
+    private function getInventoryTransactionReferences($inventories): array
+    {
+        $transactionMap = $this->inventoryTransactionMap();
+        $references = [];
+
+        $inventories->groupBy('transaction_code')->each(function ($items, $transactionCode) use ($transactionMap, &$references) {
+            if (!isset($transactionMap[$transactionCode])) {
+                return;
+            }
+
+            $config = $transactionMap[$transactionCode];
+            $ids = $items->pluck('transaction_id')->filter()->unique()->values();
+            if ($ids->isEmpty()) {
+                return;
+            }
+
+            $transactionNumbers = [];
+            if (!empty($config['number_column'])) {
+                $transactionNumbers = $config['model']::whereIn('id', $ids)
+                    ->pluck($config['number_column'], 'id')
+                    ->toArray();
+            }
+
+            foreach ($ids as $id) {
+                $references[$this->makeTransactionReferenceKey($transactionCode, $id)] = [
+                    'transaction_name' => $config['name'],
+                    'transaction_no' => $transactionNumbers[$id] ?? '',
+                ];
+            }
+        });
+
+        return $references;
+    }
+
+    private function inventoryTransactionMap(): array
+    {
+        return [
+            TransactionsCode::SALDO_AWAL => [
+                'model' => StockAwal::class,
+                'number_column' => null,
+                'name' => 'SALDO AWAL',
+            ],
+            TransactionsCode::JURNAL => [
+                'model' => Jurnal::class,
+                'number_column' => 'jurnal_no',
+                'name' => 'JURNAL',
+            ],
+            TransactionsCode::PENERIMAAN => [
+                'model' => PurchaseReceived::class,
+                'number_column' => 'receive_no',
+                'name' => 'PENERIMAAN PEMBELIAN',
+            ],
+            TransactionsCode::INVOICE_PEMBELIAN => [
+                'model' => PurchaseInvoicing::class,
+                'number_column' => 'invoice_no',
+                'name' => 'INVOICE PEMBELIAN',
+            ],
+            TransactionsCode::RETUR_PEMBELIAN => [
+                'model' => PurchaseRetur::class,
+                'number_column' => 'retur_no',
+                'name' => 'RETUR PEMBELIAN',
+            ],
+            TransactionsCode::DELIVERY_ORDER => [
+                'model' => SalesDelivery::class,
+                'number_column' => 'delivery_no',
+                'name' => 'PENGIRIMAN PENJUALAN',
+            ],
+            TransactionsCode::INVOICE_PENJUALAN => [
+                'model' => SalesInvoicing::class,
+                'number_column' => 'invoice_no',
+                'name' => 'INVOICE PENJUALAN',
+            ],
+            TransactionsCode::RETUR_PENJUALAN => [
+                'model' => SalesRetur::class,
+                'number_column' => 'retur_no',
+                'name' => 'RETUR PENJUALAN',
+            ],
+            TransactionsCode::ADJUSTMENT => [
+                'model' => Adjustment::class,
+                'number_column' => 'ref_no',
+                'name' => 'PENYESUAIAN STOK',
+            ],
+            TransactionsCode::MUTATION => [
+                'model' => Mutation::class,
+                'number_column' => 'ref_no',
+                'name' => 'MUTASI GUDANG',
+            ],
+            TransactionsCode::PEMAKAIAN_STOCK => [
+                'model' => StockUsage::class,
+                'number_column' => 'ref_no',
+                'name' => 'PEMAKAIAN STOK',
+            ],
+            TransactionsCode::PRODUCTION_MATERIAL => [
+                'model' => ProductionOrder::class,
+                'number_column' => 'ref_no',
+                'name' => 'PRODUKSI BAHAN BAKU',
+            ],
+            TransactionsCode::PRODUCTION_RESULT => [
+                'model' => ProductionOrder::class,
+                'number_column' => 'ref_no',
+                'name' => 'HASIL PRODUKSI',
+            ],
+        ];
+    }
+
+    private function makeTransactionReferenceKey($transactionCode, $transactionId): string
+    {
+        return $transactionCode . ':' . $transactionId;
     }
 
     public function kartuStok(Request $request)

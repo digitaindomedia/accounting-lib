@@ -38,11 +38,11 @@ class DeliveryRepo extends ElequentRepository
     protected $model;
     protected ActivityLogService $activityLog;
 
-    public function __construct(SalesDelivery $model, ActivityLogService $activityLog)
+    public function __construct(SalesDelivery $model, ?ActivityLogService $activityLog = null)
     {
         parent::__construct($model);
         $this->model = $model;
-        $this->activityLog = $activityLog;
+        $this->activityLog = $activityLog ?? app(ActivityLogService::class);
     }
 
     // ... [Keep getAllDataBy, getAllTotalDataBy as original] ...

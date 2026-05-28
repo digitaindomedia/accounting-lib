@@ -143,6 +143,7 @@ class Setting extends Controller
             SettingRepo::setOption(SettingEnum::COA_BEBAN_POKOK_PENJUALAN, $request->akunBebanPokokPenjualan['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_POTONGAN_PENJUALAN, $request->akunPotonganPenjualan['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_PENJUALAN, $request->akunPenjualan['id'] ?? null, $userId);
+            SettingRepo::setOption(SettingEnum::COA_PENDAPATAN_JASA, $request->akunPendapatanJasa['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_RETUR_PENJUALAN, $request->akunReturPenjualan['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_PRODUKSI_WIP, $request->akunProduksiWip['id'] ?? null, $userId);
             SettingRepo::setOption(SettingEnum::COA_UANG_MUKA_PEMBELIAN_ASET_TETAP, $request->akunUangMukaPembelianAsetTetap['id'] ?? null, $userId);
@@ -185,6 +186,7 @@ class Setting extends Controller
         $akunBebanPokokPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_BEBAN_POKOK_PENJUALAN);
         $akunPotonganPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_POTONGAN_PENJUALAN);
         $akunPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_PENJUALAN);
+        $akunPendapatanJasa = SettingRepo::getOptionValue(SettingEnum::COA_PENDAPATAN_JASA);
         $akunReturPenjualan = SettingRepo::getOptionValue(SettingEnum::COA_RETUR_PENJUALAN);
         $akunProduksiWip = SettingRepo::getOptionValue(SettingEnum::COA_PRODUKSI_WIP);
         $akunUangMukaPembelianAsetTetap = SettingRepo::getOptionValue(SettingEnum::COA_UANG_MUKA_PEMBELIAN_ASET_TETAP);
@@ -208,6 +210,7 @@ class Setting extends Controller
             'akunBebanPokokPenjualan' => Coa::where(array('id' => $akunBebanPokokPenjualan))->first(),
             'akunPotonganPenjualan' => Coa::where(array('id' => $akunPotonganPenjualan))->first(),
             'akunPenjualan' => Coa::where(array('id' => $akunPenjualan))->first(),
+            'akunPendapatanJasa' => Coa::where(array('id' => $akunPendapatanJasa))->first(),
             'akunReturPenjualan' => Coa::where(array('id' => $akunReturPenjualan))->first(),
             'akunProduksiWip' => Coa::where(array('id' => $akunProduksiWip))->first(),
             'akunUangMukaPembelianAsetTetap' => Coa::where(array('id' => $akunUangMukaPembelianAsetTetap))->first(),

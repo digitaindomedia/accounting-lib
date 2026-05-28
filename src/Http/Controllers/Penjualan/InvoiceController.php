@@ -12,6 +12,8 @@ use Icso\Accounting\Exports\JurnalInvoiceExport;
 use Icso\Accounting\Http\Requests\CreateSalesInvoiceRequest;
 use Icso\Accounting\Imports\SalesInvoiceImport;
 use Icso\Accounting\Imports\JurnalInvoiceImport;
+use Icso\Accounting\Models\ImportLog;
+use Icso\Accounting\Models\ImportLogDetail;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingMeta;
@@ -38,6 +40,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Log;
+
 class InvoiceController extends Controller
 {
     protected $invoiceRepo;
@@ -372,25 +375,19 @@ class InvoiceController extends Controller
 
     public function deleteById(Request $request){
         $id = $request->id;
-        DB::beginTransaction();
-        try
-        {
-            $find = SalesInvoicing::with(['invoicedelivery'])->find($id);
-            if (!empty($find->invoicedelivery)) {
-                foreach ($find->invoicedelivery as $item) {
-                    DeliveryRepo::changeStatusDelivery($item->delivery_id, StatusEnum::OPEN);
-                }
+        try {
+            $deleted = $this->invoiceRepo->destroy((int) $id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = array();
             }
-
-            $this->invoiceRepo->deleteAdditional($id);
-            $this->invoiceRepo->delete($id);
-            DB::commit();
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = array();
         }
         catch (\Exception $e) {
-            DB::rollback();
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
@@ -555,27 +552,44 @@ class InvoiceController extends Controller
     public function destroy(Request $request)
     {
         $id = $request->id;
-        DB::beginTransaction();
-        try
-        {
-            $find = SalesInvoicing::with(['invoicedelivery'])->find($id);
-            if (!empty($find->invoicedelivery)) {
-                foreach ($find->invoicedelivery as $item) {
-                    DeliveryRepo::changeStatusDelivery($item->delivery_id, StatusEnum::OPEN);
-                }
+        try {
+            $deleted = $this->invoiceRepo->destroy((int) $id, (int) $request->user_id);
+            if ($deleted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Data berhasil dihapus';
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['data'] = array();
             }
-
-            $this->invoiceRepo->deleteAdditional($id);
-            $this->invoiceRepo->delete($id);
-            DB::commit();
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil dihapus';
-            $this->data['data'] = array();
         }
         catch (\Exception $e) {
-            DB::rollback();
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
+            $this->data['data'] = array();
+        }
+        return response()->json($this->data);
+    }
+
+    public function repostJurnal(Request $request)
+    {
+        $id = $request->id;
+        try {
+            $reposted = $this->invoiceRepo->repostJurnal((int) $id);
+            if ($reposted) {
+                $this->data['status'] = true;
+                $this->data['message'] = 'Jurnal invoice berhasil direposting';
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = 'Jurnal invoice gagal direposting';
+                $this->data['data'] = array();
+            }
+        }
+        catch (\Exception $e) {
+            $this->data['status'] = false;
+            $this->data['message'] = 'Jurnal invoice gagal direposting';
             $this->data['data'] = array();
         }
         return response()->json($this->data);
@@ -588,22 +602,20 @@ class InvoiceController extends Controller
         $failedDelete = 0;
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                DB::beginTransaction();
-                try
-                {
-                    $find = SalesInvoicing::with(['invoicedelivery'])->find($id);
-                    if (!empty($find->invoicedelivery)) {
-                        foreach ($find->invoicedelivery as $item) {
-                            DeliveryRepo::changeStatusDelivery($item->delivery_id, StatusEnum::OPEN);
-                        }
+                $invoiceId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                if (!$invoiceId) {
+                    $failedDelete = $failedDelete + 1;
+                    continue;
+                }
+                try {
+                    $deleted = $this->invoiceRepo->destroy((int) $invoiceId, (int) $request->user_id);
+                    if ($deleted) {
+                        $successDelete = $successDelete + 1;
+                    } else {
+                        $failedDelete = $failedDelete + 1;
                     }
-                    $this->invoiceRepo->deleteAdditional($id);
-                    $this->invoiceRepo->delete($id);
-                    DB::commit();
-                    $successDelete = $successDelete + 1;
                 }
                 catch (\Exception $e) {
-                    DB::rollback();
                     $failedDelete = $failedDelete + 1;
                 }
             }
@@ -686,11 +698,155 @@ class InvoiceController extends Controller
         $orderType = $request->order_type;
         $import = new SalesInvoiceImport($userId,$orderType);
         Excel::import($import, $request->file('file'));
+        $importLogId = $this->createImportLog(
+            $userId,
+            TransactionsCode::INVOICE_PENJUALAN,
+            $import->getImportedIds()
+        );
 
         if ($errors = $import->getErrors()) {
-            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows(), 'import_log_id' => $importLogId]);
         }
-        return response()->json(['status' => true,'success' => $import->getSuccessCount(),'errors' => count($import->getErrors()), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows()], 200);
+        return response()->json(['status' => true,'success' => $import->getSuccessCount(),'errors' => count($import->getErrors()), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows(), 'import_log_id' => $importLogId], 200);
+    }
+
+    private function createImportLog($userId, string $transactionType, array $transactionIds)
+    {
+        $transactionIds = array_values(array_unique(array_filter($transactionIds)));
+        if (empty($transactionIds)) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($userId, $transactionType, $transactionIds) {
+            $importLog = ImportLog::create([
+                'import_at' => date('Y-m-d H:i:s'),
+                'user_id' => !empty($userId) ? $userId : null,
+                'transaction_type' => $transactionType,
+                'total_detail' => count($transactionIds),
+            ]);
+
+            $details = array_map(function ($transactionId) use ($importLog) {
+                return [
+                    'import_log_id' => $importLog->id,
+                    'transaksi_id' => $transactionId,
+                ];
+            }, $transactionIds);
+
+            ImportLogDetail::insert($details);
+
+            return $importLog->id;
+        });
+    }
+
+    public function getImportLogs(Request $request)
+    {
+        $page = (int) ($request->page ?? 0);
+        $perpage = (int) ($request->perpage ?? 10);
+        $perpage = $perpage > 0 ? $perpage : 10;
+
+        $query = ImportLog::where('transaction_type', TransactionsCode::INVOICE_PENJUALAN)
+            ->withCount('details')
+            ->orderBy('import_at', 'desc')
+            ->orderBy('id', 'desc');
+
+        $total = (clone $query)->count();
+        $data = $query->offset($page)->limit($perpage)->get();
+
+        return response()->json([
+            'status' => count($data) > 0,
+            'message' => count($data) > 0 ? 'Data berhasil ditemukan' : 'Data tidak ditemukan',
+            'data' => $data,
+            'total' => $total,
+            'has_more' => Helpers::hasMoreData($total, $page, $data),
+        ]);
+    }
+
+    public function showImportLog(Request $request)
+    {
+        $id = $request->id;
+        $data = ImportLog::where('transaction_type', TransactionsCode::INVOICE_PENJUALAN)
+            ->with([
+                'details',
+                'details.salesInvoice',
+                'details.salesInvoice.vendor'
+            ])
+            ->find($id);
+
+        if (!$data) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => null,
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data berhasil ditemukan',
+            'data' => $data,
+        ]);
+    }
+
+    public function deleteImportLogData(Request $request)
+    {
+        $id = $request->id;
+        $userId = (int) ($request->user_id ?? 0);
+        $importLog = ImportLog::where('transaction_type', TransactionsCode::INVOICE_PENJUALAN)
+            ->with('details')
+            ->find($id);
+
+        if (!$importLog) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => [],
+            ]);
+        }
+
+        $successDelete = 0;
+        $failedDelete = 0;
+        $missingData = 0;
+        $deletedDetailIds = [];
+
+        foreach ($importLog->details as $detail) {
+            $transactionId = (int) $detail->transaksi_id;
+
+            if (!SalesInvoicing::whereKey($transactionId)->exists()) {
+                $missingData++;
+                $deletedDetailIds[] = $detail->id;
+                continue;
+            }
+
+            if ($this->invoiceRepo->destroy($transactionId, $userId)) {
+                $successDelete++;
+                $deletedDetailIds[] = $detail->id;
+            } else {
+                $failedDelete++;
+            }
+        }
+
+        if (!empty($deletedDetailIds)) {
+            ImportLogDetail::whereIn('id', $deletedDetailIds)->delete();
+        }
+
+        $remaining = ImportLogDetail::where('import_log_id', $importLog->id)->count();
+        if ($remaining === 0) {
+            $importLog->delete();
+        } else {
+            $importLog->total_detail = $remaining;
+            $importLog->save();
+        }
+
+        $message = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
+        if ($missingData > 0) {
+            $message .= " <br /> $missingData Data sudah tidak ada";
+        }
+
+        return response()->json([
+            'status' => ($successDelete + $missingData) > 0,
+            'message' => $message,
+            'data' => [],
+        ]);
     }
 
     public function importJurnal(Request $request)

@@ -431,13 +431,93 @@ class InvoiceRepo extends ElequentRepository
             }
         }
 
-        JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PENJUALAN, $id);
+        $this->deleteInvoiceJournal($id, $invoice->invoice_no ?? null);
         (new AutoConsumeProductionService())->deleteBySource('sales_invoice_auto', (int) $id);
         SalesInvoicingDp::where('invoice_id', $id)->delete();
         SalesInvoicingDelivery::where('invoice_id', $id)->delete();
         SalesOrderProduct::where('invoice_id', $id)->delete();
         SalesInvoicingMeta::where('invoice_id', $id)->delete();
         Inventory::where('transaction_code', TransactionsCode::INVOICE_PENJUALAN)->where('transaction_id', $id)->delete();
+    }
+
+    private function deleteInvoiceJournal($id, ?string $invoiceNo = null): void
+    {
+        JurnalTransaksi::where('transaction_code', TransactionsCode::INVOICE_PENJUALAN)
+            ->where(function ($query) use ($id, $invoiceNo) {
+                $query->where('transaction_id', $id);
+
+                if (!empty($invoiceNo)) {
+                    $query->orWhere('transaction_no', $invoiceNo);
+                }
+            })
+            ->delete();
+    }
+
+    public function destroy(int $id, int $userId): bool
+    {
+        $invoice = SalesInvoicing::with(['invoicedelivery'])->find($id);
+        if (!$invoice) {
+            return false;
+        }
+
+        if (SalesPaymentInvoice::where('invoice_id', $id)->exists()) {
+            return false;
+        }
+
+        DB::beginTransaction();
+        try {
+            if (!empty($invoice->invoicedelivery)) {
+                foreach ($invoice->invoicedelivery as $item) {
+                    DeliveryRepo::changeStatusDelivery($item->delivery_id, StatusEnum::OPEN);
+                }
+            }
+
+            $this->deleteAdditional($id);
+            parent::delete($id);
+            DB::commit();
+
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[SalesInvoiceRepo][destroy] ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function repostJurnal(int $idInvoice): bool
+    {
+        $invoice = SalesInvoicing::find($idInvoice);
+        if (!$invoice) {
+            return false;
+        }
+
+        DB::beginTransaction();
+        try {
+            $this->deleteInvoiceJournal($idInvoice, $invoice->invoice_no);
+
+            if ($invoice->input_type == InputType::POS) {
+                $paymentInvoice = SalesPaymentInvoice::where('invoice_id', $idInvoice)
+                    ->with(['salespayment'])
+                    ->first();
+
+                if (empty($paymentInvoice?->salespayment?->payment_method_id)) {
+                    throw new Exception("Payment method POS invoice {$invoice->invoice_no} tidak ditemukan");
+                }
+
+                $request = new Request();
+                $request->payment_method = $paymentInvoice->salespayment->payment_method_id;
+                $this->postingJurnalPOS($idInvoice, $request);
+            } else {
+                $this->postingJurnal($idInvoice, true, true);
+            }
+
+            DB::commit();
+            return true;
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[SalesInvoiceRepo][repostJurnal] ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
@@ -461,8 +541,9 @@ class InvoiceRepo extends ElequentRepository
 
         // 2. Settings
         $settings = [
-            'coa_piutang'   => SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA),
+            'coa_piutang'   => $this->resolvePiutangCoa($find),
             'coa_penjualan' => SettingRepo::getOptionValue(SettingEnum::COA_PENJUALAN),
+            'coa_jasa'      => $this->resolveServiceRevenueCoa(),
             'coa_sediaan'   => SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN),
             'coa_hpp'       => SettingRepo::getOptionValue(SettingEnum::COA_BEBAN_POKOK_PENJUALAN),
             'coa_transit'   => SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN_DALAM_PERJALANAN),
@@ -480,8 +561,7 @@ class InvoiceRepo extends ElequentRepository
         if ($find->invoicedelivery->isEmpty()) {
 
             foreach ($find->orderproduct as $item) {
-                // Determine Revenue COA: Use product's coa_id if set, otherwise use default
-                $coaRevenue = $settings['coa_penjualan'];
+                $coaRevenue = $this->resolveRevenueCoa($find, $settings);
 
                 $subtotal = $item->subtotal;
 
@@ -578,10 +658,7 @@ class InvoiceRepo extends ElequentRepository
                 if (!$delInv->delivery) continue;
 
                 foreach ($delInv->delivery->deliveryproduct as $item) {
-                    // Determine Revenue COA: Use product's coa_id if set, otherwise use default
-                    $coaRevenue = (!empty($item->product->coa_id) && $item->product->coa_id != 0)
-                        ? $item->product->coa_id
-                        : $settings['coa_penjualan'];
+                    $coaRevenue = $this->resolveRevenueCoa($find, $settings);
 
                     $dpp = $item->subtotal;
 
@@ -716,6 +793,35 @@ class InvoiceRepo extends ElequentRepository
         // 8. Validate & Save
         Log::info($journalEntries);
         $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    private function resolvePiutangCoa($invoice): string
+    {
+        $vendorCoaId = (int) ($invoice->vendor->coa_id ?? 0);
+        if ($vendorCoaId > 0) {
+            return (string) $vendorCoaId;
+        }
+
+        return (string) SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
+    }
+
+    private function resolveServiceRevenueCoa(): string
+    {
+        $coaJasa = (int) SettingRepo::getOptionValue(SettingEnum::COA_PENDAPATAN_JASA);
+        if ($coaJasa > 0) {
+            return (string) $coaJasa;
+        }
+
+        return (string) SettingRepo::getOptionValue(SettingEnum::COA_PENJUALAN);
+    }
+
+    private function resolveRevenueCoa($invoice, array $settings): string
+    {
+        if ($invoice->invoice_type == ProductType::SERVICE) {
+            return (string) $settings['coa_jasa'];
+        }
+
+        return (string) $settings['coa_penjualan'];
     }
 
     private function calculateTaxComponents($item, $amount): array
@@ -947,7 +1053,7 @@ class InvoiceRepo extends ElequentRepository
     {
         // Simple POS Journal: Debit Cash/Bank, Credit Sales
         $jurnalRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
-        $find = SalesInvoicing::find($idInvoice);
+        $find = SalesInvoicing::with(['vendor'])->find($idInvoice);
         $paymentMethod = PaymentMethod::find($request->payment_method);
 
         if ($find && $paymentMethod) {
@@ -972,7 +1078,7 @@ class InvoiceRepo extends ElequentRepository
             ]);
 
             // Credit Piutang (Close the AR created by standard posting)
-            $coaPiutang = SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
+            $coaPiutang = $this->resolvePiutangCoa($find);
             $jurnalRepo->create([
                 'transaction_date' => $find->invoice_date,
                 'transaction_code' => TransactionsCode::INVOICE_PENJUALAN,

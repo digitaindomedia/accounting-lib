@@ -20,6 +20,7 @@ class JurnalUmumImport implements ToCollection
     private array $errors = [];
     private int $totalRows = 0;
     private int $successCount = 0;
+    private array $importedIds = [];
 
     public function __construct($userId)
     {
@@ -114,6 +115,10 @@ class JurnalUmumImport implements ToCollection
             'updated_by' => $this->userId,
         ]);
 
+        if ($jurnal) {
+            $this->importedIds[] = $jurnal->id;
+        }
+
         return $jurnal?->id;
     }
 
@@ -171,5 +176,10 @@ class JurnalUmumImport implements ToCollection
     public function getTotalRows(): int
     {
         return $this->totalRows;
+    }
+
+    public function getImportedIds(): array
+    {
+        return array_values(array_unique(array_filter($this->importedIds)));
     }
 }

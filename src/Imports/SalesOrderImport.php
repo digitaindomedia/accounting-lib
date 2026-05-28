@@ -27,6 +27,7 @@ class SalesOrderImport implements ToCollection
 
     private $totalRows = 0;
     private $successCount = 0;
+    private $importedIds = [];
     protected $orderRepo;
 
     public function __construct($userId, $orderType)
@@ -79,7 +80,9 @@ class SalesOrderImport implements ToCollection
                 if($idOrder){
                     $this->successCount++;
                 }
-                $arrListIdOrder[] = $idOrder;
+                if ($idOrder) {
+                    $arrListIdOrder[] = $idOrder;
+                }
                 $statIns = true;
 
             } elseif ($oldNo != $noOrder) {
@@ -87,7 +90,9 @@ class SalesOrderImport implements ToCollection
                 if($idOrder){
                     $this->successCount++;
                 }
-                $arrListIdOrder[] = $idOrder;
+                if ($idOrder) {
+                    $arrListIdOrder[] = $idOrder;
+                }
                 $statIns = true;
 
 
@@ -138,6 +143,7 @@ class SalesOrderImport implements ToCollection
         $res = $this->orderRepo->handleNewData($arrData, $this->orderType, $this->userId);
         if($res){
             $this->insertSalesOrderProduct($res->id,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage);
+            $this->importedIds[] = $res->id;
             return $res->id;
         }
         return 0;
@@ -239,5 +245,10 @@ class SalesOrderImport implements ToCollection
     public function getTotalRows()
     {
         return $this->totalRows;
+    }
+
+    public function getImportedIds()
+    {
+        return array_values(array_unique(array_filter($this->importedIds)));
     }
 }

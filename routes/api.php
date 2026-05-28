@@ -167,6 +167,9 @@ Route::group([
     Route::get('download-sample-jurnal-kas-bank', [JurnalController::class, 'downloadKasBankSample']);
     Route::post('import-jurnal-umum', [JurnalController::class, 'import']);
     Route::post('import-jurnal-kas-bank', [JurnalController::class, 'importKasBank']);
+    Route::get('jurnal-import-log-get-all', [JurnalController::class, 'getImportLogs']);
+    Route::get('jurnal-import-log-find-by-id', [JurnalController::class, 'showImportLog']);
+    Route::delete('delete-jurnal-import-log-data', [JurnalController::class, 'deleteImportLogData']);
     Route::get('export-excel-jurnal', [JurnalController::class, 'export']);
     Route::get('export-pdf-jurnal', [JurnalController::class, 'exportPdf']);
     Route::get('export-excel-saldo-awal', [SaldoAwalController::class, 'exportExcel']);
@@ -233,6 +236,9 @@ Route::group([
         Route::get('download-sample-saldo-awal', [InvoiceController::class, 'downloadSampleJurnal']);
         Route::post('import', [InvoiceController::class, 'import']);
         Route::post('import-saldo-awal-hutang', [InvoiceController::class, 'importJurnal']);
+        Route::get('import-log-get-all', [InvoiceController::class, 'getImportLogs']);
+        Route::get('import-log-find-by-id', [InvoiceController::class, 'showImportLog']);
+        Route::delete('delete-import-log-data', [InvoiceController::class, 'deleteImportLogData']);
         Route::get('export-excel', [InvoiceController::class, 'export']);
         Route::get('export-csv', [InvoiceController::class, 'exportCsv']);
         Route::get('export-pdf', [InvoiceController::class, 'exportPdf']);
@@ -281,6 +287,9 @@ Route::group([
         Route::get('completion', [RequestController::class, 'completion']);
         Route::get('download-sample', [RequestController::class, 'downloadSample']);
         Route::post('import', [RequestController::class, 'import']);
+        Route::get('import-log-get-all', [RequestController::class, 'getImportLogs']);
+        Route::get('import-log-find-by-id', [RequestController::class, 'showImportLog']);
+        Route::delete('delete-import-log-data', [RequestController::class, 'deleteImportLogData']);
         Route::get('export-excel', [RequestController::class, 'export']);
         Route::get('export-csv', [RequestController::class, 'exportCsv']);
         Route::get('export-pdf', [RequestController::class, 'exportPdf']);
@@ -298,6 +307,9 @@ Route::group([
         Route::get('completion', [OrderController::class, 'completion']);
         Route::get('download-sample', [OrderController::class, 'downloadSample']);
         Route::post('import', [OrderController::class, 'import']);
+        Route::get('import-log-get-all', [OrderController::class, 'getImportLogs']);
+        Route::get('import-log-find-by-id', [OrderController::class, 'showImportLog']);
+        Route::delete('delete-import-log-data', [OrderController::class, 'deleteImportLogData']);
         Route::get('export-excel', [OrderController::class, 'export']);
         Route::get('export-csv', [OrderController::class, 'exportCsv']);
         Route::get('export-pdf', [OrderController::class, 'exportPdf']);
@@ -383,6 +395,9 @@ Route::group([
         Route::delete('delete-all', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'deleteAll']);
         Route::get('download-sample', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'downloadSample']);
         Route::post('import', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'import']);
+        Route::get('import-log-get-all', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'getImportLogs']);
+        Route::get('import-log-find-by-id', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'showImportLog']);
+        Route::delete('delete-import-log-data', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'deleteImportLogData']);
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'exportCsv']);
         Route::get('export-pdf', [Icso\Accounting\Http\Controllers\Penjualan\OrderController::class, 'exportPdf']);
@@ -431,10 +446,14 @@ Route::group([
         Route::get('report-kartu-piutang-detail',[\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'showKartuPiutangDetail']);
         Route::delete('delete', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'destroy']);
         Route::delete('delete-all', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'deleteAll']);
+        Route::post('repost-jurnal', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'repostJurnal']);
         Route::get('download-sample', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'downloadSample']);
         Route::get('download-sample-saldo-awal', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'downloadSampleJurnal']);
         Route::post('import-saldo-awal-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'importJurnal']);
         Route::post('import', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'import']);
+        Route::get('import-log-get-all', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'getImportLogs']);
+        Route::get('import-log-find-by-id', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'showImportLog']);
+        Route::delete('delete-import-log-data', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'deleteImportLogData']);
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'export']);
         Route::get('export-csv', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportCsv']);
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportPdf']);
@@ -506,6 +525,9 @@ Route::group([
         Route::delete('delete-all', [AdjustmentController::class, 'deleteAll']);
         Route::get('download-sample', [AdjustmentController::class, 'downloadSample']);
         Route::post('import', [AdjustmentController::class, 'import']);
+        Route::get('import-log-get-all', [AdjustmentController::class, 'getImportLogs']);
+        Route::get('import-log-find-by-id', [AdjustmentController::class, 'showImportLog']);
+        Route::delete('delete-import-log-data', [AdjustmentController::class, 'deleteImportLogData']);
         Route::get('export-excel', [AdjustmentController::class, 'export']);
         Route::get('export-csv', [AdjustmentController::class, 'exportCsv']);
         Route::get('export-pdf', [AdjustmentController::class, 'exportPdf']);
@@ -521,6 +543,9 @@ Route::group([
         Route::delete('delete-all', [PemakaianController::class, 'deleteAll']);
         Route::get('download-sample', [PemakaianController::class, 'downloadSample']);
         Route::post('import', [PemakaianController::class, 'import']);
+        Route::get('import-log-get-all', [PemakaianController::class, 'getImportLogs']);
+        Route::get('import-log-find-by-id', [PemakaianController::class, 'showImportLog']);
+        Route::delete('delete-import-log-data', [PemakaianController::class, 'deleteImportLogData']);
         Route::get('export-excel', [PemakaianController::class, 'export']);
         Route::get('export-csv', [PemakaianController::class, 'exportCsv']);
         Route::get('export-pdf', [PemakaianController::class, 'exportPdf']);

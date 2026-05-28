@@ -7,8 +7,12 @@ use Icso\Accounting\Exports\SamplePemakaianExport;
 use Icso\Accounting\Exports\UsageStockExport;
 use Icso\Accounting\Http\Requests\CreatePemakaianRequest;
 use Icso\Accounting\Imports\PemakaianImport;
+use Icso\Accounting\Models\ImportLog;
+use Icso\Accounting\Models\ImportLogDetail;
+use Icso\Accounting\Models\Persediaan\StockUsage;
 use Icso\Accounting\Repositories\Persediaan\Pemakaian\PemakaianRepo;
 use Icso\Accounting\Utils\Helpers;
+use Icso\Accounting\Utils\TransactionsCode;
 use Illuminate\Routing\Controller;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -194,12 +198,161 @@ class PemakaianController extends Controller
         $userId = $request->input('user_id');
         $import = new PemakaianImport($userId);
         Excel::import($import, $request->file('file'));
+        $importLogId = $this->createImportLog(
+            $userId,
+            TransactionsCode::PEMAKAIAN_STOCK,
+            $import->getImportedIds()
+        );
 
         if ($errors = $import->getErrors()) {
-            return response()->json(['status' => false, 'success' => $import->getSuccessCount(), 'messageError' => $errors, 'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(), 'messageError' => $errors, 'errors' => count($errors), 'imported' => $import->getTotalRows(), 'import_log_id' => $importLogId]);
         }
 
-        return response()->json(['status' => true, 'success' => $import->getSuccessCount(), 'errors' => count($import->getErrors()), 'message' => 'Import file berhasil', 'imported' => $import->getTotalRows()], 200);
+        return response()->json(['status' => true, 'success' => $import->getSuccessCount(), 'errors' => count($import->getErrors()), 'message' => 'Import file berhasil', 'imported' => $import->getTotalRows(), 'import_log_id' => $importLogId], 200);
+    }
+
+    private function createImportLog($userId, string $transactionType, array $transactionIds)
+    {
+        $transactionIds = array_values(array_unique(array_filter($transactionIds)));
+        if (empty($transactionIds)) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($userId, $transactionType, $transactionIds) {
+            $importLog = ImportLog::create([
+                'import_at' => date('Y-m-d H:i:s'),
+                'user_id' => !empty($userId) ? $userId : null,
+                'transaction_type' => $transactionType,
+                'total_detail' => count($transactionIds),
+            ]);
+
+            $details = array_map(function ($transactionId) use ($importLog) {
+                return [
+                    'import_log_id' => $importLog->id,
+                    'transaksi_id' => $transactionId,
+                ];
+            }, $transactionIds);
+
+            ImportLogDetail::insert($details);
+
+            return $importLog->id;
+        });
+    }
+
+    public function getImportLogs(Request $request): JsonResponse
+    {
+        $page = (int) ($request->input('page') ?? 0);
+        $perpage = (int) ($request->input('perpage') ?? 10);
+        $perpage = $perpage > 0 ? $perpage : 10;
+
+        $query = ImportLog::where('transaction_type', TransactionsCode::PEMAKAIAN_STOCK)
+            ->withCount('details')
+            ->orderBy('import_at', 'desc')
+            ->orderBy('id', 'desc');
+
+        $total = (clone $query)->count();
+        $data = $query->offset($page)->limit($perpage)->get();
+
+        return response()->json([
+            'status' => count($data) > 0,
+            'message' => count($data) > 0 ? 'Data berhasil ditemukan' : 'Data tidak ditemukan',
+            'data' => $data,
+            'total' => $total,
+            'has_more' => Helpers::hasMoreData($total, $page, $data),
+        ]);
+    }
+
+    public function showImportLog(Request $request): JsonResponse
+    {
+        $id = $request->input('id');
+        $data = ImportLog::where('transaction_type', TransactionsCode::PEMAKAIAN_STOCK)
+            ->with([
+                'details',
+                'details.stockUsage',
+                'details.stockUsage.warehouse',
+                'details.stockUsage.coa_stock',
+                'details.stockUsage.stockusageproduct',
+                'details.stockUsage.stockusageproduct.product',
+                'details.stockUsage.stockusageproduct.coa',
+                'details.stockUsage.stockusageproduct.unit'
+            ])
+            ->find($id);
+
+        if (!$data) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => null,
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data berhasil ditemukan',
+            'data' => $data,
+        ]);
+    }
+
+    public function deleteImportLogData(Request $request): JsonResponse
+    {
+        $id = $request->input('id');
+        $userId = (int) ($request->input('user_id') ?? 0);
+        $importLog = ImportLog::where('transaction_type', TransactionsCode::PEMAKAIAN_STOCK)
+            ->with('details')
+            ->find($id);
+
+        if (!$importLog) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => [],
+            ]);
+        }
+
+        $successDelete = 0;
+        $failedDelete = 0;
+        $missingData = 0;
+        $deletedDetailIds = [];
+
+        foreach ($importLog->details as $detail) {
+            $transactionId = (int) $detail->transaksi_id;
+
+            if (!StockUsage::whereKey($transactionId)->exists()) {
+                $missingData++;
+                $deletedDetailIds[] = $detail->id;
+                continue;
+            }
+
+            if ($this->pemakaianRepo->destroy($transactionId, $userId)) {
+                $successDelete++;
+                $deletedDetailIds[] = $detail->id;
+            } else {
+                $failedDelete++;
+            }
+        }
+
+        if (!empty($deletedDetailIds)) {
+            ImportLogDetail::whereIn('id', $deletedDetailIds)->delete();
+        }
+
+        $remaining = ImportLogDetail::where('import_log_id', $importLog->id)->count();
+        if ($remaining === 0) {
+            $importLog->delete();
+        } else {
+            $importLog->total_detail = $remaining;
+            $importLog->save();
+        }
+
+        $message = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
+        if ($missingData > 0) {
+            $message .= " <br /> $missingData Data sudah tidak ada";
+        }
+
+        return response()->json([
+            'status' => ($successDelete + $missingData) > 0,
+            'message' => $message,
+            'data' => [],
+        ]);
     }
 
     private function prepareExportData(Request $request)

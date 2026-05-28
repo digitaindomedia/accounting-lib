@@ -247,7 +247,7 @@ class PaymentRepo extends ElequentRepository
         if (!$find) return;
 
         // 2. Settings
-        $coaPiutangUsaha = SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
+        $coaPiutangUsaha = $this->resolvePiutangCoa($find);
         $coaKasBank = $find->payment_method->coa_id ?? SettingRepo::getOptionValue(SettingEnum::COA_KAS_BANK);
 
         $journalEntries = [];
@@ -333,6 +333,25 @@ class PaymentRepo extends ElequentRepository
 
         // 5. Validate & Save
         $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    private function resolvePiutangCoa($payment): string
+    {
+        $paymentInvoice = SalesPaymentInvoice::where('payment_id', $payment->id)
+            ->where('invoice_id', '!=', 0)
+            ->with(['salesinvoice'])
+            ->first();
+        $invoiceCoaId = (int) ($paymentInvoice->salesinvoice->coa_id ?? 0);
+        if ($invoiceCoaId > 0) {
+            return (string) $invoiceCoaId;
+        }
+
+        $vendorCoaId = (int) ($payment->vendor->coa_id ?? 0);
+        if ($vendorCoaId > 0) {
+            return (string) $vendorCoaId;
+        }
+
+        return (string) SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
     }
 
     private function validateAndSaveJournal(array $entries, $paymentModel)

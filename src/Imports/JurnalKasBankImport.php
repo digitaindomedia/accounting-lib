@@ -22,6 +22,7 @@ class JurnalKasBankImport implements ToCollection
     private $errors = [];
     private $totalRows = 0;
     private $successCount = 0;
+    private $importedIds = [];
 
     public function __construct($userId, $jurnalType)
     {
@@ -109,6 +110,8 @@ class JurnalKasBankImport implements ToCollection
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
+            $this->successCount = 0;
+            $this->importedIds = [];
             $this->errors[] = "Error saat import: " . $e->getMessage();
         }
     }
@@ -181,6 +184,7 @@ class JurnalKasBankImport implements ToCollection
         ]);
 
         if ($jurnal) {
+            $this->importedIds[] = $jurnal->id;
             $this->createJurnalAkunAndTransaksi($jurnal->id, $noJurnal, $jurnalDate, $noteItem, $coaItem, $transTypeEnum, $nominal, $totalBal);
         }
 
@@ -274,5 +278,10 @@ class JurnalKasBankImport implements ToCollection
     public function getTotalRows()
     {
         return $this->totalRows;
+    }
+
+    public function getImportedIds()
+    {
+        return array_values(array_unique(array_filter($this->importedIds)));
     }
 }

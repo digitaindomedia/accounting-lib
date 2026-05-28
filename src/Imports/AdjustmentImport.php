@@ -28,6 +28,7 @@ class AdjustmentImport implements ToCollection
     protected $inventoryRepo;
     private $totalRows = 0;
     private $successCount = 0;
+    private $importedIds = [];
     public function __construct($userId){
         $this->userId = $userId;
         $this->adjustmentRepo = new AdjustmentRepo(new Adjustment(), app(ActivityLogService::class));
@@ -76,14 +77,18 @@ class AdjustmentImport implements ToCollection
                 if($idAdjustment){
                     $this->successCount++;
                 }
-                $arrListIdAdjustment[] = $idAdjustment;
+                if ($idAdjustment) {
+                    $arrListIdAdjustment[] = $idAdjustment;
+                }
                 $statIns = true;
             } elseif ($oldNo != $noPenyesuaian) {
                 $idAdjustment = $this->insertAdjustmentEntry($noPenyesuaian,$tanggalPenyesuaian,$warehouseId,$coaId,$note,$productId,$qty,$hpp);
                 if($idAdjustment){
                     $this->successCount++;
                 }
-                $arrListIdAdjustment[] = $idAdjustment;
+                if ($idAdjustment) {
+                    $arrListIdAdjustment[] = $idAdjustment;
+                }
                 $statIns = true;
             } else {
                 $this->insertAdjustmentProduct($idAdjustment,$tanggalPenyesuaian,$warehouseId,$productId,$qty,$hpp);
@@ -109,6 +114,7 @@ class AdjustmentImport implements ToCollection
         if($res){
             $this->insertAdjustmentProduct($res->id,$tanggalPenyesuaian,$gudangId,$produkId,$qty,$hpp);
             $this->success[] = "No penyesuian ".$noPenyesuaian." berhasil import";
+            $this->importedIds[] = $res->id;
             return $res->id;
         }
         return 0;
@@ -192,5 +198,10 @@ class AdjustmentImport implements ToCollection
     public function getTotalRows()
     {
         return $this->totalRows;
+    }
+
+    public function getImportedIds()
+    {
+        return array_values(array_unique(array_filter($this->importedIds)));
     }
 }

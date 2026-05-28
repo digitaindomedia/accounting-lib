@@ -19,6 +19,7 @@ class PurchaseRequestImport implements ToCollection
     protected $reqRepo;
     private $totalRows = 0;
     private $successCount = 0;
+    private $importedIds = [];
 
     public function __construct($userId)
     {
@@ -91,6 +92,7 @@ class PurchaseRequestImport implements ToCollection
         $res = $this->reqRepo->saveRequest($arrData, "", $this->userId);
         if($res){
             $this->insertPurchaseRequestProduct($res->id,$itemCode,$qty,$noteItem);
+            $this->importedIds[] = $res->id;
             return $res->id;
         }
         return 0;
@@ -160,5 +162,10 @@ class PurchaseRequestImport implements ToCollection
     public function getTotalRows()
     {
         return $this->totalRows;
+    }
+
+    public function getImportedIds()
+    {
+        return array_values(array_unique(array_filter($this->importedIds)));
     }
 }

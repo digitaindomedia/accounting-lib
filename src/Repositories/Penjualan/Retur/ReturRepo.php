@@ -263,6 +263,7 @@ class ReturRepo extends ElequentRepository
         $find = $this->model->with([
             'returproduct.tax.taxgroup.tax',
             'returproduct.deliveryproduct.product',
+            'invoice',
             'vendor'
         ])->find($idRetur);
 
@@ -271,7 +272,7 @@ class ReturRepo extends ElequentRepository
         // 2. Settings
         $settings = [
             'coa_retur'     => SettingRepo::getOptionValue(SettingEnum::COA_RETUR_PENJUALAN),
-            'coa_piutang'   => SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA),
+            'coa_piutang'   => $this->resolvePiutangCoa($find),
             'coa_sediaan'   => SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN),
             'coa_hpp'       => SettingRepo::getOptionValue(SettingEnum::COA_BEBAN_POKOK_PENJUALAN),
             'coa_transit'   => SettingRepo::getOptionValue(SettingEnum::COA_SEDIAAN_DALAM_PERJALANAN),
@@ -400,6 +401,21 @@ class ReturRepo extends ElequentRepository
 
         // 4. Validate & Save
         $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    private function resolvePiutangCoa($retur): string
+    {
+        $invoiceCoaId = (int) ($retur->invoice->coa_id ?? 0);
+        if ($invoiceCoaId > 0) {
+            return (string) $invoiceCoaId;
+        }
+
+        $vendorCoaId = (int) ($retur->vendor->coa_id ?? 0);
+        if ($vendorCoaId > 0) {
+            return (string) $vendorCoaId;
+        }
+
+        return (string) SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
     }
 
     private function calculateTaxComponents($item, $amount): array

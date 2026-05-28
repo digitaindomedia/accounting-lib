@@ -26,6 +26,7 @@ class PemakaianImport implements ToCollection
 
     private $totalRows = 0;
     private $successCount = 0;
+    private $importedIds = [];
     protected $pemakaianRepo;
 
     public function __construct($userId)
@@ -77,14 +78,18 @@ class PemakaianImport implements ToCollection
                 if($idPemakaian){
                     $this->successCount++;
                 }
-                $arrListIdPemakaian[] = $idPemakaian;
+                if ($idPemakaian) {
+                    $arrListIdPemakaian[] = $idPemakaian;
+                }
                 $statIns = true;
             } elseif ($oldNo != $noPemakaian) {
                 $idPemakaian = $this->insertPemakaianEntry($noPemakaian,$tanggalPemakaian,$warehouseId,$note,$productId,$qty,$coaId, $noteItem);
                 if($idPemakaian){
                     $this->successCount++;
                 }
-                $arrListIdPemakaian[] = $idPemakaian;
+                if ($idPemakaian) {
+                    $arrListIdPemakaian[] = $idPemakaian;
+                }
                 $statIns = true;
             } else {
                 $this->insertPemakaianProduct($idPemakaian,$productId,$qty,$coaId, $noteItem);
@@ -108,6 +113,7 @@ class PemakaianImport implements ToCollection
         $res = $this->pemakaianRepo->saveData($arrData,"",$this->userId);
         if($res){
             $this->insertPemakaianProduct($res->id,$produkId,$qty,$coaId,$noteItem);
+            $this->importedIds[] = $res->id;
             return $res->id;
         }
         return 0;
@@ -185,5 +191,10 @@ class PemakaianImport implements ToCollection
     public function getTotalRows()
     {
         return $this->totalRows;
+    }
+
+    public function getImportedIds()
+    {
+        return array_values(array_unique(array_filter($this->importedIds)));
     }
 }

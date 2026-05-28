@@ -13,6 +13,8 @@ use Icso\Accounting\Exports\JurnalPurchaseInvoiceExport;
 use Icso\Accounting\Http\Requests\CreatePurchaseInvoiceRequest;
 use Icso\Accounting\Imports\PurchaseInvoiceImport;
 use Icso\Accounting\Imports\JurnalPurchaseInvoiceImport;
+use Icso\Accounting\Models\ImportLog;
+use Icso\Accounting\Models\ImportLogDetail;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicingFakturPajak;
@@ -29,6 +31,7 @@ use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\InputType;
 use Icso\Accounting\Utils\ProductType;
+use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
@@ -522,12 +525,156 @@ class InvoiceController extends Controller
         $orderType = $request->order_type;
         $import = new PurchaseInvoiceImport($userId,$orderType);
         Excel::import($import, $request->file('file'));
+        $importLogId = $this->createImportLog(
+            $userId,
+            TransactionsCode::INVOICE_PEMBELIAN,
+            $import->getImportedIds()
+        );
 
         if ($errors = $import->getErrors()) {
-            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows()]);
+            return response()->json(['status' => false, 'success' => $import->getSuccessCount(),'messageError' => $errors,'errors' => count($errors), 'imported' => $import->getTotalRows(), 'import_log_id' => $importLogId]);
         }
 
-        return response()->json(['status' => true,'success' => $import->getSuccessCount(),'errors' => count($import->getErrors()), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows()], 200);
+        return response()->json(['status' => true,'success' => $import->getSuccessCount(),'errors' => count($import->getErrors()), 'message' => 'File berhasil import', 'imported' => $import->getTotalRows(), 'import_log_id' => $importLogId], 200);
+    }
+
+    private function createImportLog($userId, string $transactionType, array $transactionIds)
+    {
+        $transactionIds = array_values(array_unique(array_filter($transactionIds)));
+        if (empty($transactionIds)) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($userId, $transactionType, $transactionIds) {
+            $importLog = ImportLog::create([
+                'import_at' => date('Y-m-d H:i:s'),
+                'user_id' => !empty($userId) ? $userId : null,
+                'transaction_type' => $transactionType,
+                'total_detail' => count($transactionIds),
+            ]);
+
+            $details = array_map(function ($transactionId) use ($importLog) {
+                return [
+                    'import_log_id' => $importLog->id,
+                    'transaksi_id' => $transactionId,
+                ];
+            }, $transactionIds);
+
+            ImportLogDetail::insert($details);
+
+            return $importLog->id;
+        });
+    }
+
+    public function getImportLogs(Request $request)
+    {
+        $page = (int) ($request->page ?? 0);
+        $perpage = (int) ($request->perpage ?? 10);
+        $perpage = $perpage > 0 ? $perpage : 10;
+
+        $query = ImportLog::where('transaction_type', TransactionsCode::INVOICE_PEMBELIAN)
+            ->withCount('details')
+            ->orderBy('import_at', 'desc')
+            ->orderBy('id', 'desc');
+
+        $total = (clone $query)->count();
+        $data = $query->offset($page)->limit($perpage)->get();
+
+        return response()->json([
+            'status' => count($data) > 0,
+            'message' => count($data) > 0 ? 'Data berhasil ditemukan' : 'Data tidak ditemukan',
+            'data' => $data,
+            'total' => $total,
+            'has_more' => Helpers::hasMoreData($total, $page, $data),
+        ]);
+    }
+
+    public function showImportLog(Request $request)
+    {
+        $id = $request->id;
+        $data = ImportLog::where('transaction_type', TransactionsCode::INVOICE_PEMBELIAN)
+            ->with([
+                'details',
+                'details.purchaseInvoice',
+                'details.purchaseInvoice.vendor'
+            ])
+            ->find($id);
+
+        if (!$data) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => null,
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data berhasil ditemukan',
+            'data' => $data,
+        ]);
+    }
+
+    public function deleteImportLogData(Request $request)
+    {
+        $id = $request->id;
+        $userId = (int) ($request->user_id ?? 0);
+        $importLog = ImportLog::where('transaction_type', TransactionsCode::INVOICE_PEMBELIAN)
+            ->with('details')
+            ->find($id);
+
+        if (!$importLog) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => [],
+            ]);
+        }
+
+        $successDelete = 0;
+        $failedDelete = 0;
+        $missingData = 0;
+        $deletedDetailIds = [];
+
+        foreach ($importLog->details as $detail) {
+            $transactionId = (int) $detail->transaksi_id;
+
+            if (!PurchaseInvoicing::whereKey($transactionId)->exists()) {
+                $missingData++;
+                $deletedDetailIds[] = $detail->id;
+                continue;
+            }
+
+            if ($this->invoiceRepo->destroy($transactionId, $userId)) {
+                $successDelete++;
+                $deletedDetailIds[] = $detail->id;
+            } else {
+                $failedDelete++;
+            }
+        }
+
+        if (!empty($deletedDetailIds)) {
+            ImportLogDetail::whereIn('id', $deletedDetailIds)->delete();
+        }
+
+        $remaining = ImportLogDetail::where('import_log_id', $importLog->id)->count();
+        if ($remaining === 0) {
+            $importLog->delete();
+        } else {
+            $importLog->total_detail = $remaining;
+            $importLog->save();
+        }
+
+        $message = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
+        if ($missingData > 0) {
+            $message .= " <br /> $missingData Data sudah tidak ada";
+        }
+
+        return response()->json([
+            'status' => ($successDelete + $missingData) > 0,
+            'message' => $message,
+            'data' => [],
+        ]);
     }
 
     public function importJurnal(Request $request)

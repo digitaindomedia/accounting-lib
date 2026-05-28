@@ -8,8 +8,12 @@ use Icso\Accounting\Exports\AdjustmentStockReportExport;
 use Icso\Accounting\Exports\SampleAdjustmentExport;
 use Icso\Accounting\Http\Requests\CreateAdjustmentRequest;
 use Icso\Accounting\Imports\AdjustmentImport;
+use Icso\Accounting\Models\ImportLog;
+use Icso\Accounting\Models\ImportLogDetail;
+use Icso\Accounting\Models\Persediaan\Adjustment;
 use Icso\Accounting\Repositories\Persediaan\Adjustment\AdjustmentRepo;
 use Icso\Accounting\Utils\Helpers;
+use Icso\Accounting\Utils\TransactionsCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -209,6 +213,11 @@ class AdjustmentController extends Controller
             $userId = $request->user_id;
             $import = new AdjustmentImport($userId);
             Excel::import($import, $request->file('file'));
+            $importLogId = $this->createImportLog(
+                $userId,
+                TransactionsCode::ADJUSTMENT,
+                $import->getImportedIds()
+            );
 
             if ($errors = $import->getErrors()) {
                 return response()->json([
@@ -216,7 +225,8 @@ class AdjustmentController extends Controller
                     'success' => $import->getSuccessCount(),
                     'messageError' => $errors,
                     'errors' => count($errors), 
-                    'imported' => $import->getTotalRows()
+                    'imported' => $import->getTotalRows(),
+                    'import_log_id' => $importLogId
                 ]);
             }
 
@@ -225,7 +235,8 @@ class AdjustmentController extends Controller
                 'success' => $import->getSuccessCount(),
                 'errors' => count($import->getErrors()), 
                 'message' => 'File berhasil import', 
-                'imported' => $import->getTotalRows()
+                'imported' => $import->getTotalRows(),
+                'import_log_id' => $importLogId
             ], 200);
         } catch (\Exception $e) {
             Log::error("Import error: " . $e->getMessage());
@@ -234,6 +245,149 @@ class AdjustmentController extends Controller
                 'message' => 'Terjadi kesalahan saat import file: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    private function createImportLog($userId, string $transactionType, array $transactionIds)
+    {
+        $transactionIds = array_values(array_unique(array_filter($transactionIds)));
+        if (empty($transactionIds)) {
+            return null;
+        }
+
+        return DB::transaction(function () use ($userId, $transactionType, $transactionIds) {
+            $importLog = ImportLog::create([
+                'import_at' => date('Y-m-d H:i:s'),
+                'user_id' => !empty($userId) ? $userId : null,
+                'transaction_type' => $transactionType,
+                'total_detail' => count($transactionIds),
+            ]);
+
+            $details = array_map(function ($transactionId) use ($importLog) {
+                return [
+                    'import_log_id' => $importLog->id,
+                    'transaksi_id' => $transactionId,
+                ];
+            }, $transactionIds);
+
+            ImportLogDetail::insert($details);
+
+            return $importLog->id;
+        });
+    }
+
+    public function getImportLogs(Request $request): JsonResponse
+    {
+        $page = (int) ($request->page ?? 0);
+        $perpage = (int) ($request->perpage ?? 10);
+        $perpage = $perpage > 0 ? $perpage : 10;
+
+        $query = ImportLog::where('transaction_type', TransactionsCode::ADJUSTMENT)
+            ->withCount('details')
+            ->orderBy('import_at', 'desc')
+            ->orderBy('id', 'desc');
+
+        $total = (clone $query)->count();
+        $data = $query->offset($page)->limit($perpage)->get();
+
+        return response()->json([
+            'status' => count($data) > 0,
+            'message' => count($data) > 0 ? 'Data berhasil ditemukan' : 'Data tidak ditemukan',
+            'data' => $data,
+            'total' => $total,
+            'has_more' => Helpers::hasMoreData($total, $page, $data),
+        ]);
+    }
+
+    public function showImportLog(Request $request): JsonResponse
+    {
+        $id = $request->id;
+        $data = ImportLog::where('transaction_type', TransactionsCode::ADJUSTMENT)
+            ->with([
+                'details',
+                'details.adjustment',
+                'details.adjustment.warehouse',
+                'details.adjustment.coa_adjustment',
+                'details.adjustment.adjustmentproduct',
+                'details.adjustment.adjustmentproduct.product',
+                'details.adjustment.adjustmentproduct.unit'
+            ])
+            ->find($id);
+
+        if (!$data) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => null,
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data berhasil ditemukan',
+            'data' => $data,
+        ]);
+    }
+
+    public function deleteImportLogData(Request $request): JsonResponse
+    {
+        $id = $request->id;
+        $userId = (int) ($request->user_id ?? 0);
+        $importLog = ImportLog::where('transaction_type', TransactionsCode::ADJUSTMENT)
+            ->with('details')
+            ->find($id);
+
+        if (!$importLog) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Data tidak ditemukan',
+                'data' => [],
+            ]);
+        }
+
+        $successDelete = 0;
+        $failedDelete = 0;
+        $missingData = 0;
+        $deletedDetailIds = [];
+
+        foreach ($importLog->details as $detail) {
+            $transactionId = (int) $detail->transaksi_id;
+
+            if (!Adjustment::whereKey($transactionId)->exists()) {
+                $missingData++;
+                $deletedDetailIds[] = $detail->id;
+                continue;
+            }
+
+            if ($this->adjustmentRepo->destroy($transactionId, $userId)) {
+                $successDelete++;
+                $deletedDetailIds[] = $detail->id;
+            } else {
+                $failedDelete++;
+            }
+        }
+
+        if (!empty($deletedDetailIds)) {
+            ImportLogDetail::whereIn('id', $deletedDetailIds)->delete();
+        }
+
+        $remaining = ImportLogDetail::where('import_log_id', $importLog->id)->count();
+        if ($remaining === 0) {
+            $importLog->delete();
+        } else {
+            $importLog->total_detail = $remaining;
+            $importLog->save();
+        }
+
+        $message = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
+        if ($missingData > 0) {
+            $message .= " <br /> $missingData Data sudah tidak ada";
+        }
+
+        return response()->json([
+            'status' => ($successDelete + $missingData) > 0,
+            'message' => $message,
+            'data' => [],
+        ]);
     }
 
     private function prepareExportData(Request $request)

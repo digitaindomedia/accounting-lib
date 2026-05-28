@@ -34,6 +34,7 @@ class PurchaseInvoiceImport implements ToCollection
     protected $invoiceRepo;
     private $totalRows = 0;
     private $successCount = 0;
+    private $importedIds = [];
 
     public function __construct($userId, $orderType)
     {
@@ -118,7 +119,9 @@ class PurchaseInvoiceImport implements ToCollection
                 if($idInvoice){
                     $this->successCount++;
                 }
-                $arrListIdInvoice[] = $idInvoice;
+                if ($idInvoice) {
+                    $arrListIdInvoice[] = $idInvoice;
+                }
                 $statIns = true;
 
             } elseif ($oldNo != $noInvoice) {
@@ -126,7 +129,9 @@ class PurchaseInvoiceImport implements ToCollection
                 if($idInvoice){
                     $this->successCount++;
                 }
-                $arrListIdInvoice[] = $idInvoice;
+                if ($idInvoice) {
+                    $arrListIdInvoice[] = $idInvoice;
+                }
                 $statIns = true;
 
 
@@ -206,6 +211,7 @@ class PurchaseInvoiceImport implements ToCollection
         $res = $this->invoiceRepo->saveInvoice($arrData,'',$this->userId);
         if($res){
             $this->insertInvoiceProduct($itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage,$res->id, $invoiceDate, $note, $warehouseId);
+            $this->importedIds[] = $res->id;
         }
         return $res ? $res->id : '';
     }
@@ -365,5 +371,10 @@ class PurchaseInvoiceImport implements ToCollection
     public function getErrors()
     {
         return $this->errors;
+    }
+
+    public function getImportedIds()
+    {
+        return array_values(array_unique(array_filter($this->importedIds)));
     }
 }

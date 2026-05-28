@@ -3,10 +3,14 @@
 namespace Icso\Accounting\Utils;
 
 
+use Icso\Accounting\Models\Akuntansi\Jurnal;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
+use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Permintaan\PurchaseRequest;
 use Icso\Accounting\Models\Pembelian\Retur\PurchaseRetur;
 use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Retur\SalesRetur;
 use Icso\Accounting\Models\Persediaan\Adjustment;
@@ -19,6 +23,9 @@ class TransactionsCode
     const JURNAL = "JURNAL";
     const UANG_MUKA_PEMBELIAN = "UANG_MUKA_PEMBELIAN";
     const UANG_MUKA_PENJUALAN = "UANG_MUKA_PENJUALAN";
+    const ORDER_PENJUALAN = "ORDER_PENJUALAN";
+    const ORDER_PEMBELIAN = "ORDER_PEMBELIAN";
+    const PERMINTAAN_PEMBELIAN = "PERMINTAAN_PEMBELIAN";
     const PENERIMAAN = "PENERIMAAN_PEMBELIAN";
     const INVOICE_PEMBELIAN = "INVOICE_PEMBELIAN";
     const INVOICE_PENJUALAN = "INVOICE_PENJUALAN";
@@ -45,12 +52,33 @@ class TransactionsCode
     {
         $transactionName = '';
         $transactionNo = '';
-        if($transactionCode == self::PENERIMAAN){
+        if($transactionCode == self::JURNAL){
+            $findJurnal = Jurnal::where(array('id' => $transactionId))->first();
+            if(!empty($findJurnal)){
+                $transactionNo = $findJurnal->jurnal_no;
+            }
+            $transactionName = "JURNAL";
+        }
+        else if($transactionCode == self::PENERIMAAN){
             $findPenerimaan = PurchaseReceived::where(array('id' => $transactionId))->first();
             if(!empty($findPenerimaan)){
                 $transactionNo = $findPenerimaan->receive_no;
             }
             $transactionName = "PENERIMAAN PEMBELIAN";
+        }
+        else if($transactionCode == self::ORDER_PEMBELIAN){
+            $findOrder = PurchaseOrder::where(array('id' => $transactionId))->first();
+            if(!empty($findOrder)){
+                $transactionNo = $findOrder->order_no;
+            }
+            $transactionName = "ORDER PEMBELIAN";
+        }
+        else if($transactionCode == self::PERMINTAAN_PEMBELIAN){
+            $findRequest = PurchaseRequest::where(array('id' => $transactionId))->first();
+            if(!empty($findRequest)){
+                $transactionNo = $findRequest->request_no;
+            }
+            $transactionName = "PERMINTAAN PEMBELIAN";
         }
         else if($transactionCode == self::INVOICE_PEMBELIAN){
             $findInvoice = PurchaseInvoicing::where(array('id' => $transactionId))->first();
@@ -72,6 +100,13 @@ class TransactionsCode
                 $transactionNo = $findDelivery->delivery_no;
             }
             $transactionName = "PENGIRIMAN PENJUALAN";
+        }
+        else if($transactionCode == self::ORDER_PENJUALAN){
+            $findOrder = SalesOrder::where(array('id' => $transactionId))->first();
+            if(!empty($findOrder)){
+                $transactionNo = $findOrder->order_no;
+            }
+            $transactionName = "ORDER PENJUALAN";
         }
         else if($transactionCode == self::INVOICE_PENJUALAN){
             $findInvoice = SalesInvoicing::where(array('id' => $transactionId))->first();

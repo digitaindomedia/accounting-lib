@@ -46,6 +46,7 @@ use Illuminate\Support\Facades\Log;
 class InvoiceRepo extends ElequentRepository
 {
     protected $model;
+    protected string $lastError = '';
 
     public function __construct(SalesInvoicing $model)
     {
@@ -486,8 +487,10 @@ class InvoiceRepo extends ElequentRepository
 
     public function repostJurnal(int $idInvoice): bool
     {
+        $this->lastError = '';
         $invoice = SalesInvoicing::find($idInvoice);
         if (!$invoice) {
+            $this->lastError = "Invoice tidak ditemukan";
             return false;
         }
 
@@ -515,9 +518,15 @@ class InvoiceRepo extends ElequentRepository
             return true;
         } catch (\Throwable $e) {
             DB::rollBack();
+            $this->lastError = $e->getMessage();
             Log::error('[SalesInvoiceRepo][repostJurnal] ' . $e->getMessage());
             return false;
         }
+    }
+
+    public function getLastError(): string
+    {
+        return $this->lastError;
     }
 
     /**
@@ -536,6 +545,8 @@ class InvoiceRepo extends ElequentRepository
         ])->find($idInvoice);
 
         if (!$find) return;
+
+        $this->hydrateServiceOrderProductsForPosting($find);
         
         Log::info("Posting Jurnal Invoice $idInvoice. Products: " . $find->orderproduct->count());
 
@@ -561,7 +572,7 @@ class InvoiceRepo extends ElequentRepository
         if ($find->invoicedelivery->isEmpty()) {
 
             foreach ($find->orderproduct as $item) {
-                $coaRevenue = $this->resolveRevenueCoa($find, $settings);
+                $coaRevenue = $this->resolveRevenueCoa($find, $settings, $item);
 
                 $subtotal = $item->subtotal;
 
@@ -658,7 +669,7 @@ class InvoiceRepo extends ElequentRepository
                 if (!$delInv->delivery) continue;
 
                 foreach ($delInv->delivery->deliveryproduct as $item) {
-                    $coaRevenue = $this->resolveRevenueCoa($find, $settings);
+                    $coaRevenue = $this->resolveRevenueCoa($find, $settings, $item);
 
                     $dpp = $item->subtotal;
 
@@ -795,6 +806,28 @@ class InvoiceRepo extends ElequentRepository
         $this->validateAndSaveJournal($journalEntries, $find);
     }
 
+    private function hydrateServiceOrderProductsForPosting($invoice): void
+    {
+        if ($invoice->invoice_type != ProductType::SERVICE || empty($invoice->order_id) || $invoice->orderproduct->isNotEmpty()) {
+            return;
+        }
+
+        $products = SalesOrderProduct::where('order_id', $invoice->order_id)
+            ->where(function ($query) use ($invoice) {
+                $query->where('invoice_id', 0)
+                    ->orWhere('invoice_id', $invoice->id);
+            })
+            ->with(['product', 'tax.taxgroup.tax'])
+            ->get();
+
+        if ($products->isEmpty()) {
+            throw new Exception("Jurnal Sales Invoice {$invoice->invoice_no} gagal: produk jasa untuk order {$invoice->order_id} tidak ditemukan");
+        }
+
+        SalesOrderProduct::whereIn('id', $products->pluck('id'))->update(['invoice_id' => $invoice->id]);
+        $invoice->setRelation('orderproduct', $products);
+    }
+
     private function resolvePiutangCoa($invoice): string
     {
         $vendorCoaId = (int) ($invoice->vendor->coa_id ?? 0);
@@ -802,7 +835,17 @@ class InvoiceRepo extends ElequentRepository
             return (string) $vendorCoaId;
         }
 
-        return (string) SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
+        $settingCoaId = (int) SettingRepo::getOptionValue(SettingEnum::COA_PIUTANG_USAHA);
+        if ($settingCoaId > 0) {
+            return (string) $settingCoaId;
+        }
+
+        $invoiceCoaId = (int) ($invoice->coa_id ?? 0);
+        if ($invoiceCoaId > 0) {
+            return (string) $invoiceCoaId;
+        }
+
+        return '0';
     }
 
     private function resolveServiceRevenueCoa(): string
@@ -815,9 +858,14 @@ class InvoiceRepo extends ElequentRepository
         return (string) SettingRepo::getOptionValue(SettingEnum::COA_PENJUALAN);
     }
 
-    private function resolveRevenueCoa($invoice, array $settings): string
+    private function resolveRevenueCoa($invoice, array $settings, $item = null): string
     {
         if ($invoice->invoice_type == ProductType::SERVICE) {
+            $productCoaId = (int) ($item->product->coa_id ?? 0);
+            if ($productCoaId > 0) {
+                return (string) $productCoaId;
+            }
+
             return (string) $settings['coa_jasa'];
         }
 
@@ -1028,6 +1076,9 @@ class InvoiceRepo extends ElequentRepository
 
         foreach ($entries as $e) {
             if ($e['nominal'] == 0) continue;
+            if ((int) ($e['coa_id'] ?? 0) <= 0) {
+                throw new Exception("Jurnal Sales Invoice {$invoiceModel->invoice_no} gagal: akun COA untuk '{$e['note']}' belum ditentukan");
+            }
 
             $jurnalRepo->create([
                 'transaction_date'      => $invoiceModel->invoice_date,

@@ -583,13 +583,14 @@ class InvoiceController extends Controller
                 $this->data['data'] = array();
             } else {
                 $this->data['status'] = false;
-                $this->data['message'] = 'Jurnal invoice gagal direposting';
+                $error = method_exists($this->invoiceRepo, 'getLastError') ? $this->invoiceRepo->getLastError() : '';
+                $this->data['message'] = !empty($error) ? $error : 'Jurnal invoice gagal direposting';
                 $this->data['data'] = array();
             }
         }
         catch (\Exception $e) {
             $this->data['status'] = false;
-            $this->data['message'] = 'Jurnal invoice gagal direposting';
+            $this->data['message'] = $e->getMessage();
             $this->data['data'] = array();
         }
         return response()->json($this->data);

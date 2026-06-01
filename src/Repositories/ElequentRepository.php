@@ -131,8 +131,24 @@ abstract class ElequentRepository implements BaseRepository
         $values = $model::pluck($fieldName)
             ->filter(fn ($item) => ! is_null($item))
             ->map(fn ($item) => Str::upper($item));
+        $bulanRomawi = [
+            '01' => 'I',
+            '02' => 'II',
+            '03' => 'III',
+            '04' => 'IV',
+            '05' => 'V',
+            '06' => 'VI',
+            '07' => 'VII',
+            '08' => 'VIII',
+            '09' => 'IX',
+            '10' => 'X',
+            '11' => 'XI',
+            '12' => 'XII',
+        ];
         $prefix = str_replace("{tahun}",date('Y'),$prefix);
+        $prefix = str_replace("{tahun_pendek}",date('y'),$prefix);
         $prefix = str_replace("{bulan}",date('m'),$prefix);
+        $prefix = str_replace("{bulan_romawi}",$bulanRomawi[date('m')],$prefix);
         $prefix = str_replace("{tanggal}",date('d'),$prefix);
         while(true){
             $jumlahData = $jumlahData + 1;

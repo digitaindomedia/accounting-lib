@@ -107,6 +107,7 @@ class DeliveryController extends Controller
             'order',
             'order.ordermeta',
             'vendor',
+            'vendor.vendor_meta',
             'warehouse',
             'deliveryproduct',
             'deliveryproduct.items',

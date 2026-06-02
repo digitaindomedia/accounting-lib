@@ -438,6 +438,7 @@ class InvoiceController extends Controller
     {
         return [
             'vendor',
+            'vendor.vendor_meta',
             'warehouse',
             'invoicemeta',
             'invoicedelivery',

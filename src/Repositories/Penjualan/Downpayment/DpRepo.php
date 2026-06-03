@@ -8,6 +8,7 @@ use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDp;
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownPaymentMeta;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -41,7 +42,7 @@ class DpRepo extends ElequentRepository
     public function getAllDataBy($search, $page, $perpage, array $where = [])
     {
         $model = new $this->model;
-        return $model->when(!empty($search), function ($query) use($search){
+        $data = $model->when(!empty($search), function ($query) use($search){
             $query->where('ref_no', 'like', '%' .$search. '%')
                 ->orWhere('note', 'like', '%' .$search. '%');
         })->when(!empty($where), function ($query) use($where){
@@ -56,6 +57,9 @@ class DpRepo extends ElequentRepository
                 }
             });
         })->with(['order','coa','order.vendor'])->orderBy('downpayment_date','desc')->offset($page)->limit($perpage)->get();
+
+        $this->appendUsageSummary($data);
+        return $data;
     }
 
     public function getAllTotalDataBy($search, array $where = [])
@@ -347,6 +351,18 @@ class DpRepo extends ElequentRepository
     public function getTotalUangMukaByOrderId($idOrder)
     {
         return SalesDownpayment::where('order_id', $idOrder)->sum('nominal');
+    }
+
+    private function appendUsageSummary($data): void
+    {
+        foreach ($data as $dp) {
+            $usedNominal = (float) SalesInvoicingDp::where('dp_id', $dp->id)->sum('nominal');
+            $remainingNominal = max((float) $dp->nominal - $usedNominal, 0);
+
+            $dp->used_nominal = $usedNominal;
+            $dp->remaining_nominal = $remainingNominal;
+            $dp->is_fully_used = $remainingNominal <= 0;
+        }
     }
 
     public function countByOrderId($idOrder)

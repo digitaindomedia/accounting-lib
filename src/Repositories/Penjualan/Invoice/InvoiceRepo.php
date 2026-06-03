@@ -315,14 +315,16 @@ class InvoiceRepo extends ElequentRepository
                 $taxPercentage = Tax::whereKey($taxId)->value('tax_percentage') ?? 0;
             }
 
+            $qty = Utility::remove_commas($item->qty ?? 0);
+
             // Create new orderproduct
             SalesOrderProduct::create([
-                'qty'               => $item->qty,
-                'qty_left'          => $item->qty,
+                'qty'               => $qty,
+                'qty_left'          => $qty,
                 'product_id'        => $item->product_id ?? 0,
                 'unit_id'           => $item->unit_id ?? 0,
                 'tax_id'            => $taxId,
-                'tax_percentage'    => $taxPercentage,
+                'tax_percentage'    => Utility::remove_commas($taxPercentage),
                 'price'             => Utility::remove_commas($item->price ?? 0),
                 'tax_type'          => $taxType,
                 'discount_type'     => $item->discount_type ?? '',
@@ -343,17 +345,78 @@ class InvoiceRepo extends ElequentRepository
         if (empty($dps)) {
             $dps = $request->input('order.dp');
         }
-        
+
         if (!empty($dps)) {
             $dps = is_array($dps) ? json_decode(json_encode($dps)) : $dps;
+            $remainingInvoiceDpNominal = (float) Utility::remove_commas($request->dp_nominal ?? 0);
+            $reservedDpNominals = [];
+
             foreach ($dps as $dp) {
                 $dp = (object)$dp;
+                $dpId = (int) $dp->id;
+                SalesDownpayment::where('id', $dpId)->lockForUpdate()->first();
+
+                $availableNominal = $this->getAvailableDpNominal($dpId, $idInvoice) - ($reservedDpNominals[$dpId] ?? 0);
+                $usedNominal = $this->resolveDpUsedNominal($dp, $request, $availableNominal, $remainingInvoiceDpNominal);
+                if ($usedNominal <= 0) {
+                    continue;
+                }
+
+                if ($usedNominal > $availableNominal) {
+                    throw new Exception("Nominal DP melebihi sisa uang muka yang tersedia");
+                }
+
                 SalesInvoicingDp::create([
                     'invoice_id' => $idInvoice,
-                    'dp_id' => $dp->id
+                    'dp_id' => $dp->id,
+                    'nominal' => $usedNominal
                 ]);
+
+                $reservedDpNominals[$dpId] = ($reservedDpNominals[$dpId] ?? 0) + $usedNominal;
+
+                if ($remainingInvoiceDpNominal > 0) {
+                    $remainingInvoiceDpNominal -= $usedNominal;
+                }
+
+                $this->syncDownpaymentStatus($dpId);
             }
         }
+    }
+
+    private function resolveDpUsedNominal($dp, Request $request, float $availableNominal, float $remainingInvoiceDpNominal): float
+    {
+        foreach (['used_nominal', 'nominal_used', 'use_nominal', 'amount', 'pivot_nominal'] as $field) {
+            if (isset($dp->{$field}) && $dp->{$field} !== '') {
+                return (float) Utility::remove_commas($dp->{$field});
+            }
+        }
+
+        $dpNominal = (float) Utility::remove_commas($request->dp_nominal ?? 0);
+        if ($dpNominal > 0) {
+            return min($availableNominal, max($remainingInvoiceDpNominal, 0));
+        }
+
+        return $availableNominal;
+    }
+
+    private function getAvailableDpNominal(int $dpId, ?int $excludeInvoiceId = null): float
+    {
+        $dpNominal = (float) SalesDownpayment::where('id', $dpId)->value('nominal');
+        $usedQuery = SalesInvoicingDp::where('dp_id', $dpId);
+
+        if (!empty($excludeInvoiceId)) {
+            $usedQuery->where('invoice_id', '!=', $excludeInvoiceId);
+        }
+
+        $usedNominal = (float) $usedQuery->sum('nominal');
+        return max($dpNominal - $usedNominal, 0);
+    }
+
+    private function syncDownpaymentStatus(int $dpId): void
+    {
+        $availableNominal = $this->getAvailableDpNominal($dpId);
+        $status = $availableNominal <= 0 ? StatusEnum::SELESAI : StatusEnum::OPEN;
+        DpRepo::changeStatusUangMuka($dpId, $status);
     }
 
     private function processDelivery(Request $request, $idInvoice)
@@ -434,7 +497,11 @@ class InvoiceRepo extends ElequentRepository
 
         $this->deleteInvoiceJournal($id, $invoice->invoice_no ?? null);
         (new AutoConsumeProductionService())->deleteBySource('sales_invoice_auto', (int) $id);
+        $dpIds = SalesInvoicingDp::where('invoice_id', $id)->pluck('dp_id')->all();
         SalesInvoicingDp::where('invoice_id', $id)->delete();
+        foreach ($dpIds as $dpId) {
+            $this->syncDownpaymentStatus((int) $dpId);
+        }
         SalesInvoicingDelivery::where('invoice_id', $id)->delete();
         SalesOrderProduct::where('invoice_id', $id)->delete();
         SalesInvoicingMeta::where('invoice_id', $id)->delete();
@@ -940,7 +1007,11 @@ class InvoiceRepo extends ElequentRepository
 
         foreach ($dps as $row) {
             $dp = $row->downpayment;
-            $nominal = $dp->nominal;
+            if (!$dp) {
+                continue;
+            }
+
+            $nominal = (float) ($row->nominal ?: $dp->nominal);
             $dppDp = $nominal;
             $totalTaxDp = 0;
 
@@ -997,7 +1068,7 @@ class InvoiceRepo extends ElequentRepository
                 'note'   => 'Potong DP ke Piutang'
             ];
 
-            DpRepo::changeStatusUangMuka($dp->id);
+            $this->syncDownpaymentStatus((int) $dp->id);
         }
         return $entries;
     }
@@ -1176,7 +1247,15 @@ class InvoiceRepo extends ElequentRepository
         $arrDp = array();
         if(!empty($findDp)){
             foreach ($findDp as $dp){
-                $arrDp[] = $dp->downpayment;
+                if (!$dp->downpayment) {
+                    continue;
+                }
+
+                $downpayment = $dp->downpayment;
+                $downpayment->used_nominal = (float) ($dp->nominal ?: $downpayment->nominal);
+                $downpayment->pivot_nominal = $downpayment->used_nominal;
+                $downpayment->remaining_nominal = $this->getAvailableDpNominal((int) $downpayment->id, (int) $idInvoice);
+                $arrDp[] = $downpayment;
             }
         }
         return $arrDp;

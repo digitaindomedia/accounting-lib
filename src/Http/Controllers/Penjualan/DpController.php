@@ -32,6 +32,7 @@ class DpController extends Controller
         $vendorId = $request->vendor_id;
         $orderId = $request->order_id;
         $dpType = $request->dp_type;
+        $dpStatus = $request->status;
 
         $where = array();
         if (!empty($vendorId)) {
@@ -55,7 +56,9 @@ class DpController extends Controller
                 'value' => array('field' => 'downpayment_date', 'value' => [$fromDate,$untilDate]));
         }
         if(!empty($dpStatus)){
-            $where[] = ['downpayment_status', '=', $dpStatus];
+            $where[] = array(
+                'method' => 'where',
+                'value' => [['downpayment_status', '=', $dpStatus]]);
         }
         return compact('search', 'page', 'perpage', 'where');
     }

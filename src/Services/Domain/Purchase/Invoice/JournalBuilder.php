@@ -195,7 +195,7 @@ class JournalBuilder
             $dp = $dpLink->downpayment;
             if (!$dp) continue;
 
-            $nominal = (float) $dp->nominal;
+            $nominal = (float) ($dpLink->nominal ?: $dp->nominal);
             $totalDpNominal += $nominal;
 
             // Default: anggap seluruh DP = DPP jika tidak ada tax / faktur belum accepted

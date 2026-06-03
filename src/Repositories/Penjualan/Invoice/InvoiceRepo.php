@@ -1252,8 +1252,12 @@ class InvoiceRepo extends ElequentRepository
                 }
 
                 $downpayment = $dp->downpayment;
+                $originalNominal = (float) $downpayment->nominal;
                 $downpayment->used_nominal = (float) ($dp->nominal ?: $downpayment->nominal);
                 $downpayment->pivot_nominal = $downpayment->used_nominal;
+                $downpayment->original_nominal = $originalNominal;
+                $downpayment->total_nominal = $originalNominal;
+                $downpayment->nominal = $downpayment->used_nominal;
                 $downpayment->remaining_nominal = $this->getAvailableDpNominal((int) $downpayment->id, (int) $idInvoice);
                 $arrDp[] = $downpayment;
             }

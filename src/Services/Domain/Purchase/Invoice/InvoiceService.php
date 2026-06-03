@@ -55,7 +55,7 @@ class InvoiceService
                 $this->inventoryRepo
             );
 
-            $this->invoiceRepo->handleDownPayments($request->dp, $idInvoice);
+            $this->invoiceRepo->handleDownPayments($request->dp, $idInvoice, $request);
             $this->invoiceRepo->handleReceivedProducts($request->receive, $idInvoice);
 
             if ($data['input_type'] != InputType::JURNAL) {

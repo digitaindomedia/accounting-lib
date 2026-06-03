@@ -19,6 +19,7 @@ use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicingReceived;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
@@ -117,7 +118,7 @@ class InvoiceRepo extends ElequentRepository
                 }
 
                 $this->handleOrderProducts($request->orderproduct, $idInvoice, $data['tax_type'], $data['invoice_date'], $data['note'], $userId, $data['warehouse_id'], $request->input_type, $inventoryRepo);
-                $this->handleDownPayments($request->dp, $idInvoice);
+                $this->handleDownPayments($request->dp, $idInvoice, $request);
                 $this->handleReceivedProducts($request->receive, $idInvoice);
 
                 if ($data['input_type'] == InputType::PURCHASE) {
@@ -349,17 +350,78 @@ class InvoiceRepo extends ElequentRepository
         $inventoryRepo->store($req);
     }
 
-    public function handleDownPayments($dps, string $invoiceId)
+    public function handleDownPayments($dps, string $invoiceId, ?Request $request = null)
     {
         if (!empty($dps)) {
             $dps = json_decode(json_encode($dps));
+            $remainingInvoiceDpNominal = (float) Utility::remove_commas($request->dp_nominal ?? 0);
+            $reservedDpNominals = [];
+
             foreach ($dps as $dp) {
+                $dpId = (int) $dp->id;
+                PurchaseDownPayment::where('id', $dpId)->lockForUpdate()->first();
+
+                $availableNominal = $this->getAvailableDpNominal($dpId, (int) $invoiceId) - ($reservedDpNominals[$dpId] ?? 0);
+                $usedNominal = $this->resolveDpUsedNominal($dp, $request, $availableNominal, $remainingInvoiceDpNominal);
+                if ($usedNominal <= 0) {
+                    continue;
+                }
+
+                if ($usedNominal > $availableNominal) {
+                    throw new Exception("Nominal DP melebihi sisa uang muka pembelian yang tersedia");
+                }
+
                 PurchaseInvoicingDp::create([
                     'invoice_id' => $invoiceId,
-                    'dp_id' => $dp->id
+                    'dp_id' => $dp->id,
+                    'nominal' => $usedNominal
                 ]);
+
+                $reservedDpNominals[$dpId] = ($reservedDpNominals[$dpId] ?? 0) + $usedNominal;
+
+                if ($remainingInvoiceDpNominal > 0) {
+                    $remainingInvoiceDpNominal -= $usedNominal;
+                }
+
+                $this->syncDownpaymentStatus($dpId);
             }
         }
+    }
+
+    private function resolveDpUsedNominal($dp, ?Request $request, float $availableNominal, float $remainingInvoiceDpNominal): float
+    {
+        foreach (['used_nominal', 'nominal_used', 'use_nominal', 'amount', 'pivot_nominal'] as $field) {
+            if (isset($dp->{$field}) && $dp->{$field} !== '') {
+                return (float) Utility::remove_commas($dp->{$field});
+            }
+        }
+
+        $dpNominal = (float) Utility::remove_commas($request->dp_nominal ?? 0);
+        if ($dpNominal > 0) {
+            return min($availableNominal, max($remainingInvoiceDpNominal, 0));
+        }
+
+        return $availableNominal;
+    }
+
+    private function getAvailableDpNominal(int $dpId, ?int $excludeInvoiceId = null): float
+    {
+        $dpNominal = (float) PurchaseDownPayment::where('id', $dpId)->value('nominal');
+        $usedQuery = PurchaseInvoicingDp::where('dp_id', $dpId);
+
+        if (!empty($excludeInvoiceId)) {
+            $usedQuery->where('invoice_id', '!=', $excludeInvoiceId);
+        }
+
+        $usedNominal = (float) $usedQuery->sum('nominal');
+        return max($dpNominal - $usedNominal, 0);
+    }
+
+    private function syncDownpaymentStatus(int $dpId): void
+    {
+        $availableNominal = $this->getAvailableDpNominal($dpId);
+        $status = $availableNominal <= 0 ? StatusEnum::SELESAI : StatusEnum::OPEN;
+        DpRepo::changeStatusUangMuka($dpId, $status);
     }
 
     public function handleReceivedProducts($receives, string $invoiceId)
@@ -395,12 +457,7 @@ class InvoiceRepo extends ElequentRepository
 
     public function deleteAdditional($id)
     {
-        $findDp = PurchaseInvoicingDp::where(array('invoice_id' => $id))->get();
-        if(!empty($findDp)) {
-            foreach ($findDp as $dp) {
-                DpRepo::changeStatusUangMuka($dp->dp_id);
-            }
-        }
+        $dpIds = PurchaseInvoicingDp::where(array('invoice_id' => $id))->pluck('dp_id')->all();
         $findReceived = PurchaseInvoicingReceived::where(array('invoice_id' => $id))->get();
         if(!empty($findReceived)) {
             foreach ($findReceived as $received) {
@@ -416,6 +473,9 @@ class InvoiceRepo extends ElequentRepository
         PurchaseOrderProduct::where('invoice_id','=',$id)->delete();
         PurchaseInvoicingReceived::where(array('invoice_id' => $id))->delete();
         PurchaseInvoicingDp::where(array('invoice_id' => $id))->delete();
+        foreach ($dpIds as $dpId) {
+            $this->syncDownpaymentStatus((int) $dpId);
+        }
         PurchaseInvoicingMeta::where(array('invoice_id' => $id))->delete();
         Inventory::where('transaction_code','=',TransactionsCode::INVOICE_PEMBELIAN)->where('transaction_id','=',$id)->delete();
     }
@@ -656,7 +716,11 @@ class InvoiceRepo extends ElequentRepository
 
         foreach ($dps as $row) {
             $dp = $row->downpayment;
-            $nominal = $dp->nominal;
+            if (!$dp) {
+                continue;
+            }
+
+            $nominal = (float) ($row->nominal ?: $dp->nominal);
             $totalNominal += $nominal;
             $dpp = $nominal;
 
@@ -698,7 +762,7 @@ class InvoiceRepo extends ElequentRepository
                 'note'   => 'Penggunaan Uang Muka'
             ];
 
-            DpRepo::changeStatusUangMuka($dp->id);
+            $this->syncDownpaymentStatus((int) $dp->id);
         }
 
         return ['entries' => $entries, 'total_nominal' => $totalNominal];
@@ -773,7 +837,19 @@ class InvoiceRepo extends ElequentRepository
         $arrDp = array();
         if(!empty($findDp)){
             foreach ($findDp as $dp){
-                $arrDp[] = $dp->downpayment;
+                if (!$dp->downpayment) {
+                    continue;
+                }
+
+                $downpayment = $dp->downpayment;
+                $originalNominal = (float) $downpayment->nominal;
+                $downpayment->used_nominal = (float) ($dp->nominal ?: $downpayment->nominal);
+                $downpayment->pivot_nominal = $downpayment->used_nominal;
+                $downpayment->original_nominal = $originalNominal;
+                $downpayment->total_nominal = $originalNominal;
+                $downpayment->nominal = $downpayment->used_nominal;
+                $downpayment->remaining_nominal = $this->getAvailableDpNominal((int) $downpayment->id, (int) $idInvoice);
+                $arrDp[] = $downpayment;
             }
         }
         return $arrDp;

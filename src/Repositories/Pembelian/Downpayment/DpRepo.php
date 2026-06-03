@@ -8,6 +8,7 @@ use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicingDp;
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPaymentMeta;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -42,13 +43,16 @@ class DpRepo extends ElequentRepository
     public function getAllDataBy($search, $page, $perpage, array $where = [])
     {
         $model = new $this->model;
-        return $model->when(!empty($search), function ($query) use($search){
+        $data = $model->when(!empty($search), function ($query) use($search){
             $query->where('ref_no', 'like', '%' .$search. '%')
                 ->orWhere('note', 'like', '%' .$search. '%')
                 ->orWhere('no_faktur', 'like', '%' .$search. '%');
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->with(['order','coa'])->orderBy('downpayment_date','desc')->offset($page)->limit($perpage)->get();
+
+        $this->appendUsageSummary($data);
+        return $data;
     }
 
     public function getAllTotalDataBy($search, array $where = [])
@@ -66,7 +70,7 @@ class DpRepo extends ElequentRepository
     public function getAllDataBetweenBy($search, $page, $perpage, array $where = [], array $whereBetween=[])
     {
         $model = new $this->model;
-        return $model->when(!empty($search), function ($query) use($search){
+        $data = $model->when(!empty($search), function ($query) use($search){
             $query->where('ref_no', 'like', '%' .$search. '%')
                 ->orWhere('note', 'like', '%' .$search. '%')
                 ->orWhere('no_faktur', 'like', '%' .$search. '%')
@@ -81,6 +85,9 @@ class DpRepo extends ElequentRepository
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
             $query->whereBetween('downpayment_date', $whereBetween);
         })->orderBy('downpayment_date','desc')->with(['order','order.vendor','coa'])->offset($page)->limit($perpage)->get();
+
+        $this->appendUsageSummary($data);
+        return $data;
     }
 
     public function getAllTotalDataBetweenBy($search, array $where = [], array $whereBetween=[])
@@ -416,6 +423,18 @@ class DpRepo extends ElequentRepository
     public function getTotalUangMukaByOrderId($idOrder)
     {
         return PurchaseDownPayment::where('order_id', $idOrder)->sum('nominal');
+    }
+
+    private function appendUsageSummary($data): void
+    {
+        foreach ($data as $dp) {
+            $usedNominal = (float) PurchaseInvoicingDp::where('dp_id', $dp->id)->sum('nominal');
+            $remainingNominal = max((float) $dp->nominal - $usedNominal, 0);
+
+            $dp->used_nominal = $usedNominal;
+            $dp->remaining_nominal = $remainingNominal;
+            $dp->is_fully_used = $remainingNominal <= 0;
+        }
     }
 
     public static function changeStatusUangMuka($idUangMuka, $statusUangMuka=StatusEnum::SELESAI)

@@ -97,10 +97,10 @@ class InventoryController extends Controller
         $id = $request->id;
         $productId = $request->product_id;
         $unitId = $request->unit_id;
-        $qty = $request->qty;
+        $qty = (float) Utility::remove_commas($request->qty ?? 0);
         $warehouseId = $request->warehouse_id;
-        $nominal = $request->nominal;
-        $total = $request->total;
+        $nominal = (float) Utility::remove_commas($request->nominal ?? 0);
+        $total = (float) Utility::remove_commas($request->total ?? 0);
         $userId = $request->user_id;
         DB::beginTransaction();
         try {
@@ -109,8 +109,8 @@ class InventoryController extends Controller
                 'qty' => $qty,
                 'unit_id' => $unitId,
                 'warehouse_id' => $warehouseId,
-                'total' => Utility::remove_commas($total),
-                'nominal' => Utility::remove_commas($nominal),
+                'total' => $total,
+                'nominal' => $nominal,
                 'updated_at' => date('Y-m-d H:i:s'),
                 'updated_by' => $userId,
             );
@@ -122,7 +122,7 @@ class InventoryController extends Controller
                     if ($findProduct->unit_id != $unitId) {
                         $findConvertion = ProductConvertion::where(array('product_id' => $productId, 'unit_id' => $unitId))->first();
                         if (!empty($findConvertion)) {
-                            $nilai = $findConvertion->nilai;
+                            $nilai = (float) $findConvertion->nilai;
                             $qty = $qty * $nilai;
                             $price = $nominal / $nilai;
                         }
@@ -148,7 +148,7 @@ class InventoryController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             $this->data['status'] = false;
-            $this->data['message'] = 'Data gagal disimpan';
+            $this->data['message'] = "Data Gagal disimpan";
         }
         return response()->json($this->data);
     }

@@ -34,6 +34,7 @@ class BukuPembantuController extends Controller
         $inputType = $request->input_type;
         $coaId = $request->coa_id;
         $fieldName = $request->field_name;
+        $onlyUnpaid = $request->only_unpaid;
 
         $where=array();
         if(!empty($inputType)){
@@ -45,11 +46,15 @@ class BukuPembantuController extends Controller
         if(!empty($fieldName)){
             $where[] = ['field_name','=',$fieldName];
         }
-        $data = $this->bukuPembantuRepo->getAllDataBy($search, $page, $perpage,$where);
         $total = $this->bukuPembantuRepo->getAllTotalDataBy($search, $where);
+        if ($onlyUnpaid == 'yes') {
+            $page = 0;
+            $perpage = $total;
+        }
+        $data = $this->bukuPembantuRepo->getAllDataBy($search, $page, $perpage,$where);
         $has_more = false;
         $page = $page + count($data);
-        if($total > $page)
+        if($total > $page && $onlyUnpaid != 'yes')
         {
             $has_more = true;
         }
@@ -60,8 +65,14 @@ class BukuPembantuController extends Controller
                 $left_bill = $item->nominal - $paid;
                 $item->left_bill = $left_bill;
             }
-            $this->data['status'] = true;
-            $this->data['message'] = 'Data berhasil ditemukan';
+            if ($onlyUnpaid == 'yes') {
+                $data = $data->filter(function ($item) {
+                    return $item->left_bill > 0;
+                })->values();
+                $total = count($data);
+            }
+            $this->data['status'] = count($data) > 0;
+            $this->data['message'] = count($data) > 0 ? 'Data berhasil ditemukan' : 'Data tidak ditemukan';
             $this->data['data'] = $data;
             $this->data['coa'] = $findCoa;
             $this->data['has_more'] = $has_more;

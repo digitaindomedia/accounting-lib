@@ -276,6 +276,8 @@ class JurnalRepo extends ElequentRepository
         PurchaseInvoicing::where(array('input_type' => TransactionsCode::JURNAL, 'jurnal_id' => $id))->delete();
         SalesInvoicing::where(array('input_type' => TransactionsCode::JURNAL, 'jurnal_id' => $id))->delete();
         JurnalMeta::where(array('jurnal_id' => $id))->delete();
+        PelunasanBukuPembantu::where(array('jurnal_id' => $id))->delete();
+        BukuPembantu::where(array('input_type' => InputType::JURNAL, 'jurnal_id' => $id))->delete();
     }
 
     public function storeKasBank(Request $request, $jurnalId)
@@ -528,13 +530,13 @@ class JurnalRepo extends ElequentRepository
                 }
                 $request = new Request();
                 $request->field_name = $fieldName;
-                $request->no_ref = $noRef;
+                $request->ref_no = $noRef;
                 $request->note = $note;
                 $request->input_type = InputType::JURNAL;
                 $request->nominal = $nominal;
                 $request->coa_id = $data['coa_id'];
                 $request->user_id = $data['user_id'];
-                $request->jurnal_date = $data['jurnal_date'];
+                $request->ref_date = $data['jurnal_date'];
                 $request->jurnal_id = $data['jurnal_id'];
                 $request->jurnal_akun_id = $data['jurnal_akun_id'];
                 $resBukuPembantu = $bukuPembantuRepo->store($request);
@@ -657,6 +659,7 @@ class JurnalRepo extends ElequentRepository
                         'debet' => $nomDebet,
                         'kredit' => $nomKredit,
                         'jurnal_id' => $jurnalId,
+                        'jurnal_no' => $jurnalNo,
                         'jurnal_date' => $jurnalDate,
                         'user_id' => $userId,
                         'coa_id' => $val->coa_id,

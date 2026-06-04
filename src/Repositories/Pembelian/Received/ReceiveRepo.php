@@ -105,7 +105,7 @@ class ReceiveRepo extends ElequentRepository
             $oldData = $this->findOne($id, [], ['vendor', 'order', 'warehouse','receiveproduct','receiveproduct.items', 'receiveproduct.product','receiveproduct.orderproduct','receiveproduct.tax','receiveproduct.unit'])?->toArray();
         }
 
-        $dataHeader = $this->gatherHeaderData($request);
+        $dataHeader = $this->gatherHeaderData($request, $oldData);
 
         DB::beginTransaction();
         try {
@@ -271,14 +271,22 @@ class ReceiveRepo extends ElequentRepository
         }
     }
 
-    private function gatherHeaderData(Request $request)
+    private function gatherHeaderData(Request $request, ?array $oldData = null)
     {
-        $receivedNo = $request->received_no ?: self::generateCodeTransaction(new PurchaseReceived(), KeyNomor::NO_PENERIMAAN_PEMBELIAN, 'receive_no', 'receive_date');
+        $receivedNo = $request->receive_no ?: $request->received_no;
+        if (empty($receivedNo) && !empty($request->id)) {
+            $receivedNo = $oldData['receive_no'] ?? null;
+        }
+        if (empty($receivedNo)) {
+            $receivedNo = self::generateCodeTransaction(new PurchaseReceived(), KeyNomor::NO_PENERIMAAN_PEMBELIAN, 'receive_no', 'receive_date');
+        }
+
+        $receivedDate = $request->receive_date ?: $request->received_date;
         $order = json_decode(json_encode($request->order));
         $vendorId = $order->vendor->id ?? $request->vendor_id;
 
         return [
-            'receive_date'   => $request->received_date ? Utility::changeDateFormat($request->received_date) : date("Y-m-d"),
+            'receive_date'   => $receivedDate ? Utility::changeDateFormat($receivedDate) : ($oldData['receive_date'] ?? date("Y-m-d")),
             'receive_no'     => $receivedNo,
             'surat_jalan_no' => $request->surat_jalan_no ?? "",
             'note'           => $request->note ?? "",

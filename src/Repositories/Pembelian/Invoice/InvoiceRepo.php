@@ -102,7 +102,7 @@ class InvoiceRepo extends ElequentRepository
         if (!empty($request->id)) {
             $oldData = $this->findOne($request->id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray();
         }
-        $data = $this->gatherInputData($request);
+        $data = $this->gatherInputData($request, $oldData);
 
         DB::beginTransaction();
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
@@ -156,11 +156,16 @@ class InvoiceRepo extends ElequentRepository
         }
     }
 
-    public function gatherInputData(Request $request): array
+    public function gatherInputData(Request $request, ?array $oldData = null): array
     {
+        $invoiceNo = $request->invoice_no ?: ($oldData['invoice_no'] ?? null);
+        if (empty($invoiceNo)) {
+            $invoiceNo = self::generateCodeTransaction(new PurchaseInvoicing(), KeyNomor::NO_INVOICE_PEMBELIAN, 'invoice_no', 'invoice_date');
+        }
+
         $data = [
             'id' => $request->id,
-            'invoice_no' => $request->invoice_no ?: self::generateCodeTransaction(new PurchaseInvoicing(), KeyNomor::NO_INVOICE_PEMBELIAN, 'invoice_no', 'invoice_date'),
+            'invoice_no' => $invoiceNo,
             'invoice_date' => Utility::changeDateFormat($request->invoice_date),
             'note' => $request->note ?? '',
             'due_date' => $request->due_date ? Utility::changeDateFormat($request->due_date) : date('Y-m-d'),

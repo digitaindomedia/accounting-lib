@@ -128,7 +128,10 @@ class OrderRepo extends ElequentRepository
         if (!empty($id)) {
             $oldData = $this->findOne($id, [], ['orderproduct','coa', 'ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit','purchaserequest'])?->toArray();
         }
-        $orderNo = $request->order_no ?: self::generateCodeTransaction(new PurchaseOrder(), KeyNomor::NO_ORDER_PEMBELIAN, 'order_no', 'order_date');
+        $orderNo = $request->order_no ?: ($oldData['order_no'] ?? null);
+        if (empty($orderNo)) {
+            $orderNo = self::generateCodeTransaction(new PurchaseOrder(), KeyNomor::NO_ORDER_PEMBELIAN, 'order_no', 'order_date');
+        }
         $orderDate = Utility::changeDateFormat($request->order_date ?: date('Y-m-d'));
         $dateSend = $request->date_send;
         $requestId = $request->request_id ?: '0';

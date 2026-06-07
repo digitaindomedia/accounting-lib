@@ -15,6 +15,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Log;
 
 class ReceiveController extends Controller
 {
@@ -133,6 +134,7 @@ class ReceiveController extends Controller
     {
         try {
             $reqData = $request->input('ids', []);
+            $userId = (int) $request->user_id;
             $successDelete = 0;
             $failedDelete = 0;
 
@@ -144,19 +146,35 @@ class ReceiveController extends Controller
                 $receiveId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$receiveId) {
                     $failedDelete++;
+                    Log::warning('[ReceiveController][deleteAll] ID penerimaan tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
 
                 try {
-                    $deleted = $this->purchaseReceivedRepo->destroy((int) $receiveId, (int) $request->user_id);
+                    $deleted = $this->purchaseReceivedRepo->destroy((int) $receiveId, $userId);
                     if ($deleted) {
                         $successDelete++;
                     } else {
                         $failedDelete++;
+                        Log::warning('[ReceiveController][deleteAll] Penerimaan gagal dihapus', [
+                            'receive_id' => (int) $receiveId,
+                            'user_id' => $userId,
+                        ]);
                     }
                 }
                 catch (\Throwable $e) {
                     $failedDelete++;
+                    Log::error('[ReceiveController][deleteAll] Error hapus penerimaan', [
+                        'receive_id' => (int) $receiveId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
                 }
             }
 
@@ -170,6 +188,14 @@ class ReceiveController extends Controller
                 $this->data['data'] = array();
             }
         } catch (\Throwable $e) {
+            Log::error('[ReceiveController][deleteAll] Error hapus semua penerimaan', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'ids' => $request->input('ids', []),
+                'user_id' => $request->user_id,
+            ]);
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();

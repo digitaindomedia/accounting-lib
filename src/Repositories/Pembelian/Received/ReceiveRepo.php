@@ -547,7 +547,16 @@ class ReceiveRepo extends ElequentRepository
             return true;
         } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error('[ReceiveRepo][destroy] ' . $e->getMessage());
+            Log::error('[ReceiveRepo][destroy] Gagal hapus penerimaan pembelian', [
+                'receive_id' => $id,
+                'receive_no' => $oldData['receive_no'] ?? null,
+                'order_id' => $orderId,
+                'user_id' => $userId,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return false;
         }
     }

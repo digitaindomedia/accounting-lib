@@ -19,6 +19,7 @@ use Maatwebsite\Excel\Facades\Excel;
 class ReceiveController extends Controller
 {
     protected $purchaseReceivedRepo;
+    protected $data = [];
 
     public function __construct(ReceiveRepo $purchaseReceivedRepo)
     {
@@ -130,39 +131,50 @@ class ReceiveController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
-        $successDelete = 0;
-        $failedDelete = 0;
-        if(count($reqData) > 0){
-            foreach ($reqData as $id){
-                $receiveId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+        try {
+            $reqData = $request->input('ids', []);
+            $successDelete = 0;
+            $failedDelete = 0;
+
+            if (!is_array($reqData)) {
+                $reqData = json_decode(json_encode($reqData), true) ?: [];
+            }
+
+            foreach ($reqData as $id) {
+                $receiveId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$receiveId) {
-                    $failedDelete = $failedDelete + 1;
+                    $failedDelete++;
                     continue;
                 }
+
                 try {
                     $deleted = $this->purchaseReceivedRepo->destroy((int) $receiveId, (int) $request->user_id);
                     if ($deleted) {
-                        $successDelete = $successDelete + 1;
+                        $successDelete++;
                     } else {
-                        $failedDelete = $failedDelete + 1;
+                        $failedDelete++;
                     }
                 }
-                catch (\Exception $e) {
-                    $failedDelete = $failedDelete + 1;
+                catch (\Throwable $e) {
+                    $failedDelete++;
                 }
             }
-        }
 
-        if($successDelete > 0) {
-            $this->data['status'] = true;
-            $this->data['message'] = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
-            $this->data['data'] = array();
-        } else {
+            if($successDelete > 0) {
+                $this->data['status'] = true;
+                $this->data['message'] = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
+                $this->data['data'] = array();
+            } else {
+                $this->data['status'] = false;
+                $this->data['message'] = $failedDelete > 0 ? "$failedDelete Data tidak bisa dihapus" : 'Data gagal dihapus';
+                $this->data['data'] = array();
+            }
+        } catch (\Throwable $e) {
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
         }
+
         return response()->json($this->data);
     }
 

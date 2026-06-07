@@ -303,7 +303,7 @@ Route::group([
         Route::get('find-received-by-id', [OrderController::class, 'showNotReceived']);
         Route::post('save-data', [OrderController::class, 'store']);
         Route::delete('delete', [OrderController::class, 'delete']);
-        Route::delete('delete-all', [OrderController::class, 'deleteAll']);
+        Route::post('delete-all', [OrderController::class, 'deleteAll']);
         Route::get('completion', [OrderController::class, 'completion']);
         Route::get('download-sample', [OrderController::class, 'downloadSample']);
         Route::post('import', [OrderController::class, 'import']);
@@ -323,7 +323,7 @@ Route::group([
         Route::get('completion', [ReceiveController::class, 'completion']);
         Route::post('save-data', [ReceiveController::class, 'store']);
         Route::delete('delete', [ReceiveController::class, 'destroy']);
-        Route::delete('delete-all', [ReceiveController::class, 'deleteAll']);
+        Route::post('delete-all', [ReceiveController::class, 'deleteAll']);
         Route::get('export-excel', [ReceiveController::class, 'export']);
         Route::get('export-csv', [ReceiveController::class, 'exportCsv']);
         Route::get('export-pdf', [ReceiveController::class, 'exportPdf']);

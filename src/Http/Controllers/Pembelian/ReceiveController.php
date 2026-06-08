@@ -117,12 +117,24 @@ class ReceiveController extends Controller
                 $this->data['message'] = 'Data berhasil dihapus';
                 $this->data['data'] = array();
             } else {
+                Log::error('[ReceiveController][destroy] Penerimaan gagal dihapus', [
+                    'id' => $id,
+                    'user_id' => $request->user_id,
+                ]);
                 $this->data['status'] = false;
                 $this->data['message'] = 'Data gagal dihapus';
                 $this->data['data'] = array();
             }
         }
-        catch (\Exception $e) {
+        catch (\Throwable $e) {
+            Log::error('[ReceiveController][destroy] Error hapus penerimaan', [
+                'id' => $id,
+                'user_id' => $request->user_id,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
@@ -133,7 +145,7 @@ class ReceiveController extends Controller
     public function deleteAll(Request $request)
     {
         try {
-            $reqData = $request->input('ids', []);
+            $reqData = $request->input('ids', $request->input('params.ids', []));
             $userId = (int) $request->user_id;
             $successDelete = 0;
             $failedDelete = 0;
@@ -146,7 +158,7 @@ class ReceiveController extends Controller
                 $receiveId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$receiveId) {
                     $failedDelete++;
-                    Log::warning('[ReceiveController][deleteAll] ID penerimaan tidak valid', [
+                    Log::error('[ReceiveController][deleteAll] ID penerimaan tidak valid', [
                         'payload_id' => $id,
                         'user_id' => $userId,
                     ]);
@@ -159,7 +171,7 @@ class ReceiveController extends Controller
                         $successDelete++;
                     } else {
                         $failedDelete++;
-                        Log::warning('[ReceiveController][deleteAll] Penerimaan gagal dihapus', [
+                        Log::error('[ReceiveController][deleteAll] Penerimaan gagal dihapus', [
                             'receive_id' => (int) $receiveId,
                             'user_id' => $userId,
                         ]);
@@ -183,6 +195,12 @@ class ReceiveController extends Controller
                 $this->data['message'] = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
                 $this->data['data'] = array();
             } else {
+                Log::error('[ReceiveController][deleteAll] Semua penerimaan gagal dihapus', [
+                    'ids' => $reqData,
+                    'success_delete' => $successDelete,
+                    'failed_delete' => $failedDelete,
+                    'user_id' => $userId,
+                ]);
                 $this->data['status'] = false;
                 $this->data['message'] = $failedDelete > 0 ? "$failedDelete Data tidak bisa dihapus" : 'Data gagal dihapus';
                 $this->data['data'] = array();
@@ -193,7 +211,7 @@ class ReceiveController extends Controller
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
-                'ids' => $request->input('ids', []),
+                'ids' => $request->input('ids', $request->input('params.ids', [])),
                 'user_id' => $request->user_id,
             ]);
             $this->data['status'] = false;

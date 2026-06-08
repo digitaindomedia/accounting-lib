@@ -518,6 +518,10 @@ class ReceiveRepo extends ElequentRepository
     {
         $receive = $this->findOne($id, [], ['vendor', 'order', 'warehouse','receiveproduct','receiveproduct.items', 'receiveproduct.product','receiveproduct.orderproduct','receiveproduct.tax','receiveproduct.unit']);
         if (!$receive) {
+            Log::error('[ReceiveRepo][destroy] Penerimaan pembelian tidak ditemukan', [
+                'receive_id' => $id,
+                'user_id' => $userId,
+            ]);
             return false;
         }
 

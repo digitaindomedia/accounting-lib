@@ -21,6 +21,7 @@ use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\TransactionsCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -225,28 +226,46 @@ class OrderController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $orderId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $orderId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$orderId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[OrderController][deleteAll] ID order pembelian tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
 
                 $countDp = PurchaseDownPayment::where('order_id', $orderId)->count();
                 if($countDp > 0){
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[OrderController][deleteAll] Order pembelian gagal dihapus karena sudah ada uang muka', [
+                        'order_id' => (int) $orderId,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
 
-                $res = $this->purchaseOrderRepo->destroy((int) $orderId, (int) $request->user_id);
+                $res = $this->purchaseOrderRepo->destroy((int) $orderId, $userId);
                 if($res){
                     $successDelete = $successDelete + 1;
                 } else {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[OrderController][deleteAll] Order pembelian gagal dihapus', [
+                        'order_id' => (int) $orderId,
+                        'user_id' => $userId,
+                    ]);
                 }
             }
         }
@@ -256,6 +275,12 @@ class OrderController extends Controller
             $this->data['message'] = "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus";
             $this->data['data'] = array();
         } else {
+            Log::error('[OrderController][deleteAll] Semua order pembelian gagal dihapus', [
+                'ids' => $reqData,
+                'success_delete' => $successDelete,
+                'failed_delete' => $failedDelete,
+                'user_id' => $userId,
+            ]);
             $this->data['status'] = false;
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();

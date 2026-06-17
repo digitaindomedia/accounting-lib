@@ -266,10 +266,8 @@ class InvoiceController extends Controller
         $coaId = $request->coa_id;
         $userId = $request->user_id;
         $invoice = json_decode(json_encode($request->invoice));
-        DB::beginTransaction();
         try {
             if (count($invoice) > 0) {
-                DB::statement('SET FOREIGN_KEY_CHECKS=0;');
                 foreach ($invoice as $i => $item) {
                     $req = new Request();
                     $req->coa_id = $coaId;
@@ -285,13 +283,11 @@ class InvoiceController extends Controller
                     $this->invoiceRepo->store($req);
                 }
             }
-            DB::commit();
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil disimpan';
             $this->data['data'] = '';
         }catch (\Exception $e) {
-            DB::rollBack();
             $this->data['status'] = false;
             $this->data['message'] = $e->getMessage();
         }

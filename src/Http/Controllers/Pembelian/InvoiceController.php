@@ -45,6 +45,7 @@ class InvoiceController extends Controller
     protected $paymentInvoiceRepo;
     protected $returRepo;
     protected $invoiceService;
+    protected array $data = [];
 
     public function __construct(InvoiceRepo $invoiceRepo, PaymentInvoiceRepo $paymentInvoiceRepo,ReturRepo $returRepo,InvoiceService $invoiceService)
     {
@@ -161,33 +162,57 @@ class InvoiceController extends Controller
     {
         $coaId = $request->coa_id;
         $userId = $request->user_id;
-        $invoice = json_decode(json_encode($request->invoice));
-        DB::beginTransaction();
+        $invoice = json_decode(json_encode($request->input('invoice', [])));
         try {
-            if (count($invoice) > 0) {
-                DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-                foreach ($invoice as $i => $item) {
-                    $req = new Request();
-                    $req->coa_id = $coaId;
-                    $req->user_id = $userId;
-                    $req->invoice_date = date("Y-m-d", strtotime($item->invoice_date));
-                    $req->invoice_no = $item->invoice_no;
-                    $req->note = $item->note;
-                    $req->vendor_id = $item->vendor_id;
-                    $req->subtotal = Utility::remove_commas($item->nominal);
-                    $req->grandtotal = Utility::remove_commas($item->nominal);
-                    $req->invoice_type = ProductType::ITEM;
-                    $req->input_type = InputType::SALDO_AWAL;
-                    $this->invoiceRepo->store($req);
+            if (empty($invoice) || !is_array($invoice)) {
+                throw new \Exception('Data invoice wajib diisi');
+            }
+
+            foreach ($invoice as $i => $item) {
+                $row = $i + 1;
+                $invoiceDate = $item->invoice_date ?? null;
+                $invoiceNo = $item->invoice_no ?? null;
+                $vendorId = $item->vendor_id ?? ($item->vendor->id ?? null);
+                $nominal = $item->nominal ?? null;
+
+                if (empty($invoiceDate) || strtotime($invoiceDate) === false) {
+                    throw new \Exception('Tanggal invoice saldo awal wajib diisi pada baris ke-' . $row);
+                }
+
+                if (empty($invoiceNo)) {
+                    throw new \Exception('Nomor invoice saldo awal wajib diisi pada baris ke-' . $row);
+                }
+
+                if (empty($vendorId)) {
+                    throw new \Exception('Vendor invoice saldo awal wajib diisi pada baris ke-' . $row);
+                }
+
+                if ($nominal === null || $nominal === '') {
+                    throw new \Exception('Nominal invoice saldo awal wajib diisi pada baris ke-' . $row);
+                }
+
+                $req = Request::create('', 'POST', [
+                    'coa_id' => $coaId,
+                    'user_id' => $userId,
+                    'invoice_date' => date("Y-m-d", strtotime($invoiceDate)),
+                    'invoice_no' => $invoiceNo,
+                    'note' => $item->note ?? '',
+                    'vendor_id' => $vendorId,
+                    'subtotal' => Utility::remove_commas($nominal),
+                    'grandtotal' => Utility::remove_commas($nominal),
+                    'invoice_type' => ProductType::ITEM,
+                    'input_type' => InputType::SALDO_AWAL,
+                ]);
+
+                if (!$this->invoiceRepo->store($req)) {
+                    throw new \Exception('Data invoice saldo awal gagal disimpan pada baris ke-' . $row);
                 }
             }
-            DB::commit();
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil disimpan';
             $this->data['data'] = '';
-        }catch (\Exception $e) {
-            DB::rollBack();
+        }catch (\Throwable $e) {
             $this->data['status'] = false;
             $this->data['message'] = $e->getMessage();
         }

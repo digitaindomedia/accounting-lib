@@ -470,13 +470,13 @@ class InvoiceController extends Controller
     public function kartuPiutang(Request $request)
     {
         $search = $request->q;
-        $page = $request->page;
-        $perpage = $request->perpage;
+        $page = max((int) $request->page, 1);
+        $perpage = !empty($request->perpage) ? (int) $request->perpage : 10;
         $vendorId = $request->vendor_id;
         $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
         $untilDate = !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth();
         $vendorRepo = new VendorRepo(new Vendor(), app(ActivityLogService::class));
-        $where=array('vendor_type' => VendorType::CUSTOMER);
+        $where = [['vendor_type', '=', VendorType::CUSTOMER]];
         if(!empty($vendorId)){
             $where[] = ['id','=',$vendorId];
         }
@@ -495,7 +495,9 @@ class InvoiceController extends Controller
                 $vendor->saldo_akhir = $saldoAkhir;
                 return $vendor;
             })->filter(function ($vendor) {
-                return $vendor->saldo_akhir > 0;
+                return (float) $vendor->saldo_awal !== 0.0
+                    || (float) $vendor->piutang !== 0.0
+                    || (float) $vendor->pelunasan !== 0.0;
             });
             $processedResults = $processedResults->concat($processedInvoice);
         });
@@ -520,8 +522,8 @@ class InvoiceController extends Controller
     public function showKartuPiutangDetail(Request $request)
     {
         $vendorId = $request->vendor_id;
-        $page = $request->page;
-        $perpage = $request->perpage;
+        $page = max((int) $request->page, 1);
+        $perpage = !empty($request->perpage) ? (int) $request->perpage : 10;
         $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
         $untilDate = !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth();
         $resultInvoice = SalesInvoicing::select('invoice_date as tanggal', 'invoice_no as nomor', 'note as note', DB::raw("'0' as kredit"), 'grandtotal as debet')->where([['vendor_id', '=', $vendorId]])->whereBetween('invoice_date',[$fromDate,$untilDate])->orderBy('invoice_date','asc');

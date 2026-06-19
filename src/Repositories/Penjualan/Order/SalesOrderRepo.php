@@ -249,23 +249,54 @@ class SalesOrderRepo extends ElequentRepository
 
     public function createProduct($item, $orderId, $taxType='')
     {
+        $qty = $this->numericValue($item->qty ?? 0);
+        $price = $this->resolveItemPrice($item, $qty);
         $arrItem = [
-            'qty' => Utility::remove_commas($item->qty),
-            'qty_left' => Utility::remove_commas($item->qty),
+            'qty' => $qty,
+            'qty_left' => $qty,
             'product_id' => $item->product_id ?: '0',
             'unit_id' => $item->unit_id ?: '0',
             'tax_id' => $item->tax_id ?: '0',
             'tax_percentage' => $item->tax_percentage ?: '0',
-            'price' => Utility::remove_commas($item->price ?: 0),
+            'price' => $price,
             'tax_type' => $taxType ?: '',
             'discount_type' => $item->discount_type ?: '',
-            'discount' => Utility::remove_commas($item->discount ?: 0),
-            'subtotal' => Utility::remove_commas($item->subtotal ?: 0),
+            'discount' => $this->numericValue($item->discount ?? 0),
+            'subtotal' => $this->numericValue($item->subtotal ?? 0),
             'multi_unit' => 0,
             'order_id' => $orderId,
         ];
        $res = SalesOrderProduct::create($arrItem);
        return $res;
+    }
+
+    private function numericValue($value): float
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+
+        $numericValue = Utility::remove_commas($value);
+        return is_numeric($numericValue) ? (float) $numericValue : 0;
+    }
+
+    private function resolveItemPrice($item, float $qty): float
+    {
+        $price = $this->numericValue($item->price ?? 0);
+        $subtotal = $this->numericValue($item->subtotal ?? 0);
+
+        if ($price != 0 || $subtotal == 0 || $qty == 0) {
+            return $price;
+        }
+
+        $discount = $this->numericValue($item->discount ?? 0);
+        $discountType = $item->discount_type ?? '';
+        if ($discountType === 'percent') {
+            $baseMultiplier = 1 - ($discount / 100);
+            return $baseMultiplier != 0 ? $subtotal / $baseMultiplier / $qty : 0;
+        }
+
+        return ($subtotal + $discount) / $qty;
     }
 
     private function handleFileUploads($uploadedFiles, $orderId, $userId)

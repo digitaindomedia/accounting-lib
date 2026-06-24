@@ -6,12 +6,14 @@ namespace Icso\Accounting\Http\Controllers\Akuntansi;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Enums\TransactionType;
 use Icso\Accounting\Exports\BukuBesarExport;
+use Icso\Accounting\Exports\DetailKasBankExport;
 use Icso\Accounting\Exports\JurnalTransaksiExport;
 use Icso\Accounting\Models\Akuntansi\Jurnal;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\VarType;
@@ -107,6 +109,164 @@ class BukuBesarController extends Controller
         return $pdf->download('bukubesar.pdf');
     }
 
+    public function getKasAccounts()
+    {
+        return response()->json([
+            'status' => true,
+            'message' => 'Data akun kas berhasil ditemukan',
+            'data' => $this->getCashAccounts('kas'),
+        ]);
+    }
+
+    public function showKas(Request $request)
+    {
+        return $this->showKasBank($request, 'kas', 'kas');
+    }
+
+    public function showBank(Request $request)
+    {
+        return $this->showKasBank($request, 'bank', 'bank');
+    }
+
+    private function showKasBank(Request $request, string $category, string $label)
+    {
+        $coaId = $request->input('coa_id');
+        if (empty($coaId)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Akun ' . $label . ' wajib dipilih',
+                'data' => [],
+                'total' => 0,
+            ], 422);
+        }
+
+        if (!$this->isCashAccount($coaId, $category)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Akun yang dipilih bukan akun ' . $label,
+                'data' => [],
+                'total' => 0,
+            ], 422);
+        }
+
+        $data = $this->getFilteredData($request);
+        $total = $this->getFilteredTotal($request);
+        $arrData = $this->processData($data, $request, $total);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data laporan ' . $label . ' berhasil ditemukan',
+            'data' => $arrData,
+            'total' => $total,
+            'cash_accounts' => $this->getCashAccounts($category),
+        ]);
+    }
+
+    public function exportKas(Request $request)
+    {
+        $arrData = $this->getKasExportData($request, 'kas');
+        return Excel::download(new BukuBesarExport($arrData), 'kasbank' . date('YmdHis') . '.xlsx');
+    }
+
+    public function exportKasToPdf(Request $request)
+    {
+        $arrData = $this->getKasExportData($request, 'kas');
+        $pdf = PDF::loadView('accounting::buku_besar_pdf', ['jurnalData' => $arrData]);
+
+        return $pdf->download('kas-bank' . date('YmdHis') . '.pdf');
+    }
+
+    public function exportBank(Request $request)
+    {
+        $arrData = $this->getKasExportData($request, 'bank');
+        return Excel::download(new BukuBesarExport($arrData), 'bank' . date('YmdHis') . '.xlsx');
+    }
+
+    public function exportBankToPdf(Request $request)
+    {
+        $arrData = $this->getKasExportData($request, 'bank');
+        $pdf = PDF::loadView('accounting::buku_besar_pdf', ['jurnalData' => $arrData]);
+
+        return $pdf->download('bank' . date('YmdHis') . '.pdf');
+    }
+
+    public function showDetailKas(Request $request)
+    {
+        return $this->showDetailKasBank($request, 'kas', 'Kas');
+    }
+
+    public function showDetailBank(Request $request)
+    {
+        return $this->showDetailKasBank($request, 'bank', 'Bank');
+    }
+
+    public function exportDetailKas(Request $request)
+    {
+        $reportData = $this->getDetailKasBankData($request, 'kas');
+        return Excel::download(new DetailKasBankExport($reportData), 'detail-kas' . date('YmdHis') . '.xlsx');
+    }
+
+    public function exportDetailKasToPdf(Request $request)
+    {
+        $reportData = $this->getDetailKasBankData($request, 'kas');
+        $pdf = PDF::loadView('accounting::detail_kas_bank_pdf', [
+            'title' => $this->getDetailReportTitle($request, 'Kas'),
+            'period' => $this->getReportPeriod($request),
+            'reportData' => $reportData,
+        ]);
+
+        return $pdf->download('detail-kas' . date('YmdHis') . '.pdf');
+    }
+
+    public function exportDetailBank(Request $request)
+    {
+        $reportData = $this->getDetailKasBankData($request, 'bank');
+        return Excel::download(new DetailKasBankExport($reportData), 'detail-bank' . date('YmdHis') . '.xlsx');
+    }
+
+    public function exportDetailBankToPdf(Request $request)
+    {
+        $reportData = $this->getDetailKasBankData($request, 'bank');
+        $pdf = PDF::loadView('accounting::detail_kas_bank_pdf', [
+            'title' => $this->getDetailReportTitle($request, 'Bank'),
+            'period' => $this->getReportPeriod($request),
+            'reportData' => $reportData,
+        ]);
+
+        return $pdf->download('detail-bank' . date('YmdHis') . '.pdf');
+    }
+
+    private function showDetailKasBank(Request $request, string $category, string $label)
+    {
+        $coaId = $request->input('coa_id');
+        if (empty($coaId)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Akun ' . strtolower($label) . ' wajib dipilih',
+                'data' => [],
+                'total' => 0,
+            ], 422);
+        }
+
+        if (!$this->isCashAccount($coaId, $category)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Akun yang dipilih bukan akun ' . strtolower($label),
+                'data' => [],
+                'total' => 0,
+            ], 422);
+        }
+
+        $reportData = $this->getDetailKasBankData($request, $category);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data laporan detail ' . strtolower($label) . ' berhasil ditemukan',
+            'data' => $reportData,
+            'total' => count($reportData),
+        ]);
+    }
+
     private function getFilteredData(Request $request)
     {
         $search = $request->q;
@@ -154,8 +314,12 @@ class BukuBesarController extends Controller
 
                 $currentSaldo = $saldoAwal;
                 $coaPosition = $item->coa->coa_position ?? 'debet';
+                $totalDebet = 0;
+                $totalKredit = 0;
 
                 foreach ($res as $transaction) {
+                    $totalDebet += (float) $transaction->debet;
+                    $totalKredit += (float) $transaction->kredit;
                     $amount = 0;
                     if ($coaPosition == 'debet') {
                         $amount = $transaction->debet - $transaction->kredit;
@@ -176,6 +340,9 @@ class BukuBesarController extends Controller
 
                 $arrData[] = [
                     'saldo_awal' => $saldoAwal,
+                    'total_debet' => $totalDebet,
+                    'total_kredit' => $totalKredit,
+                    'saldo_akhir' => $currentSaldo,
                     'coa' => $item->coa,
                     'data' => $res
                 ];
@@ -185,6 +352,9 @@ class BukuBesarController extends Controller
             if (!empty($coa)) {
                 $arrData[] = [
                     'saldo_awal' => $this->getSaldoAwalByDate($request->coa_id, $request->from_date),
+                    'total_debet' => 0,
+                    'total_kredit' => 0,
+                    'saldo_akhir' => $this->getSaldoAwalByDate($request->coa_id, $request->from_date),
                     'coa' => $coa,
                     'data' => collect()
                 ];
@@ -247,6 +417,140 @@ class BukuBesarController extends Controller
     {
         $data = $this->getFilteredData($request);
         return $this->processData($data, $request);
+    }
+
+    private function getKasExportData(Request $request, string $category = 'kas')
+    {
+        if (!$this->isCashAccount($request->input('coa_id'), $category)) {
+            return [];
+        }
+
+        $total = $this->getFilteredTotal($request);
+        $request->page = 0;
+        $request->perpage = $total;
+        $data = $this->getFilteredData($request);
+
+        return $this->processData($data, $request, $total);
+    }
+
+    private function getDetailKasBankData(Request $request, string $category)
+    {
+        $coaId = $request->input('coa_id');
+        if (!$this->isCashAccount($coaId, $category)) {
+            return [];
+        }
+
+        $fromDate = $request->from_date;
+        $untilDate = $request->until_date;
+
+        $mainTransactions = JurnalTransaksi::with('coa')
+            ->where('coa_id', $coaId)
+            ->whereBetween('transaction_date', [$fromDate, $untilDate])
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->orderBy('transaction_no')
+            ->get()
+            ->groupBy('transaction_no');
+
+        $reportData = [];
+        foreach ($mainTransactions as $transactionNo => $mainRows) {
+            $counterRows = JurnalTransaksi::with('coa')
+                ->where('transaction_no', $transactionNo)
+                ->where('coa_id', '!=', $coaId)
+                ->orderBy('id')
+                ->get();
+
+            $rows = $mainRows->concat($counterRows)->values()->map(function ($row) use ($coaId) {
+                return [
+                    'id' => $row->id,
+                    'transaction_date' => $row->transaction_date,
+                    'transaction_no' => $row->transaction_no,
+                    'note' => $row->note ?? '',
+                    'debet' => (float) $row->debet,
+                    'kredit' => (float) $row->kredit,
+                    'coa_id' => $row->coa_id,
+                    'is_selected_account' => (string) $row->coa_id === (string) $coaId,
+                    'coa' => $row->coa,
+                ];
+            });
+
+            $firstRow = $mainRows->first();
+            $reportData[] = [
+                'transaction_date' => $firstRow->transaction_date,
+                'transaction_no' => $transactionNo,
+                'rows' => $rows,
+            ];
+        }
+
+        return $reportData;
+    }
+
+    private function getDetailReportTitle(Request $request, string $label)
+    {
+        $coa = Coa::find($request->input('coa_id'));
+        if (empty($coa)) {
+            return 'Laporan Detail ' . $label;
+        }
+
+        return 'Laporan Detail ' . $label . ' ' . $coa->coa_name . ' (' . $coa->coa_code . ')';
+    }
+
+    private function getReportPeriod(Request $request)
+    {
+        return 'Periode ' . $request->from_date . ' - ' . $request->until_date;
+    }
+
+    private function getCashAccounts(string $category = 'kas')
+    {
+        $ids = $this->getCashAccountIds($category);
+        $query = Coa::where('coa_level', '4')
+            ->where('coa_category', $category);
+
+        if (!empty($ids)) {
+            $query->orWhere(function ($subQuery) use ($ids) {
+                $subQuery->where('coa_level', '4')
+                    ->whereIn('id', $ids);
+            });
+        }
+
+        return $query
+            ->orderBy('coa_code')
+            ->get();
+    }
+
+    private function getCashAccountIds(string $category = 'kas'): array
+    {
+        $settingValue = SettingRepo::getOptionValue($category === 'bank' ? 'akun_bank' : 'akun_kas');
+        if (empty($settingValue)) {
+            return [];
+        }
+
+        if (is_string($settingValue)) {
+            $decoded = json_decode($settingValue, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $settingValue = $decoded;
+            }
+        }
+
+        if (is_array($settingValue)) {
+            $ids = [];
+            array_walk_recursive($settingValue, function ($value, $key) use (&$ids) {
+                if (($key === 'id' || is_int($key)) && is_numeric($value)) {
+                    $ids[] = (int) $value;
+                }
+            });
+            return array_values(array_unique(array_filter($ids)));
+        }
+
+        preg_match_all('/\d+/', (string) $settingValue, $matches);
+        return array_values(array_unique(array_map('intval', $matches[0] ?? [])));
+    }
+
+    private function isCashAccount($coaId, string $category = 'kas'): bool
+    {
+        return $this->getCashAccounts($category)
+            ->where('id', $coaId)
+            ->isNotEmpty();
     }
 
 }

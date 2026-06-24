@@ -134,14 +134,13 @@ class JurnalController extends Controller
         
         if (count($reqData) > 0) {
             foreach ($reqData as $item) {
-                // Handle both object (from json_decode) and array (from input) structures if needed,
-                // but since we use input('ids') and validate array, we expect array of objects or IDs.
-                // Assuming input is array of objects with 'id' and 'can_delete' properties based on original code logic
-                // Or if it's just IDs, we need to adjust. Original code: $item->can_delete
-                
-                // Safe access to properties
-                $itemId = is_array($item) ? ($item['id'] ?? null) : ($item->id ?? null);
-                $canDelete = is_array($item) ? ($item['can_delete'] ?? false) : ($item->can_delete ?? false);
+                $isLegacyPayload = is_array($item) || is_object($item);
+                $itemId = $isLegacyPayload
+                    ? (is_array($item) ? ($item['id'] ?? null) : ($item->id ?? null))
+                    : $item;
+                $canDelete = $isLegacyPayload
+                    ? (is_array($item) ? ($item['can_delete'] ?? false) : ($item->can_delete ?? false))
+                    : true;
 
                 if ($itemId && $canDelete) {
                     $res = $this->jurnalRepo->destroy($itemId, (int) $request->input('user_id'));

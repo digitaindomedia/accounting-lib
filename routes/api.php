@@ -161,7 +161,7 @@ Route::group([
     Route::get('jurnal-get-all',[JurnalController::class, 'getAllData']);
     Route::get('get-jurnal-by-id',[JurnalController::class, 'findJurnalById']);
     Route::delete('delete-jurnal',[JurnalController::class, 'deleteById']);
-    Route::delete('delete-all-jurnal',[JurnalController::class, 'deleteAllJurnal']);
+    Route::post('delete-all-jurnal',[JurnalController::class, 'deleteAllJurnal']);
     Route::get('show-jurnal',[JurnalController::class, 'showAccountJurnal']);
     Route::get('download-sample-jurnal-umum', [JurnalController::class, 'downloadSample']);
     Route::get('download-sample-jurnal-kas-bank', [JurnalController::class, 'downloadKasBankSample']);

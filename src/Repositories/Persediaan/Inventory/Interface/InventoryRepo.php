@@ -492,7 +492,7 @@ class InventoryRepo extends ElequentRepository
             ])
             ->chunk(500, function ($rows) use (&$counter, $actorId) {
                 foreach ($rows as $row) {
-                    $hpp = $this->movingAverageByDate($row->product_id, $row->unit_id, $row->delivery_date);
+                    $cost = $this->resolveOutgoingCost($row->product_id, $row->unit_id, $row->qty, $row->delivery_date);
 
                     $req = new Request();
                     $req->coa_id = $row->product_coa_id ?: 0;
@@ -502,7 +502,7 @@ class InventoryRepo extends ElequentRepository
                     $req->qty_out = (float) $row->qty;
                     $req->warehouse_id = $row->warehouse_id;
                     $req->product_id = $row->product_id;
-                    $req->price = (float) $hpp;
+                    $req->price = (float) $cost['hpp_unit'];
                     $req->note = $row->note;
                     $req->unit_id = $row->unit_id;
                     $req->transaction_id = $row->delivery_id;
@@ -548,7 +548,7 @@ class InventoryRepo extends ElequentRepository
             ])
             ->chunk(500, function ($rows) use (&$counter, $actorId) {
                 foreach ($rows as $row) {
-                    $hpp = $this->movingAverageByDate($row->product_id, $row->unit_id, $row->invoice_date);
+                    $cost = $this->resolveOutgoingCost($row->product_id, $row->unit_id, $row->qty, $row->invoice_date);
 
                     $req = new Request();
                     $req->coa_id = $row->product_coa_id ?: 0;
@@ -558,7 +558,7 @@ class InventoryRepo extends ElequentRepository
                     $req->qty_out = (float) $row->qty;
                     $req->warehouse_id = $row->warehouse_id;
                     $req->product_id = $row->product_id;
-                    $req->price = (float) $hpp;
+                    $req->price = (float) $cost['hpp_unit'];
                     $req->note = $row->note;
                     $req->unit_id = $row->unit_id;
                     $req->transaction_id = $row->invoice_id;
@@ -695,6 +695,61 @@ class InventoryRepo extends ElequentRepository
 
         }*/
         return $hpp;
+    }
+
+    public function getConversionFactorToSmallest($productId, $unitId): float
+    {
+        $product = Product::where('id', $productId)->first();
+        if (empty($product) || empty($unitId) || (int) $product->unit_id === (int) $unitId) {
+            return 1;
+        }
+
+        $conversion = ProductConvertion::where([
+            'product_id' => $productId,
+            'unit_id' => $unitId
+        ])->first();
+
+        if (empty($conversion)) {
+            return 1;
+        }
+
+        $factor = (float) ($conversion->nilai_terkecil ?: $conversion->nilai ?: 0);
+        return $factor > 0 ? $factor : 1;
+    }
+
+    public function movingAverageSmallestByDate($productId, $date): float
+    {
+        $totalIn = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('total_in');
+        $totalOut = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('total_out');
+        $qtyIn = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('qty_in');
+        $qtyOut = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('qty_out');
+
+        $qty = $qtyIn - $qtyOut;
+        if ($qty == 0) {
+            return 0;
+        }
+
+        $hpp = ($totalIn - $totalOut) / $qty;
+        return $hpp > 0 ? $hpp : 0;
+    }
+
+    public function resolveOutgoingCost($productId, $unitId, $qty, $date): array
+    {
+        $factor = $this->getConversionFactorToSmallest($productId, $unitId);
+        $qtySmallest = (float) $qty * $factor;
+        $hppSmallest = $this->movingAverageSmallestByDate($productId, $date);
+
+        if ($hppSmallest <= 0) {
+            $hppSmallest = $this->movingAverageByDate($productId, $unitId, $date);
+        }
+
+        return [
+            'factor' => $factor,
+            'qty_smallest' => $qtySmallest,
+            'hpp_smallest' => $hppSmallest,
+            'hpp_unit' => $hppSmallest * $factor,
+            'subtotal_hpp' => $hppSmallest * $qtySmallest,
+        ];
     }
 
     public function getTotalSaldoAwalByCoaType($coaId)

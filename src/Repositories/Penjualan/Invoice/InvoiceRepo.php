@@ -688,7 +688,10 @@ class InvoiceRepo extends ElequentRepository
 
                 // 2. COGS & Inventory (Only for Non-Service Items)
                 if ($find->invoice_type != ProductType::SERVICE && $item->product_id) {
-                    $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $find->invoice_date);
+                    $cost = $inventoryRepo->resolveOutgoingCost($item->product_id, $item->unit_id, $item->qty, $find->invoice_date);
+                    $hpp = $cost['hpp_smallest'];
+                    $hppUnit = $cost['hpp_unit'];
+                    $subtotalHpp = $cost['subtotal_hpp'];
                     if ($preferExistingInventoryHpp) {
                         $invLog = Inventory::where([
                             'transaction_code' => TransactionsCode::INVOICE_PENJUALAN,
@@ -696,9 +699,13 @@ class InvoiceRepo extends ElequentRepository
                         ])->first();
                         if ($invLog) {
                             $hpp = (float) $invLog->nominal;
+                            $hppUnit = $hpp * $cost['factor'];
+                            $subtotalHpp = (float) $invLog->total_out;
+                            if ($subtotalHpp <= 0) {
+                                $subtotalHpp = $hpp * $cost['qty_smallest'];
+                            }
                         }
                     }
-                    $subtotalHpp = $hpp * $item->qty;
 
                     // Debit COGS
                     $journalEntries[] = [
@@ -724,7 +731,7 @@ class InvoiceRepo extends ElequentRepository
 
                     // Log Inventory
                     if (!$skipInventoryLog) {
-                        $this->logInventory($find, $item, $hpp, $subtotalHpp, $inventoryRepo);
+                        $this->logInventory($find, $item, $hppUnit, $subtotalHpp, $inventoryRepo);
                     }
                 }
             }
@@ -772,13 +779,22 @@ class InvoiceRepo extends ElequentRepository
                     // 2. COGS (Debit) vs Inventory In Transit (Credit)
                     $valTransit = DeliveryRepo::getValueSediaanDalamPerjalan($delInv->delivery_id, $settings['coa_transit']);
 
+                    $cost = $inventoryRepo->resolveOutgoingCost($item->product_id, $item->unit_id, $item->qty, $find->invoice_date);
                     $hppFromDelivery = $item->hpp_price;
+                    $subtotalHpp = 0;
                     if($hppFromDelivery == 0) {
                         // Fallback check inventory log
                         $log = Inventory::where(['transaction_code' => TransactionsCode::DELIVERY_ORDER, 'transaction_sub_id' => $item->id])->first();
-                        $hppFromDelivery = $log ? $log->price : 0;
+                        if ($log) {
+                            $hppFromDelivery = (float) $log->nominal;
+                            $subtotalHpp = (float) $log->total_out;
+                        }
+                        if ($subtotalHpp <= 0) {
+                            $subtotalHpp = $hppFromDelivery > 0 ? $hppFromDelivery * $cost['qty_smallest'] : $cost['subtotal_hpp'];
+                        }
+                    } else {
+                        $subtotalHpp = $hppFromDelivery * $item->qty;
                     }
-                    $subtotalHpp = $hppFromDelivery * $item->qty;
 
                     if ($subtotalHpp > 0) {
                         $journalEntries[] = [

@@ -185,11 +185,10 @@ class InvoiceController extends Controller
         if (!empty($invoice->orderproduct)) {
             foreach ($invoice->orderproduct as $item) {
                 $hpp = $this->getInvoiceProductHpp($invoice, $item, $inventoryRepo);
-                $hppTotal = $hpp * (float) ($item->qty ?? 0);
-                $item->hpp_price = $hpp;
-                $item->hpp_total = $hppTotal;
-                $item->subtotal_hpp = $hppTotal;
-                $totalHpp += $hppTotal;
+                $item->hpp_price = $hpp['price'];
+                $item->hpp_total = $hpp['total'];
+                $item->subtotal_hpp = $hpp['total'];
+                $totalHpp += $hpp['total'];
             }
         }
 
@@ -201,11 +200,10 @@ class InvoiceController extends Controller
 
                 foreach ($invoiceDelivery->delivery->deliveryproduct as $item) {
                     $hpp = $this->getDeliveryProductHpp($invoiceDelivery, $item, $inventoryRepo);
-                    $hppTotal = $hpp * (float) ($item->qty ?? 0);
-                    $item->hpp_price = $hpp;
-                    $item->hpp_total = $hppTotal;
-                    $item->subtotal_hpp = $hppTotal;
-                    $totalHpp += $hppTotal;
+                    $item->hpp_price = $hpp['price'];
+                    $item->hpp_total = $hpp['total'];
+                    $item->subtotal_hpp = $hpp['total'];
+                    $totalHpp += $hpp['total'];
                 }
             }
         }
@@ -214,11 +212,13 @@ class InvoiceController extends Controller
         $invoice->total_hpp = $totalHpp;
     }
 
-    private function getInvoiceProductHpp($invoice, $item, InventoryRepo $inventoryRepo): float
+    private function getInvoiceProductHpp($invoice, $item, InventoryRepo $inventoryRepo): array
     {
         if (empty($item->product_id) || empty($item->unit_id)) {
-            return 0;
+            return ['price' => 0, 'total' => 0];
         }
+
+        $cost = $inventoryRepo->resolveOutgoingCost($item->product_id, $item->unit_id, $item->qty, $invoice->invoice_date);
 
         $inventoryLog = Inventory::where([
             'transaction_code' => TransactionsCode::INVOICE_PENJUALAN,
@@ -227,18 +227,40 @@ class InvoiceController extends Controller
         ])->first();
 
         if ($inventoryLog) {
-            return (float) $inventoryLog->nominal;
+            $hpp = (float) $inventoryLog->nominal;
+            $total = (float) $inventoryLog->total_out;
+            return [
+                'price' => $hpp,
+                'total' => $total > 0 ? $total : $hpp * $cost['qty_smallest']
+            ];
         }
 
-        return (float) $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $invoice->invoice_date);
+        return [
+            'price' => $cost['hpp_smallest'],
+            'total' => $cost['subtotal_hpp']
+        ];
     }
 
-    private function getDeliveryProductHpp($invoiceDelivery, $item, InventoryRepo $inventoryRepo): float
+    private function getDeliveryProductHpp($invoiceDelivery, $item, InventoryRepo $inventoryRepo): array
     {
         $hpp = (float) ($item->hpp_price ?? 0);
         if ($hpp > 0) {
-            return $hpp;
+            return [
+                'price' => $hpp,
+                'total' => $hpp * (float) ($item->qty ?? 0)
+            ];
         }
+
+        if (empty($item->product_id) || empty($item->unit_id) || empty($invoiceDelivery->delivery)) {
+            return ['price' => 0, 'total' => 0];
+        }
+
+        $cost = $inventoryRepo->resolveOutgoingCost(
+            $item->product_id,
+            $item->unit_id,
+            $item->qty,
+            $invoiceDelivery->delivery->delivery_date
+        );
 
         $inventoryLog = Inventory::where([
             'transaction_code' => TransactionsCode::DELIVERY_ORDER,
@@ -247,18 +269,18 @@ class InvoiceController extends Controller
         ])->first();
 
         if ($inventoryLog) {
-            return (float) $inventoryLog->nominal;
+            $hpp = (float) $inventoryLog->nominal;
+            $total = (float) $inventoryLog->total_out;
+            return [
+                'price' => $hpp,
+                'total' => $total > 0 ? $total : $hpp * $cost['qty_smallest']
+            ];
         }
 
-        if (empty($item->product_id) || empty($item->unit_id) || empty($invoiceDelivery->delivery)) {
-            return 0;
-        }
-
-        return (float) $inventoryRepo->movingAverageByDate(
-            $item->product_id,
-            $item->unit_id,
-            $invoiceDelivery->delivery->delivery_date
-        );
+        return [
+            'price' => $cost['hpp_smallest'],
+            'total' => $cost['subtotal_hpp']
+        ];
     }
 
     public function storeSaldoAwal(Request $request)

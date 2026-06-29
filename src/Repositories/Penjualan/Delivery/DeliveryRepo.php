@@ -412,7 +412,10 @@ class DeliveryRepo extends ElequentRepository
 
             // Calculate HPP (Moving Average)
             // Note: This must handle the logic: Cost of goods LEAVING warehouse
-            $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $find->delivery_date);
+            $cost = $inventoryRepo->resolveOutgoingCost($item->product_id, $item->unit_id, $item->qty, $find->delivery_date);
+            $hpp = $cost['hpp_smallest'];
+            $hppUnit = $cost['hpp_unit'];
+            $subtotalHpp = $cost['subtotal_hpp'];
             if ($preferExistingInventoryHpp) {
                 $invLog = Inventory::where([
                     'transaction_code' => TransactionsCode::DELIVERY_ORDER,
@@ -420,9 +423,13 @@ class DeliveryRepo extends ElequentRepository
                 ])->first();
                 if ($invLog) {
                     $hpp = (float) $invLog->nominal;
+                    $hppUnit = $hpp * $cost['factor'];
+                    $subtotalHpp = (float) $invLog->total_out;
+                    if ($subtotalHpp <= 0) {
+                        $subtotalHpp = $hpp * $cost['qty_smallest'];
+                    }
                 }
             }
-            $subtotalHpp = $hpp * $item->qty;
             $totalHppAll += $subtotalHpp;
 
             if (!$skipInventoryLog) {
@@ -437,7 +444,7 @@ class DeliveryRepo extends ElequentRepository
                 $reqInventory->qty_out = $item->qty;
                 $reqInventory->warehouse_id = $find->warehouse_id;
                 $reqInventory->product_id = $item->product_id;
-                $reqInventory->price = $hpp; // Store the HPP used
+                $reqInventory->price = $hppUnit; // Store will normalize this to the smallest unit.
                 $reqInventory->note = $find->note;
                 $reqInventory->unit_id = $item->unit_id;
 

@@ -6,6 +6,7 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\PurchaseReceivedExport;
 use Icso\Accounting\Exports\PurchaseReceivedReportDetailExport;
 use Icso\Accounting\Http\Requests\CreatePurchaseReceivedRequest;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicingReceived;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
 use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -160,6 +161,15 @@ class ReceiveController extends Controller
                     $failedDelete++;
                     Log::error('[ReceiveController][deleteAll] ID penerimaan tidak valid', [
                         'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
+                    continue;
+                }
+
+                if (PurchaseInvoicingReceived::where('receive_id', $receiveId)->exists()) {
+                    $failedDelete++;
+                    Log::warning('[ReceiveController][deleteAll] Penerimaan sudah digunakan pada invoice pembelian', [
+                        'receive_id' => (int) $receiveId,
                         'user_id' => $userId,
                     ]);
                     continue;

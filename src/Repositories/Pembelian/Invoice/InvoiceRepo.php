@@ -475,6 +475,11 @@ class InvoiceRepo extends ElequentRepository
             OrderRepo::changeStatusPenerimaan($findInvoice->order_id);
         }
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PEMBELIAN, $id);
+        if (JurnalTransaksi::where('transaction_code', TransactionsCode::INVOICE_PEMBELIAN)
+            ->where('transaction_id', $id)
+            ->exists()) {
+            throw new Exception('Jurnal invoice pembelian gagal dihapus');
+        }
         PurchaseOrderProduct::where('invoice_id','=',$id)->delete();
         PurchaseInvoicingReceived::where(array('invoice_id' => $id))->delete();
         PurchaseInvoicingDp::where(array('invoice_id' => $id))->delete();

@@ -36,6 +36,7 @@ use Icso\Accounting\Utils\Utility;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -449,26 +450,55 @@ class InvoiceController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $invoiceId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $invoiceId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$invoiceId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[InvoiceController][deleteAll] ID invoice pembelian tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
+
+                if (PurchasePaymentInvoice::where('invoice_id', $invoiceId)->exists()) {
+                    $failedDelete = $failedDelete + 1;
+                    Log::warning('[InvoiceController][deleteAll] Invoice pembelian sudah memiliki pembayaran', [
+                        'invoice_id' => (int) $invoiceId,
+                        'user_id' => $userId,
+                    ]);
+                    continue;
+                }
+
                 try {
-                    $deleted = $this->invoiceRepo->destroy((int) $invoiceId, (int) $request->user_id);
+                    $deleted = $this->invoiceRepo->destroy((int) $invoiceId, $userId);
                     if ($deleted) {
                         $successDelete = $successDelete + 1;
                     } else {
                         $failedDelete = $failedDelete + 1;
+                        Log::error('[InvoiceController][deleteAll] Invoice pembelian gagal dihapus', [
+                            'invoice_id' => (int) $invoiceId,
+                            'user_id' => $userId,
+                        ]);
                     }
                 }
-                catch (\Exception $e) {
+                catch (\Throwable $e) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[InvoiceController][deleteAll] Error hapus invoice pembelian', [
+                        'invoice_id' => (int) $invoiceId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }

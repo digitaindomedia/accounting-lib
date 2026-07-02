@@ -11,7 +11,10 @@ use Icso\Accounting\Http\Requests\CreatePurchaseOrderRequest;
 use Icso\Accounting\Imports\PurchaseOrderImport;
 use Icso\Accounting\Models\ImportLog;
 use Icso\Accounting\Models\ImportLogDetail;
+use Icso\Accounting\Models\Pembelian\Bast\PurchaseBast;
+use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
 use Icso\Accounting\Repositories\Pembelian\Downpayment\DpRepo;
 use Icso\Accounting\Repositories\Pembelian\Order\OrderRepo;
@@ -252,6 +255,27 @@ class OrderController extends Controller
                     $failedDelete = $failedDelete + 1;
                     Log::error('[OrderController][deleteAll] Order pembelian gagal dihapus karena sudah ada uang muka', [
                         'order_id' => (int) $orderId,
+                        'user_id' => $userId,
+                    ]);
+                    continue;
+                }
+
+                $dependencies = [];
+                if (PurchaseReceived::where('order_id', $orderId)->exists()) {
+                    $dependencies[] = 'penerimaan';
+                }
+                if (PurchaseBast::where('order_id', $orderId)->exists()) {
+                    $dependencies[] = 'BAST';
+                }
+                if (PurchaseInvoicing::where('order_id', $orderId)->exists()) {
+                    $dependencies[] = 'invoice';
+                }
+
+                if (!empty($dependencies)) {
+                    $failedDelete = $failedDelete + 1;
+                    Log::warning('[OrderController][deleteAll] Order pembelian masih digunakan', [
+                        'order_id' => (int) $orderId,
+                        'dependencies' => $dependencies,
                         'user_id' => $userId,
                     ]);
                     continue;

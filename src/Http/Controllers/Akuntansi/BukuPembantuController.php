@@ -6,6 +6,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Exports\BukuPembantuExport;
 use Icso\Accounting\Exports\SampleBukuPembantuExport;
 use Icso\Accounting\Imports\BukuPembantuImport;
+use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Akuntansi\BukuPembantuRepo;
 use Icso\Accounting\Repositories\Akuntansi\PelunasanBukuPembantuRepo;
@@ -64,6 +65,11 @@ class BukuPembantuController extends Controller
                 $paid = $this->pelunasanBukuPembantuRepo->getAllPaymentByBukuPembantuId($item->id);
                 $left_bill = $item->nominal - $paid;
                 $item->left_bill = $left_bill;
+                if ($item->status_ref != JurnalStatusEnum::BATAL) {
+                    $item->status_ref = $paid >= $item->nominal
+                        ? JurnalStatusEnum::LUNAS
+                        : JurnalStatusEnum::BELUM_LUNAS;
+                }
             }
             if ($onlyUnpaid == 'yes') {
                 $data = $data->filter(function ($item) {

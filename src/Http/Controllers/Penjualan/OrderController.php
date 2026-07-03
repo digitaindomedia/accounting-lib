@@ -11,8 +11,11 @@ use Icso\Accounting\Http\Requests\CreateSalesOrderRequest;
 use Icso\Accounting\Imports\SalesOrderImport;
 use Icso\Accounting\Models\ImportLog;
 use Icso\Accounting\Models\ImportLogDetail;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
+use Icso\Accounting\Models\Penjualan\Spk\SalesSpk;
+use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
 use Icso\Accounting\Repositories\Penjualan\Downpayment\DpRepo;
 use Icso\Accounting\Repositories\Penjualan\Order\SalesOrderRepo;
@@ -22,6 +25,7 @@ use Icso\Accounting\Utils\TransactionsCode;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class OrderController extends Controller
@@ -149,10 +153,10 @@ class OrderController extends Controller
     }
 
     public function delete(Request $request){
-        $checkDp = $this->salesDpRepo->countByOrderId($request->id);
-        if($checkDp > 0){
+        $dependencies = $this->getDeleteDependencies((int) $request->id);
+        if (!empty($dependencies)) {
             $this->data['status'] = false;
-            $this->data['message'] = "Data tidak bisa dihapus karena sudah ada uang muka";
+            $this->data['message'] = 'Data tidak bisa dihapus karena sudah digunakan pada ' . implode(', ', $dependencies);
             return response()->json($this->data);
         }
         $res = $this->salesOrderRepo->destroy($request->id, (int) $request->user_id);
@@ -168,26 +172,47 @@ class OrderController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $orderId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $orderId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$orderId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[SalesOrderController][deleteAll] ID order penjualan tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
-                $checkDp = $this->salesDpRepo->countByOrderId($orderId);
-                if($checkDp > 0){
+
+                $dependencies = $this->getDeleteDependencies((int) $orderId);
+                if (!empty($dependencies)) {
                     $failedDelete = $failedDelete + 1;
+                    Log::warning('[SalesOrderController][deleteAll] Order penjualan masih digunakan', [
+                        'order_id' => (int) $orderId,
+                        'dependencies' => $dependencies,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
-                $res = $this->salesOrderRepo->destroy((int) $orderId, (int) $request->user_id);
+
+                $res = $this->salesOrderRepo->destroy((int) $orderId, $userId);
                 if($res){
                     $successDelete = $successDelete + 1;
                 } else {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[SalesOrderController][deleteAll] Order penjualan gagal dihapus', [
+                        'order_id' => (int) $orderId,
+                        'user_id' => $userId,
+                    ]);
                 }
             }
         }
@@ -202,6 +227,26 @@ class OrderController extends Controller
             $this->data['data'] = array();
         }
         return response()->json($this->data);
+    }
+
+    private function getDeleteDependencies(int $orderId): array
+    {
+        $dependencies = [];
+
+        if (SalesDownpayment::where('order_id', $orderId)->exists()) {
+            $dependencies[] = 'uang muka';
+        }
+        if (SalesDelivery::where('order_id', $orderId)->exists()) {
+            $dependencies[] = 'pengiriman';
+        }
+        if (SalesSpk::where('order_id', $orderId)->exists()) {
+            $dependencies[] = 'SPK';
+        }
+        if (SalesInvoicing::where('order_id', $orderId)->exists()) {
+            $dependencies[] = 'invoice';
+        }
+
+        return $dependencies;
     }
 
     public function completion()

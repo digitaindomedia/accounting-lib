@@ -4,6 +4,7 @@ namespace Icso\Accounting\Repositories\Penjualan\Order;
 
 
 use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicing;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderMeta;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
@@ -11,7 +12,9 @@ use Icso\Accounting\Models\Penjualan\Order\SalesQuotation;
 use Icso\Accounting\Models\Penjualan\Order\SalesQuotationProduct;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryProduct;
+use Icso\Accounting\Models\Penjualan\Spk\SalesSpk;
 use Icso\Accounting\Models\Penjualan\Spk\SalesSpkProduct;
+use Icso\Accounting\Models\Penjualan\UangMuka\SalesDownpayment;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Services\ActivityLogService;
 use Icso\Accounting\Services\FileUploadService;
@@ -378,6 +381,17 @@ class SalesOrderRepo extends ElequentRepository
     {
         $order = $this->findOne($id, [], ['orderproduct','salesquotation','ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if (!$order) {
+            return false;
+        }
+
+        if (SalesDownpayment::where('order_id', $id)->exists()
+            || SalesDelivery::where('order_id', $id)->exists()
+            || SalesSpk::where('order_id', $id)->exists()
+            || SalesInvoicing::where('order_id', $id)->exists()) {
+            Log::warning('[SalesOrderRepo][destroy] Order penjualan masih memiliki transaksi turunan', [
+                'order_id' => $id,
+                'user_id' => $userId,
+            ]);
             return false;
         }
 

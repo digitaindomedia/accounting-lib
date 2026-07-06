@@ -75,7 +75,7 @@ class PurchaseInvoiceImport implements ToCollection
                 $price = $row[10];
                 $diskonItem = $row[11];
                 $diskonItemType = $row[12];
-                $persenPpn = $row[13];
+                $persenPpn = $this->normalizeTaxPercentage($row[13]);
             } else {
                 $kodeGudang = $row[2];
                 $kodeSupplier = $row[3];
@@ -88,7 +88,7 @@ class PurchaseInvoiceImport implements ToCollection
                 $price = $row[10];
                 $diskonItem = $row[11];
                 $diskonItemType = $row[12];
-                $persenPpn = $row[13];
+                $persenPpn = $this->normalizeTaxPercentage($row[13]);
                 $warehouseId = WarehouseRepo::getWarehouseId($kodeGudang);
             }
             $note = !empty($note) ? $note : "";
@@ -218,6 +218,7 @@ class PurchaseInvoiceImport implements ToCollection
 
     public function insertInvoiceProduct($itemCode, $qty,$price,$diskonItem,$diskonItemType, $taxType, $taxPercentage, $invoiceId, string $invoiceDate, string $note, string $warehouseId)
     {
+        $taxPercentage = $this->normalizeTaxPercentage($taxPercentage);
         $product1 = new stdClass();
         if($this->orderType == ProductType::ITEM){
             $findBarang = Product::where('item_code', $itemCode)->first();
@@ -250,6 +251,11 @@ class PurchaseInvoiceImport implements ToCollection
         $product1->request_product_id = 0;
         $res = $this->invoiceRepo->saveOrderProduct($product1,$invoiceId,$taxType,$invoiceDate,$note,$this->userId,$warehouseId, $this->orderType, new InventoryRepo(new Inventory()));
 
+    }
+
+    private function normalizeTaxPercentage($taxPercentage)
+    {
+        return $taxPercentage !== null && $taxPercentage !== '' ? $taxPercentage : 0;
     }
 
     private function hasValidationErrors($index, $row)

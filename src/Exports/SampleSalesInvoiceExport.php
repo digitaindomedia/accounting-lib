@@ -22,8 +22,8 @@ class SampleSalesInvoiceExport implements FromArray, WithHeadings
         // TODO: Implement array() method.
         if($this->orderType == ProductType::ITEM){
             return [
-                ['PO001', '2024-07-01', "A00003", "G001","keterangan order penjualan", 0, "fix", "exclude", "B001", 100, 2000000, 0, "fix",11],
-                ['PO001', '2024-07-01', "A00003", "G001","keterangan order penjualan", 0, "fix", "exclude", "B002", 200, 2000000, 0, "fix",0],
+                ['PO001', '2024-07-01', "A00003", "G001","keterangan order penjualan", 0, "fix", "exclude", "B001", 100, "PCS", 2000000, 0, "fix",11],
+                ['PO001', '2024-07-01', "A00003", "G001","keterangan order penjualan", 0, "fix", "exclude", "B002", 200, "PCS", 2000000, 0, "fix",0],
             ];
         } else {
             return [
@@ -45,10 +45,11 @@ class SampleSalesInvoiceExport implements FromArray, WithHeadings
                 'Kode Gudang',
                 'Keterangan',
                 'Diskon',
-                'Tipe Diskon Total(persen,fix)',
+                'Tipe Diskon Total(percent,fix)',
                 'Tipe PPN(include/exclude)',
                 'Kode Barang',
                 'Kuantiti',
+                'Kode Satuan',
                 'Harga Satuan',
                 'Diskon Item',
                 'Tipe Diskon Item(persen,fix)',

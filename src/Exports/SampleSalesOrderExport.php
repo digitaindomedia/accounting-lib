@@ -21,8 +21,8 @@ class SampleSalesOrderExport implements FromArray, WithHeadings
         // TODO: Implement array() method.
         if($this->orderType == ProductType::ITEM){
             return [
-                ['PO001', '2024-07-01', "A00003","keterangan order penjualan", 0, "fix", "exclude", "B001", 100, 2000000, 0, "fix",11],
-                ['PO001', '2024-07-01', "A00003","keterangan order penjualan", 0, "fix", "exclude", "B002", 200, 2000000, 0, "fix",0],
+                ['PO001', '2024-07-01', "A00003","keterangan order penjualan", 0, "fix", "exclude", "B001", 100, "PCS", 2000000, 0, "fix",11],
+                ['PO001', '2024-07-01', "A00003","keterangan order penjualan", 0, "fix", "exclude", "B002", 200, "PCS", 2000000, 0, "fix",0],
             ];
         } else {
             return [
@@ -43,13 +43,14 @@ class SampleSalesOrderExport implements FromArray, WithHeadings
                 'Kode Customer',
                 'Keterangan',
                 'Diskon',
-                'Tipe Diskon Total(persen,fix)',
+                'Tipe Diskon Total(percent,fix)',
                 'Tipe PPN(include/exclude)',
                 'Kode Barang',
                 'Kuantiti',
+                'Kode Satuan',
                 'Harga Satuan',
                 'Diskon Item',
-                'Tipe Diskon Item(persen,fix)',
+                'Tipe Diskon Item(percent,fix)',
                 'Persen PPN(lihat dimaster data pajak)'
             ];
         } else{
@@ -59,13 +60,13 @@ class SampleSalesOrderExport implements FromArray, WithHeadings
                 'Kode Customer',
                 'Keterangan',
                 'Diskon',
-                'Tipe Diskon Total(persen,fix)',
+                'Tipe Diskon Total(percent,fix)',
                 'Tipe PPN(include/exclude)',
                 'Kode Jasa',
                 'Kuantiti',
                 'Harga Satuan',
                 'Diskon Item',
-                'Tipe Diskon Item(persen,fix)',
+                'Tipe Diskon Item(percent,fix)',
                 'Persen PPN(lihat dimaster data pajak)'
             ];
         }

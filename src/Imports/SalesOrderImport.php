@@ -5,6 +5,7 @@ namespace Icso\Accounting\Imports;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\Master\Unit;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrder;
 use Icso\Accounting\Repositories\Master\TaxRepo;
@@ -60,10 +61,11 @@ class SalesOrderImport implements ToCollection
             $tipePpn = $row[6];
             $itemCode = $row[7];
             $qty = $row[8];
-            $price = $row[9];
-            $diskonItem = $row[10];
-            $diskonItemType = $row[11];
-            $persenPpn = $row[12];
+            $unitCode = $row[9];
+            $price = $row[10];
+            $diskonItem = $row[11];
+            $diskonItemType = $row[12];
+            $persenPpn = $row[13];
             if ($this->hasValidationErrors($index, $row)) {
                 continue;
             }
@@ -76,7 +78,7 @@ class SalesOrderImport implements ToCollection
             }
             $vendorId = VendorRepo::getVendorId($kodeCustomer);
             if ($oldNo == '0') {
-                $idOrder = $this->insertSalesOrderEntry($noOrder,$tanggalOrder,$note,$vendorId,$diskon,$diskonType,$tipePpn,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$persenPpn);
+                $idOrder = $this->insertSalesOrderEntry($noOrder,$tanggalOrder,$note,$vendorId,$diskon,$diskonType,$tipePpn,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$persenPpn);
                 if($idOrder){
                     $this->successCount++;
                 }
@@ -86,7 +88,7 @@ class SalesOrderImport implements ToCollection
                 $statIns = true;
 
             } elseif ($oldNo != $noOrder) {
-                $idOrder = $this->insertSalesOrderEntry($noOrder,$tanggalOrder,$note,$vendorId,$diskon,$diskonType,$tipePpn,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$persenPpn);
+                $idOrder = $this->insertSalesOrderEntry($noOrder,$tanggalOrder,$note,$vendorId,$diskon,$diskonType,$tipePpn,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$persenPpn);
                 if($idOrder){
                     $this->successCount++;
                 }
@@ -97,7 +99,7 @@ class SalesOrderImport implements ToCollection
 
 
             } else {
-                $this->insertSalesOrderProduct($idOrder, $itemCode, $qty,$price,$diskonItem,$diskonItemType, $tipePpn, $persenPpn);
+                $this->insertSalesOrderProduct($idOrder, $itemCode, $qty,$unitCode,$price,$diskonItem,$diskonItemType, $tipePpn, $persenPpn);
             }
         }
         if(!empty($arrListIdOrder)){
@@ -137,25 +139,25 @@ class SalesOrderImport implements ToCollection
         }
     }
 
-    public function insertSalesOrderEntry($orderNo,$orderDate,$note,$vendorId,$discount,$discountType,$taxType,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxPercentage)
+    public function insertSalesOrderEntry($orderNo,$orderDate,$note,$vendorId,$discount,$discountType,$taxType,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$taxPercentage)
     {
         $arrData = $this->orderRepo->preparedDataArray($orderNo,$orderDate,$this->userId,$note,'',$vendorId,0,$discount, 0,$discountType,$taxType,0,'','','');
         $res = $this->orderRepo->handleNewData($arrData, $this->orderType, $this->userId);
         if($res){
-            $this->insertSalesOrderProduct($res->id,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage);
+            $this->insertSalesOrderProduct($res->id,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage);
             $this->importedIds[] = $res->id;
             return $res->id;
         }
         return 0;
     }
 
-    private function insertSalesOrderProduct($orderId, $itemCode, $qty,$price,$diskonItem,$diskonItemType, $taxType, $taxPercentage)
+    private function insertSalesOrderProduct($orderId, $itemCode, $qty,$unitCode,$price,$diskonItem,$diskonItemType, $taxType, $taxPercentage)
     {
         $product1 = new stdClass();
         $findBarang = Product::where('item_code', $itemCode)->first();
         if(!empty($findBarang)){
             $product1->product_id = $findBarang->id;
-            $product1->unit_id = $findBarang->unit_id;
+            $product1->unit_id = $this->resolveProductUnitId($findBarang, $unitCode);
         }
         $taxId = 0;
         if(!empty($taxPercentage)){
@@ -176,6 +178,21 @@ class SalesOrderImport implements ToCollection
         $product1->request_product_id = 0;
         $products = [$product1];
         $this->orderRepo->handleOrderProducts($products, $orderId, $taxType);
+    }
+
+    private function resolveProductUnitId(Product $product, $unitCode)
+    {
+        if ($this->isEmptyCell($unitCode)) {
+            return $product->unit_id;
+        }
+
+        $unit = Unit::where('unit_code', trim((string) $unitCode))->first();
+        return !empty($unit) ? $unit->id : 0;
+    }
+
+    private function isEmptyCell($value)
+    {
+        return $value === null || trim((string) $value) === '';
     }
 
     private function hasValidationErrors($index, $row)
@@ -204,7 +221,8 @@ class SalesOrderImport implements ToCollection
             $this->errors[] = "Baris " . ($index + 1) . ": Tipe PPN tidak valid.";
             return true;
         }
-        if (empty($row[7]) || !Product::where('item_code', $row[7])->exists()) {
+        $product = Product::where('item_code', $row[7])->first();
+        if (empty($row[7]) || empty($product)) {
             $this->errors[] = "Baris " . ($index + 1) . ": Kode barang tidak ditemukan.";
             return true;
         }
@@ -212,15 +230,23 @@ class SalesOrderImport implements ToCollection
             $this->errors[] = "Baris " . ($index + 1) . ": Kuantiti Kosong.";
             return true;
         }
-        if (empty($row[9])) {
+        if ($this->isEmptyCell($row[9])) {
+            $this->errors[] = "Baris " . ($index + 1) . ": Kode satuan Kosong.";
+            return true;
+        }
+        if ($this->resolveProductUnitId($product, $row[9]) === 0) {
+            $this->errors[] = "Baris " . ($index + 1) . ": Kode satuan tidak ditemukan.";
+            return true;
+        }
+        if (empty($row[10])) {
             $this->errors[] = "Baris " . ($index + 1) . ": Harga satuan Kosong.";
             return true;
         }
-        if (!empty($row[10]) && !in_array($row[10], ['percent', 'fix'])) {
+        if (!empty($row[12]) && !in_array($row[12], ['percent', 'fix'])) {
             $this->errors[] = "Baris " . ($index + 1) . ": Tipe diskon item tidak valid.";
             return true;
         }
-        if (!empty($row[12]) && !Tax::where('tax_percentage', $row[12])->exists()) {
+        if (!empty($row[13]) && !Tax::where('tax_percentage', $row[13])->exists()) {
             $this->errors[] = "Baris " . ($index + 1) . ": Pajak tidak ditemukan.";
             return true;
         }

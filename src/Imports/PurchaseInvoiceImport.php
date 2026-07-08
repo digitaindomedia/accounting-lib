@@ -6,6 +6,7 @@ use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\Master\Unit;
 use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\Master\Warehouse;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
@@ -63,6 +64,7 @@ class PurchaseInvoiceImport implements ToCollection
             $tanggalInvoice = $row[1];
             $kodeAkunBiaya = 0;
             $warehouseId = 0;
+            $unitCode = null;
             if($this->orderType == ProductType::SERVICE){
                 $kodeAkunBiaya = $row[2];
                 $kodeSupplier = $row[3];
@@ -85,10 +87,11 @@ class PurchaseInvoiceImport implements ToCollection
                 $tipePpn = $row[7];
                 $itemCode = $row[8];
                 $qty = $row[9];
-                $price = $row[10];
-                $diskonItem = $row[11];
-                $diskonItemType = $row[12];
-                $persenPpn = $this->normalizeTaxPercentage($row[13]);
+                $unitCode = $row[10];
+                $price = $row[11];
+                $diskonItem = $row[12];
+                $diskonItemType = $row[13];
+                $persenPpn = $this->normalizeTaxPercentage($row[14]);
                 $warehouseId = WarehouseRepo::getWarehouseId($kodeGudang);
             }
             $note = !empty($note) ? $note : "";
@@ -115,7 +118,7 @@ class PurchaseInvoiceImport implements ToCollection
             }
 
             if ($oldNo == '0') {
-                $idInvoice = $this->insertInvoiceEntry($noInvoice,$tanggalInvoice,$note,$warehouseId,$vendorId,$diskon,$diskonType,$tipePpn,$this->userId,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$persenPpn, $kodeAkunBiaya);
+                $idInvoice = $this->insertInvoiceEntry($noInvoice,$tanggalInvoice,$note,$warehouseId,$vendorId,$diskon,$diskonType,$tipePpn,$this->userId,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$persenPpn, $kodeAkunBiaya);
                 if($idInvoice){
                     $this->successCount++;
                 }
@@ -125,7 +128,7 @@ class PurchaseInvoiceImport implements ToCollection
                 $statIns = true;
 
             } elseif ($oldNo != $noInvoice) {
-                $idInvoice = $this->insertInvoiceEntry($noInvoice,$tanggalInvoice,$note,$warehouseId,$vendorId,$diskon,$diskonType,$tipePpn,$this->userId,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$persenPpn, $kodeAkunBiaya);
+                $idInvoice = $this->insertInvoiceEntry($noInvoice,$tanggalInvoice,$note,$warehouseId,$vendorId,$diskon,$diskonType,$tipePpn,$this->userId,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$persenPpn, $kodeAkunBiaya);
                 if($idInvoice){
                     $this->successCount++;
                 }
@@ -136,7 +139,7 @@ class PurchaseInvoiceImport implements ToCollection
 
 
             } else {
-                $this->insertInvoiceProduct($itemCode, $qty,$price,$diskonItem,$diskonItemType, $tipePpn, $persenPpn, $idInvoice, $tanggalInvoice, $note, $warehouseId);
+                $this->insertInvoiceProduct($itemCode, $qty,$unitCode,$price,$diskonItem,$diskonItemType, $tipePpn, $persenPpn, $idInvoice, $tanggalInvoice, $note, $warehouseId);
             }
         }
         if(!empty($arrListIdInvoice)){
@@ -181,7 +184,7 @@ class PurchaseInvoiceImport implements ToCollection
 
     }
 
-    public function insertInvoiceEntry($invoiceNo, $invoiceDate, $note, $warehouseId, $vendorId, $discount,$discountType,$taxType,$userId,$itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxPercentage, $kodeAkunBiaya=0)
+    public function insertInvoiceEntry($invoiceNo, $invoiceDate, $note, $warehouseId, $vendorId, $discount,$discountType,$taxType,$userId,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$taxPercentage, $kodeAkunBiaya=0)
     {
         $akunBiayaId = 0;
         if(!empty($kodeAkunBiaya)){
@@ -210,13 +213,13 @@ class PurchaseInvoiceImport implements ToCollection
         $arrData = $this->invoiceRepo->gatherInputData($request);
         $res = $this->invoiceRepo->saveInvoice($arrData,'',$this->userId);
         if($res){
-            $this->insertInvoiceProduct($itemCode,$qty,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage,$res->id, $invoiceDate, $note, $warehouseId);
+            $this->insertInvoiceProduct($itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$taxType,$taxPercentage,$res->id, $invoiceDate, $note, $warehouseId);
             $this->importedIds[] = $res->id;
         }
         return $res ? $res->id : '';
     }
 
-    public function insertInvoiceProduct($itemCode, $qty,$price,$diskonItem,$diskonItemType, $taxType, $taxPercentage, $invoiceId, string $invoiceDate, string $note, string $warehouseId)
+    public function insertInvoiceProduct($itemCode, $qty,$unitCode,$price,$diskonItem,$diskonItemType, $taxType, $taxPercentage, $invoiceId, string $invoiceDate, string $note, string $warehouseId)
     {
         $taxPercentage = $this->normalizeTaxPercentage($taxPercentage);
         $product1 = new stdClass();
@@ -225,7 +228,7 @@ class PurchaseInvoiceImport implements ToCollection
             if(!empty($findBarang)){
                 $product1->product_id = $findBarang->id;
                 $product1->service_name = "";
-                $product1->unit_id = $findBarang->unit_id;
+                $product1->unit_id = $this->resolveProductUnitId($findBarang, $unitCode);
             }
         } else {
             $product1->product_id = 0;
@@ -256,6 +259,21 @@ class PurchaseInvoiceImport implements ToCollection
     private function normalizeTaxPercentage($taxPercentage)
     {
         return $taxPercentage !== null && $taxPercentage !== '' ? $taxPercentage : 0;
+    }
+
+    private function resolveProductUnitId(Product $product, $unitCode)
+    {
+        if ($this->isEmptyCell($unitCode)) {
+            return $product->unit_id;
+        }
+
+        $unit = Unit::where('unit_code', trim((string) $unitCode))->first();
+        return !empty($unit) ? $unit->id : 0;
+    }
+
+    private function isEmptyCell($value)
+    {
+        return $value === null || trim((string) $value) === '';
     }
 
     private function hasValidationErrors($index, $row)
@@ -296,15 +314,24 @@ class PurchaseInvoiceImport implements ToCollection
             $this->errors[] = "Baris " . ($index + 1) . ": Kuantiti Kosong.";
             return true;
         }
-        if (empty($row[10])) {
+        $product = Product::where('item_code', $row[8])->first();
+        if ($this->isEmptyCell($row[10])) {
+            $this->errors[] = "Baris " . ($index + 1) . ": Kode satuan Kosong.";
+            return true;
+        }
+        if ($this->resolveProductUnitId($product, $row[10]) === 0) {
+            $this->errors[] = "Baris " . ($index + 1) . ": Kode satuan tidak ditemukan.";
+            return true;
+        }
+        if (empty($row[11])) {
             $this->errors[] = "Baris " . ($index + 1) . ": Harga satuan Kosong.";
             return true;
         }
-        if (!empty($row[12]) && !in_array($row[12], ['percent', 'fix'])) {
+        if (!empty($row[13]) && !in_array($row[13], ['percent', 'fix'])) {
             $this->errors[] = "Baris " . ($index + 1) . ": Tipe diskon item tidak valid.";
             return true;
         }
-        if (!empty($row[13]) && !Tax::where('tax_percentage', $row[13])->exists()) {
+        if (!empty($row[14]) && !Tax::where('tax_percentage', $row[14])->exists()) {
             $this->errors[] = "Baris " . ($index + 1) . ": Pajak tidak ditemukan.";
             return true;
         }

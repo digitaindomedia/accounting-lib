@@ -424,16 +424,18 @@ class InvoiceController extends Controller
                 }
             }
             if($res->invoice_type == ProductType::SERVICE){
-                $invProduct = SalesOrderProduct::where(array('order_id' => $res->order_id))->with([
-                    'unit',
-                    'product',
-                    'product.productconvertion',
-                    'product.productconvertion.unit',
-                    'product.productconvertion.base_unit',
-                    'tax',
-                    'tax.taxgroup'
-                ])->get();
-                $res->orderproductservice = $invProduct;
+                if(!empty($res->order_id)){
+                    $invProduct = SalesOrderProduct::where(array('order_id' => $res->order_id))->with([
+                        'unit',
+                        'product',
+                        'product.productconvertion',
+                        'product.productconvertion.unit',
+                        'product.productconvertion.base_unit',
+                        'tax',
+                        'tax.taxgroup'
+                    ])->get();
+                    $res->orderproductservice = $invProduct;
+                }
             }
             $this->attachHppToInvoice($res);
             $res->payment_list = $this->invoiceRepo->getPaymentList($id);

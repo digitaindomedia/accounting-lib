@@ -39,7 +39,8 @@ class ProductExport implements FromCollection, WithHeadings, ShouldAutoSize
                     'item_name' => $item->item_name,
                     'item_code' => $item->item_code,
                     'categories' => ProductRepo::getAllCategoriesById($item->id),
-                    'satuan' => !empty(ProductRepo::getSatuanById($item->id)) ? ProductRepo::getSatuanById($item->id)->unit_name: "",
+                    'satuan' => !empty($item->unit) ? $item->unit->unit_name: "",
+                    'konversi_satuan' => $this->formatConversions($item),
                     'selling_price' => $item->selling_price,
                     'description' => $item->descriptions,
                     'has_tax' => $item->has_tax == 'yes' ? "Ya" : "Tidak",
@@ -64,7 +65,7 @@ class ProductExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'item_name' => $item->item_name,
                 'item_code' => $item->item_code,
                 'categories' => ProductRepo::getAllCategoriesById($item->id),
-                'satuan' => !empty(ProductRepo::getSatuanById($item->id)) ? ProductRepo::getSatuanById($item->id)->unit_name: "",
+                'satuan' => !empty($item->unit) ? $item->unit->unit_name: "",
                 'selling_price' => $item->selling_price,
                 'description' => $item->descriptions,
                 'has_tax' => $item->has_tax == 'yes' ? "Ya" : "Tidak",
@@ -83,6 +84,7 @@ class ProductExport implements FromCollection, WithHeadings, ShouldAutoSize
                 'Kode',
                 'Nama Kategori',
                 'Nama Satuan',
+                'Konversi Satuan',
                 'Harga',
                 'Deskripsi',
                 'Kena Pajak',
@@ -100,5 +102,41 @@ class ProductExport implements FromCollection, WithHeadings, ShouldAutoSize
             'Akun Biaya',
             'Akun Pendapatan',
         ];
+    }
+
+    private function formatConversions($item): string
+    {
+        if (empty($item->productconvertion) || count($item->productconvertion) === 0) {
+            return "";
+        }
+
+        return collect($item->productconvertion)->map(function ($conversion) {
+            $unit = $this->getUnitCode($conversion->unit ?? null);
+            $baseUnit = $this->getUnitCode($conversion->base_unit ?? null);
+
+            if (empty($unit) || empty($baseUnit) || empty($conversion->nilai)) {
+                return null;
+            }
+
+            return $unit . '=' . $this->formatConversionValue($conversion->nilai) . ' ' . $baseUnit;
+        })->filter()->implode(';');
+    }
+
+    private function getUnitCode($unit): string
+    {
+        if (empty($unit)) {
+            return "";
+        }
+
+        return $unit->unit_code ?: $unit->unit_name;
+    }
+
+    private function formatConversionValue($value): string
+    {
+        if (!is_numeric($value)) {
+            return (string) $value;
+        }
+
+        return rtrim(rtrim(number_format((float) $value, 8, '.', ''), '0'), '.');
     }
 }

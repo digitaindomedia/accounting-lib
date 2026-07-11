@@ -43,7 +43,7 @@ class ProductRepo extends ElequentRepository
             $query->whereHas('categories', function ($q) use ($where) {
                 $q->where('category_id', $where['category_id']);
             });
-        })->with(['unit', 'categories', 'productconvertion'])
+        })->with(['unit', 'categories', 'productconvertion.unit', 'productconvertion.base_unit'])
             ->orderBy('item_name', 'asc')
             ->offset($page)
             ->limit($perpage)
@@ -286,7 +286,7 @@ class ProductRepo extends ElequentRepository
     public static function getSatuanById($productId)
     {
         $product = Product::find($productId);
-        $satuan = $product->satuan;
+        $satuan = $product->unit;
         return $satuan;
     }
 }

@@ -315,6 +315,7 @@ Route::group([
         Route::get('find-by-id', [OrderController::class, 'show']);
         Route::get('find-received-by-id', [OrderController::class, 'showNotReceived']);
         Route::post('save-data', [OrderController::class, 'store']);
+        Route::post('close', [OrderController::class, 'close']);
         Route::delete('delete', [OrderController::class, 'delete']);
         Route::post('delete-all', [OrderController::class, 'deleteAll']);
         Route::get('completion', [OrderController::class, 'completion']);

@@ -353,6 +353,45 @@ class OrderRepo extends ElequentRepository
         }
     }
 
+    public function closeOrder(int $id, int $userId): bool
+    {
+        $find = $this->findOne($id,[],['orderproduct','coa', 'ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit','purchaserequest']);
+        if (!$find || $find->order_status === StatusEnum::CLOSE) {
+            return false;
+        }
+
+        $oldData = $find->toArray();
+
+        DB::beginTransaction();
+        try {
+            $this->update([
+                'order_status' => StatusEnum::CLOSE,
+                'updated_by' => $userId,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ], $id);
+
+            DB::commit();
+
+            $this->activityLog->log([
+                'user_id' => $userId,
+                'action' => 'Tutup order pembelian dengan nomor ' . ($oldData['order_no'] ?? ''),
+                'model_type' => PurchaseOrder::class,
+                'model_id' => $id,
+                'old_values' => $oldData,
+                'new_values' => $this->findOne($id, [], ['orderproduct','coa', 'ordermeta', 'vendor', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit','purchaserequest'])?->toArray(),
+                'request_payload' => RequestAuditHelper::sanitize(request()),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('[OrderRepo][closeOrder] ' . $e->getMessage());
+            DB::rollBack();
+            return false;
+        }
+    }
+
     public function findInUseInPenerimaanById($idOrder){
         $find = $this->findOne($idOrder,array(),['orderproduct','orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         $arrDataProduk = array();
@@ -394,6 +433,9 @@ class OrderRepo extends ElequentRepository
         $orderRepo = new self(new PurchaseOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($idOrder);
         if (empty($find)) {
+            return;
+        }
+        if ($find->order_status === StatusEnum::CLOSE) {
             return;
         }
 
@@ -490,7 +532,7 @@ class OrderRepo extends ElequentRepository
         $orderRepo = new self(new PurchaseOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($id);
         if(!empty($find)){
-            if($find->order_status == StatusEnum::PENERIMAAN)
+            if(in_array($find->order_status, [StatusEnum::PENERIMAAN, StatusEnum::CLOSE]))
             {
                 self::changeStatusOrderById($id);
             }

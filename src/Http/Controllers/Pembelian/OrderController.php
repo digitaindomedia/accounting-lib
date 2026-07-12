@@ -115,6 +115,7 @@ class OrderController extends Controller
                 case TransactionsCode::INVOICE_PEMBELIAN:
                     $where[] = ['method' => 'where', 'value' => [['order_status', '=', StatusEnum::PARSIAL_PENERIMAAN]]];
                     $where[] = ['method' => 'orWhere', 'value' => [['order_status', '=', StatusEnum::PENERIMAAN]]];
+                    $where[] = ['method' => 'orWhere', 'value' => [['order_status', '=', StatusEnum::CLOSE]]];
                     break;
             }
         }
@@ -227,6 +228,19 @@ class OrderController extends Controller
         return response()->json($this->data);
     }
 
+    public function close(Request $request)
+    {
+        $res = $this->purchaseOrderRepo->closeOrder((int) $request->id, (int) $request->user_id);
+        if($res){
+            $this->data['status'] = true;
+            $this->data['message'] = 'Order pembelian berhasil ditutup';
+        } else {
+            $this->data['status'] = false;
+            $this->data['message'] = "Order pembelian gagal ditutup";
+        }
+        return response()->json($this->data);
+    }
+
     public function deleteAll(Request $request)
     {
         $reqData = $request->input('ids', $request->input('params.ids', []));
@@ -315,7 +329,7 @@ class OrderController extends Controller
     public function completion()
     {
         $query = PurchaseOrder::where('order_type', ProductType::ITEM);
-        $completed = (clone $query)->whereIn('order_status',[StatusEnum::SELESAI, StatusEnum::PENERIMAAN, StatusEnum::INVOICE])->count();
+        $completed = (clone $query)->whereIn('order_status',[StatusEnum::SELESAI, StatusEnum::PENERIMAAN, StatusEnum::INVOICE, StatusEnum::CLOSE])->count();
         $outstanding = (clone $query)->whereIn('order_status',[StatusEnum::OPEN, StatusEnum::PARSIAL_PENERIMAAN])->count();
         $all = $query->count();
         $arrData = [

@@ -71,7 +71,7 @@ class InvoiceRepo extends ElequentRepository
                     }
                 }
             });
-        })->with(['vendor', 'invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])
+        })->with(['vendor', 'invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.product.productconvertion','invoicereceived.receive.receiveproduct.product.productconvertion.unit','invoicereceived.receive.receiveproduct.product.productconvertion.base_unit','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','orderproduct', 'orderproduct.product','orderproduct.product.productconvertion','orderproduct.product.productconvertion.unit','orderproduct.product.productconvertion.base_unit','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])
             ->orderBy('invoice_date','desc')->offset($page)->limit($perpage)->get();
     }
 

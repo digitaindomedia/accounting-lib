@@ -1,7 +1,5 @@
 @php
     use Icso\Accounting\Enums\TypeEnum;
-    use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
-    use Icso\Accounting\Repositories\Pembelian\Received\ReceiveRepo;
 @endphp
 
         <!DOCTYPE html>
@@ -152,60 +150,61 @@
             <!-- ===== DENGAN ORDER ===== -->
         @else
 
-            <tr>
-                <td colspan="6" style="padding:0">
-                    <table width="100%" border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse">
-                        <thead>
-                        <tr style="background:#fafafa;font-weight:bold;text-align:center">
-                            <td width="20%">No Penerimaan</td>
-                            <td width="15%">Tanggal</td>
-                            <td width="45%">Gudang</td>
-                            <td width="20%" style="text-align:right">Total</td>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        @foreach ($post->invoicereceived as $item)
-                            @php
-                                $receiveRepo = new ReceiveRepo(new PurchaseReceived());
-                                $total = $receiveRepo->getTotalReceived($item->id);
-                            @endphp
-                            <tr>
-                                <td>{{ $item->receive->receive_no }}</td>
-                                <td class="text-center">{{ $item->receive->receive_date }}</td>
-                                <td>{{ $item->receive->warehouse->warehouse_name }}</td>
-                                <td class="text-right">
-                                    {{ number_format($total, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}
-                                </td>
-                            </tr>
-
-                            @foreach($item->receive->receiveproduct as $val)
-                                @php
-                                    $taxname = \Icso\Accounting\Utils\Helpers::getTaxName(
-                                        $val->tax_id,
-                                        $val->tax_percentage,
-                                        $val->tax_group
-                                    );
-                                    $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp(
-                                        $val->subtotal,
-                                        $val->tax_id,
-                                        $val->tax_type,
-                                        $val->tax_percentage
-                                    );
-
-                                    if($val->tax_id){
-                                        $arrTax[] = [
-                                            'id' => $val->tax_id,
-                                            'name' => $taxname,
-                                            'total' => $taxCalc[TypeEnum::PPN]
-                                        ];
-                                    }
-                                @endphp
-                            @endforeach
-                        @endforeach
-                        </tbody>
-                    </table>
-                </td>
+            <tr class="sub-header">
+                <td colspan="2">Nama Item</td>
+                <td class="text-center">Qty</td>
+                <td class="text-right">Harga</td>
+                <td class="text-right">Diskon</td>
+                <td class="text-right">Subtotal</td>
             </tr>
+
+            @foreach ($post->invoicereceived as $item)
+                @foreach($item->receive->receiveproduct as $val)
+                    @php
+                        $taxname = \Icso\Accounting\Utils\Helpers::getTaxName(
+                            $val->tax_id,
+                            $val->tax_percentage,
+                            $val->tax_group
+                        );
+                        $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp(
+                            $val->subtotal,
+                            $val->tax_id,
+                            $val->tax_type,
+                            $val->tax_percentage
+                        );
+                    @endphp
+                    <tr>
+                        <td colspan="2">
+                            {{ !empty($val->product)
+                                ? $val->product->item_name.' ('.$val->product->item_code.')'
+                                : '-' }}
+                        </td>
+                        <td class="text-center">
+                            {{ $val->qty }}
+                            {{ optional($val->unit)->unit_code }}
+                        </td>
+                        <td class="text-right">
+                            {{ number_format($val->buy_price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}
+                        </td>
+                        <td class="text-right">
+                            {{ \Icso\Accounting\Utils\Helpers::getDiscountString($val->discount, $val->discount_type) }}
+                        </td>
+                        <td class="text-right">
+                            {{ number_format($val->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}
+                        </td>
+                    </tr>
+
+                    @php
+                        if($val->tax_id){
+                            $arrTax[] = [
+                                'id' => $val->tax_id,
+                                'name' => $taxname,
+                                'total' => $taxCalc[TypeEnum::PPN]
+                            ];
+                        }
+                    @endphp
+                @endforeach
+            @endforeach
 
             @php
                 $colspan = 5;

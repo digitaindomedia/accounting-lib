@@ -785,29 +785,76 @@ class InvoiceController extends Controller
 
     public function exportReportExcel(Request $request)
     {
-        $params = $this->setQueryParameters($request);
-        extract($params);
-        $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage, $where);
-        return Excel::download(new PurchaseInvoiceReportDetailExport($data,$params), 'excel-purchase-invoice.xlsx');
+        return $this->exportReportAsFormat($request, 'excel-purchase-invoice.xlsx');
 
     }
 
     public function exportReportPdf(Request $request)
     {
+        return $this->exportReportAsFormat($request, 'laporan-invoice-pembelian.pdf', 'pdf');
+    }
+
+    private function exportReportAsFormat(Request $request, string $filename, string $type = 'excel')
+    {
         $params = $this->setQueryParameters($request);
         extract($params);
         $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage, $where);
+
+        $receiveRepo = new ReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
+        $data = $this->processReportInvoiceData($data, $receiveRepo);
+
+        if ($type === 'excel') {
+            return Excel::download(new PurchaseInvoiceReportDetailExport($data, $params), $filename);
+        }
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_invoice_detail_report', [
             'data' => $data,
             'params' => $params,
         ])->setPaper('a4', 'portrait');
 
         if ($request->get('mode') === 'print') {
-            return $pdf->stream('laporan-invoice-pembelian.pdf');
+            return $pdf->stream($filename);
         }
 
-        return $pdf->download('laporan-invoice-pembelian.pdf');
+        return $pdf->download($filename);
+    }
 
+    private function processReportInvoiceData($data, ReceiveRepo $receiveRepo)
+    {
+        foreach ($data as $item) {
+            if (!empty($item->invoicereceived)) {
+                foreach ($item->invoicereceived as $itemRec) {
+                    if (!empty($itemRec->receive)) {
+                        $itemRec->receive->total = $receiveRepo->getTotalReceived($itemRec->receive->id);
+                    }
+                }
+            }
+
+            if ($item->invoice_type == ProductType::SERVICE) {
+                $item->orderproductservice = PurchaseOrderProduct::where(['order_id' => $item->order_id])->with([
+                    'unit',
+                    'product',
+                    'product.productconvertion',
+                    'product.productconvertion.unit',
+                    'product.productconvertion.base_unit',
+                    'tax',
+                    'tax.taxgroup',
+                    'tax.taxgroup.tax'
+                ])->get();
+            }
+
+            $paid = $this->paymentInvoiceRepo->getAllPaymentByInvoiceId($item->id);
+            $leftBill = $item->grandtotal - $paid;
+            $item->left_bill = $leftBill;
+            $item->nominal_paid = $leftBill;
+            $item->paid = $paid;
+            $item->payment_list = $this->invoiceRepo->getPaymentList($item->id);
+            $item->dp = $this->invoiceRepo->getDpListBy($item->id);
+            $item->has_dp = count($item->dp) > 0;
+            $item->dp_id = $item->has_dp ? $item->dp[0]->id : "";
+        }
+
+        return $data;
     }
 
     public function exportKartuHutangExcel(Request $request)

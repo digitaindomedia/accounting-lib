@@ -96,7 +96,7 @@ class DeliveryController extends Controller
             $this->data['data'] = '';
         } else {
             $this->data['status'] = false;
-            $this->data['message'] = "Data gagal disimpan";
+            $this->data['message'] = $this->deliveryRepo->getLastError() ?: "Data gagal disimpan";
         }
         return response()->json($this->data);
     }

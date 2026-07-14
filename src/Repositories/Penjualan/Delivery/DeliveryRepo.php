@@ -37,12 +37,18 @@ class DeliveryRepo extends ElequentRepository
 {
     protected $model;
     protected ActivityLogService $activityLog;
+    protected string $lastError = '';
 
     public function __construct(SalesDelivery $model, ?ActivityLogService $activityLog = null)
     {
         parent::__construct($model);
         $this->model = $model;
         $this->activityLog = $activityLog ?? app(ActivityLogService::class);
+    }
+
+    public function getLastError(): string
+    {
+        return $this->lastError;
     }
 
     // ... [Keep getAllDataBy, getAllTotalDataBy as original] ...
@@ -117,6 +123,7 @@ class DeliveryRepo extends ElequentRepository
      */
     public function store(Request $request, array $other = [])
     {
+        $this->lastError = '';
         $id = $request->id;
         $userId = $request->user_id;
         $oldData = null;
@@ -141,6 +148,13 @@ class DeliveryRepo extends ElequentRepository
                 $deliveryId = $id;
                 $this->deleteAdditional($deliveryId);
             }
+
+            $products = is_array($request->deliveryproduct)
+                ? $request->deliveryproduct
+                : json_decode(json_encode($request->deliveryproduct), true);
+
+            $this->validateStockAvailability($products, (int) $request->warehouse_id, $data['delivery_date']);
+
             if(!empty($request->shipping_address)){
                 SalesDeliveryMeta::create([
                     'delivery_id' => $deliveryId,
@@ -150,9 +164,6 @@ class DeliveryRepo extends ElequentRepository
             }
 
             // 2. Process Products
-            $products = is_array($request->deliveryproduct)
-                ? $request->deliveryproduct
-                : json_decode(json_encode($request->deliveryproduct), true);
             $identityService = new IdentityStockService();
 
             if (!empty($products)) {
@@ -292,9 +303,106 @@ class DeliveryRepo extends ElequentRepository
 
         } catch (Exception $e) {
             DB::rollBack();
+            $this->lastError = $e->getMessage();
             Log::error("[DeliveryRepo][store] " . $e->getMessage());
             return false;
         }
+    }
+
+    private function validateStockAvailability(?array $products, int $warehouseId, string $deliveryDate): void
+    {
+        if (!$this->isStockMinusDisallowed() || empty($products)) {
+            return;
+        }
+
+        $inventoryRepo = new InventoryRepo(new Inventory());
+        $stockRequests = [];
+
+        foreach ($products as $itemRaw) {
+            $orderProductId = $itemRaw['order_product_id'] ?? null;
+            $findProductOrder = $orderProductId
+                ? SalesOrderProduct::with('product')->find($orderProductId)
+                : null;
+
+            if (!$findProductOrder || !$findProductOrder->product) {
+                continue;
+            }
+
+            $product = $findProductOrder->product;
+            $productId = (int) ($itemRaw['product_id'] ?? $findProductOrder->product_id);
+            $unitId = (int) ($itemRaw['unit_id'] ?? $findProductOrder->unit_id);
+            $qty = $this->resolveRequestedQty($itemRaw, $product);
+
+            if ($qty <= 0) {
+                continue;
+            }
+
+            $factor = $inventoryRepo->getConversionFactorToSmallest($productId, $unitId);
+            $key = $productId . ':' . $warehouseId;
+
+            if (!isset($stockRequests[$key])) {
+                $stockRequests[$key] = [
+                    'product_id' => $productId,
+                    'warehouse_id' => $warehouseId,
+                    'product_name' => $product->item_name ?? ('Produk #' . $productId),
+                    'requested_qty' => 0,
+                ];
+            }
+
+            $stockRequests[$key]['requested_qty'] += $qty * $factor;
+        }
+
+        foreach ($stockRequests as $request) {
+            $availableQty = (float) Inventory::where('product_id', $request['product_id'])
+                ->where('warehouse_id', $request['warehouse_id'])
+                ->where('inventory_date', '<=', $deliveryDate)
+                ->sum(DB::raw('qty_in - qty_out'));
+
+            if ($availableQty < (float) $request['requested_qty']) {
+                throw new Exception(
+                    "Stok {$request['product_name']} tidak mencukupi. Stok tersedia: " .
+                    number_format($availableQty, 2, ',', '.') .
+                    ", qty pengiriman: " .
+                    number_format((float) $request['requested_qty'], 2, ',', '.')
+                );
+            }
+        }
+    }
+
+    private function isStockMinusDisallowed(): bool
+    {
+        $settingKeys = [
+            SettingEnum::STOCK_MINUS,
+            SettingEnum::STOK_TIDAK_BOLEH_MINUS,
+            'stok_tidak_boleh_minus',
+            'stok_tidak_boleh_kurang',
+            'stock_not_allowed_minus',
+        ];
+
+        $value = '';
+        foreach ($settingKeys as $settingKey) {
+            $value = SettingRepo::getOptionValue($settingKey);
+            if ($value !== '') {
+                break;
+            }
+        }
+
+        return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function resolveRequestedQty(array $itemRaw, $product): float
+    {
+        if ($product && $product->usesIdentityTracking()) {
+            $identityItems = $itemRaw['items']
+                ?? $itemRaw['orderproduct']['items']
+                ?? $itemRaw['deliveryproduct']['items'] ?? [];
+
+            return array_reduce($identityItems, function ($total, $row) {
+                return $total + (float) ($row['qty'] ?? 0);
+            }, 0.0);
+        }
+
+        return (float) ($itemRaw['qty'] ?? 0);
     }
 
     private function gatherHeaderData(Request $request)

@@ -59,5 +59,7 @@ class SettingEnum
     public const COMPANY_PROVINCE = "COMPANY_PROVINCE";
     public const TAX_TYPE_PURCHASE = "TAX_TYPE_PURCHASE";
     public const TAX_TYPE_SALES = "TAX_TYPE_SALES";
+    public const STOCK_MINUS = "STOCK_MINUS";
+    public const STOK_TIDAK_BOLEH_MINUS = "STOK_TIDAK_BOLEH_MINUS";
 
 }

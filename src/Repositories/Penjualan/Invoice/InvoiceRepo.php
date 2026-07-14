@@ -658,7 +658,7 @@ class InvoiceRepo extends ElequentRepository
                         'posisi' => $tax['posisi'],
                         'nominal'=> $tax['nominal'],
                         'sub_id' => $item->id,
-                        'note'   => 'Tax ' . ($item->product->item_name ?? '')
+                        'note'   => 'Pajak ' . ($item->product->item_name ?? '')
                     ];
 
                     // Sum up tax for DPP calculation
@@ -756,7 +756,7 @@ class InvoiceRepo extends ElequentRepository
                             'posisi' => $tax['posisi'],
                             'nominal'=> $tax['nominal'],
                             'sub_id' => $item->id,
-                            'note'   => 'Tax ' . ($item->product->item_name ?? '')
+                            'note'   => 'Pajak ' . ($item->product->item_name ?? '')
                         ];
                         if ($item->tax_type == TypeEnum::TAX_TYPE_INCLUDE && $tax['posisi'] == 'kredit') {
                             $totalTaxAmount += $tax['nominal'];
@@ -777,24 +777,14 @@ class InvoiceRepo extends ElequentRepository
                     ];
 
                     // 2. COGS (Debit) vs Inventory In Transit (Credit)
-                    $valTransit = DeliveryRepo::getValueSediaanDalamPerjalan($delInv->delivery_id, $settings['coa_transit']);
-
-                    $cost = $inventoryRepo->resolveOutgoingCost($item->product_id, $item->unit_id, $item->qty, $find->invoice_date);
-                    $hppFromDelivery = $item->hpp_price;
-                    $subtotalHpp = 0;
-                    if($hppFromDelivery == 0) {
-                        // Fallback check inventory log
-                        $log = Inventory::where(['transaction_code' => TransactionsCode::DELIVERY_ORDER, 'transaction_sub_id' => $item->id])->first();
-                        if ($log) {
-                            $hppFromDelivery = (float) $log->nominal;
-                            $subtotalHpp = (float) $log->total_out;
-                        }
-                        if ($subtotalHpp <= 0) {
-                            $subtotalHpp = $hppFromDelivery > 0 ? $hppFromDelivery * $cost['qty_smallest'] : $cost['subtotal_hpp'];
-                        }
-                    } else {
-                        $subtotalHpp = $hppFromDelivery * $item->qty;
-                    }
+                    $subtotalHpp = $this->resolveDeliveryHppTotal(
+                        $delInv->delivery_id,
+                        $item,
+                        $settings['coa_transit'],
+                        $inventoryRepo,
+                        $find->invoice_date,
+                        $delInv->delivery->deliveryproduct->count()
+                    );
 
                     if ($subtotalHpp > 0) {
                         $journalEntries[] = [
@@ -802,14 +792,14 @@ class InvoiceRepo extends ElequentRepository
                             'posisi' => 'debet',
                             'nominal'=> $subtotalHpp,
                             'sub_id' => $item->id,
-                            'note'   => 'HPP (From Delivery)'
+                            'note'   => 'HPP dari Pengiriman'
                         ];
                         $journalEntries[] = [
                             'coa_id' => $settings['coa_transit'],
                             'posisi' => 'kredit',
                             'nominal'=> $subtotalHpp,
                             'sub_id' => $item->id,
-                            'note'   => 'Reversal In Transit'
+                            'note'   => 'Pembalikan Sediaan Dalam Perjalanan'
                         ];
                     }
 
@@ -887,6 +877,45 @@ class InvoiceRepo extends ElequentRepository
         // 8. Validate & Save
         Log::info($journalEntries);
         $this->validateAndSaveJournal($journalEntries, $find);
+    }
+
+    private function resolveDeliveryHppTotal($deliveryId, $item, $coaTransitId, InventoryRepo $inventoryRepo, $invoiceDate, int $deliveryProductCount): float
+    {
+        $journalHpp = JurnalTransaksi::where([
+                'transaction_code' => TransactionsCode::DELIVERY_ORDER,
+                'transaction_id' => $deliveryId,
+                'transaction_sub_id' => $item->id,
+            ])
+            ->where('kredit', '>', 0)
+            ->sum('kredit');
+
+        if ($journalHpp > 0) {
+            return (float) $journalHpp;
+        }
+
+        $inventoryLog = Inventory::where([
+            'transaction_code' => TransactionsCode::DELIVERY_ORDER,
+            'transaction_id' => $deliveryId,
+            'transaction_sub_id' => $item->id,
+        ])->first();
+
+        if ($inventoryLog && (float) $inventoryLog->total_out > 0) {
+            return (float) $inventoryLog->total_out;
+        }
+
+        if ((float) ($item->hpp_price ?? 0) > 0) {
+            return (float) $item->hpp_price * (float) $item->qty;
+        }
+
+        if ($deliveryProductCount === 1) {
+            $transitValue = DeliveryRepo::getValueSediaanDalamPerjalan($deliveryId, $coaTransitId);
+            if ($transitValue > 0) {
+                return (float) $transitValue;
+            }
+        }
+
+        $cost = $inventoryRepo->resolveOutgoingCost($item->product_id, $item->unit_id, $item->qty, $invoiceDate);
+        return (float) $cost['subtotal_hpp'];
     }
 
     private function hydrateServiceOrderProductsForPosting($invoice): void
@@ -1043,7 +1072,7 @@ class InvoiceRepo extends ElequentRepository
                         'posisi' => $reversePos,
                         'nominal'=> $tax['nominal'],
                         'sub_id' => $dp->id,
-                        'note'   => 'Reversal Tax DP'
+                        'note'   => 'Pembalikan Pajak Uang Muka'
                     ];
 
                     // Sum tax amount for DPP calculation
@@ -1081,7 +1110,7 @@ class InvoiceRepo extends ElequentRepository
                 'posisi' => 'kredit',
                 'nominal'=> $nominal,
                 'sub_id' => $dp->id,
-                'note'   => 'Potong DP ke Piutang'
+                'note'   => 'Pemotongan Uang Muka ke Piutang'
             ];
 
             $this->syncDownpaymentStatus((int) $dp->id);
@@ -1141,7 +1170,7 @@ class InvoiceRepo extends ElequentRepository
             'transaction_date' => $invoice->invoice_date,
             'warehouse_id' => (int) $invoice->warehouse_id,
             'user_id' => (int) $invoice->created_by,
-            'note' => $invoice->note ?: 'Auto consume invoice ' . $invoice->invoice_no,
+            'note' => $invoice->note ?: 'Pemakaian otomatis invoice ' . $invoice->invoice_no,
         ]);
     }
 
@@ -1212,7 +1241,7 @@ class InvoiceRepo extends ElequentRepository
                 'kredit' => 0,
                 'created_by'            => $find->created_by,
                 'updated_by'            => $find->created_by,
-                'note' => 'POS Payment'
+                'note' => 'Pembayaran POS'
             ]);
 
             // Credit Piutang (Close the AR created by standard posting)
@@ -1230,7 +1259,7 @@ class InvoiceRepo extends ElequentRepository
                 'kredit' => $find->grandtotal,
                 'created_by'            => $find->created_by,
                 'updated_by'            => $find->created_by,
-                'note' => 'POS Payment Settlement'
+                'note' => 'Pelunasan Piutang POS'
             ]);
         }
     }

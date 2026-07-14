@@ -457,7 +457,7 @@ class ReceiveRepo extends ElequentRepository
             'tax_id'         => $op->tax_id,
             'tax_percentage' => $op->tax_percentage,
             'tax_group'      => $op->tax_group,
-            'discount'       => $discountAmount,
+            'discount'       => $op->discount,
             'tax_type'       => $taxType,
             'coa_id'         => $coaId,
             'discount_type'  => $op->discount_type

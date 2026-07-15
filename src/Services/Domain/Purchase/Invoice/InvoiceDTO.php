@@ -37,6 +37,9 @@ class InvoiceDTO
 
     public static function fromRequest(Request $request): self
     {
+        $taxTotal = $request->tax_total ?? $request->total_tax ?? 0;
+        $dppTotal = $request->dpp_total ?? $request->total_dpp ?? 0;
+
         return new self([
             'id'             => (string) ($request->id ?? ''),
             'invoice_no'     => $request->invoice_no, // diasumsikan sudah di-generate di controller / repo
@@ -50,9 +53,9 @@ class InvoiceDTO
             'order_id'       => (string) ($request->order_id ?? '0'),
             'warehouse_id'   => (string) ($request->warehouse_id ?? '0'),
             'subtotal'       => (float) Utility::remove_commas($request->subtotal ?? 0),
-            'dpp_total'      => (float) ($request->dpp_total ? Utility::remove_commas($request->dpp_total) : 0),
+            'dpp_total'      => (float) ($dppTotal ? Utility::remove_commas($dppTotal) : 0),
             'discount_total' => (float) ($request->discount_total ? Utility::remove_commas($request->discount_total) : 0),
-            'tax_total'      => (float) ($request->tax_total ? Utility::remove_commas($request->tax_total) : 0),
+            'tax_total'      => (float) ($taxTotal ? Utility::remove_commas($taxTotal) : 0),
             'grandtotal'     => (float) Utility::remove_commas($request->grandtotal ?? 0),
             'note'           => $request->note ?? '',
             'items'          => $request->orderproduct ?? [],

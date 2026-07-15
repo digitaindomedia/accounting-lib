@@ -163,6 +163,9 @@ class InvoiceRepo extends ElequentRepository
             $invoiceNo = self::generateCodeTransaction(new PurchaseInvoicing(), KeyNomor::NO_INVOICE_PEMBELIAN, 'invoice_no', 'invoice_date');
         }
 
+        $taxTotal = $request->tax_total ?? $request->total_tax ?? '0';
+        $dppTotal = $request->dpp_total ?? $request->total_dpp ?? '0';
+
         $data = [
             'id' => $request->id,
             'invoice_no' => $invoiceNo,
@@ -180,10 +183,10 @@ class InvoiceRepo extends ElequentRepository
             'jurnal_id' => $request->jurnal_id ?? '0',
             'warehouse_id' => $request->warehouse_id ?? '0',
             'subtotal' => Utility::remove_commas($request->subtotal),
-            'dpp_total' => $request->dpp_total ? Utility::remove_commas($request->dpp_total) : '0',
+            'dpp_total' => $dppTotal ? Utility::remove_commas($dppTotal) : '0',
             'discount' => $request->discount ? Utility::remove_commas($request->discount) : '0',
             'discount_total' => $request->discount_total ? Utility::remove_commas($request->discount_total) : '0',
-            'tax_total' => $request->tax_total ? Utility::remove_commas($request->tax_total) : '0',
+            'tax_total' => $taxTotal ? Utility::remove_commas($taxTotal) : '0',
             'grandtotal' => Utility::remove_commas($request->grandtotal),
         ];
 

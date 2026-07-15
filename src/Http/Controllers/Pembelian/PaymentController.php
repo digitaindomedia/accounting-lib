@@ -7,6 +7,7 @@ use Icso\Accounting\Exports\PurchasePaymentExport;
 use Icso\Accounting\Exports\PurchasePaymentReportDetailExport;
 use Icso\Accounting\Http\Requests\CreatePurchasePaymentRequest;
 use Icso\Accounting\Imports\PurchasePaymentImport;
+use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
 use Icso\Accounting\Repositories\Pembelian\Payment\PaymentInvoiceRepo;
 use Icso\Accounting\Repositories\Pembelian\Payment\PaymentRepo;
 use Illuminate\Routing\Controller;
@@ -127,6 +128,30 @@ class PaymentController extends Controller
             $this->data['message'] = "Data gagal disimpan";
         }
         return response()->json($this->data);
+    }
+
+    public function getTotalPayment(Request $request): JsonResponse
+    {
+        $filter = $request->input('filter');
+        $query = PurchasePaymentInvoice::query()
+            ->where('invoice_id', '!=', 0);
+
+        if (!empty($filter)) {
+            if ($filter == 'HARI_INI') {
+                $query->whereDate('payment_date', date('Y-m-d'));
+            } else if ($filter == 'BULAN_INI') {
+                $query->whereMonth('payment_date', date('m'))
+                    ->whereYear('payment_date', date('Y'));
+            } else if ($filter == 'TAHUN_INI') {
+                $query->whereYear('payment_date', date('Y'));
+            }
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data berhasil ditemukan',
+            'data' => $query->sum('total_payment'),
+        ]);
     }
 
     public function show(Request $request): JsonResponse

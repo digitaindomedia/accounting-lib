@@ -12,6 +12,7 @@ use Icso\Accounting\Repositories\Master\Vendor\VendorRepo;
 use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -181,6 +182,31 @@ class VendorController extends Controller
         ];
 
         return response()->json($response);
+    }
+
+    public function getNewThisMonth(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $vendorType = $request->input('vendor_type');
+        $limit = (int) ($request->input('limit') ?: 5);
+        $limit = max(1, min($limit, 20));
+        $startOfMonth = Carbon::now()->startOfMonth();
+        $endOfMonth = Carbon::now()->endOfMonth();
+
+        $query = Vendor::query()
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->limit($limit);
+
+        if (!empty($vendorType)) {
+            $query->where('vendor_type', $vendorType);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Data berhasil ditemukan',
+            'data' => $query->get(),
+        ]);
     }
 
     public function downloadSample(Request $request)

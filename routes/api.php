@@ -96,6 +96,7 @@ Route::group([
     Route::post('vendor-save-data',[VendorController::class, 'store']);
     Route::get('vendor-find-by-id',[VendorController::class, 'show']);
     Route::get('vendor-count',[VendorController::class, 'getCountVendor']);
+    Route::get('vendor-new-this-month',[VendorController::class, 'getNewThisMonth']);
     Route::delete('vendor-delete-by-id',[VendorController::class, 'destroy']);
     Route::delete('vendor-delete-all',[VendorController::class, 'deleteAll']);
     Route::get('download-sample-vendor', [VendorController::class, 'downloadSample']);
@@ -286,6 +287,7 @@ Route::group([
         Route::get('export-neraca', [NeracaController::class, 'export']);
         Route::get('export-neraca-pdf', [NeracaController::class, 'exportToPdf']);
         Route::get('laba-rugi', [LabaRugiController::class, 'show']);
+        Route::get('dashboard-laba-rugi', [LabaRugiController::class, 'dashboard']);
         Route::get('export-excel-laba-rugi', [LabaRugiController::class, 'export']);
         Route::get('export-pdf-laba-rugi', [LabaRugiController::class, 'exportToPdf']);
         Route::get('jurnal-transaksi', [BukuBesarController::class, 'showAll']);
@@ -361,6 +363,7 @@ Route::group([
     Route::prefix('purchase-payment')->group(function () {
         Route::get('get-all-list', [PaymentController::class, 'getAllData']);
         Route::get('find-by-id', [PaymentController::class, 'show']);
+        Route::get('total-saldo', [PaymentController::class, 'getTotalPayment']);
         Route::post('save-data', [PaymentController::class, 'store']);
         Route::get('download-sample', [PaymentController::class, 'downloadSample']);
         Route::post('import', [PaymentController::class, 'import']);

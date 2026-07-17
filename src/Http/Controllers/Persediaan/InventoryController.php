@@ -474,8 +474,8 @@ class InventoryController extends Controller
     }
 
     public function showKartuStockDetail(Request $request){
-        $page = $request->page;
-        $perpage = $request->perpage;
+        $page = max((int) $request->page, 1);
+        $perpage = max((int) $request->perpage, 1);
         $productId = $request->product_id;
         $warehouseId = $request->warehouse_id;
         $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
@@ -484,19 +484,38 @@ class InventoryController extends Controller
         if(!empty($warehouseId)){
             $where[] = ['warehouse_id', '=', $warehouseId];
         }
+
+        $openingBalance = Inventory::where($where)
+            ->where('inventory_date', '<', $fromDate)
+            ->select(
+                DB::raw('COALESCE(SUM(qty_in), 0) - COALESCE(SUM(qty_out), 0) as saldo_qty'),
+                DB::raw('COALESCE(SUM(total_in), 0) - COALESCE(SUM(total_out), 0) as saldo_nilai')
+            )
+            ->first();
+
+        $runningSaldo = $openingBalance ? (float) $openingBalance->saldo_qty : 0;
+        $runningSaldoNilai = $openingBalance ? (float) $openingBalance->saldo_nilai : 0;
         $processedResults = collect();
-        $resultInventory = Inventory::where($where)->whereBetween('inventory_date',[$fromDate,$untilDate])->orderBy('inventory_date', 'asc')->chunk(200, function ($input) use (&$processedResults) {
-            $processedInventory = $input->map(function ($inventory) {
+        Inventory::where($where)
+            ->whereBetween('inventory_date',[$fromDate,$untilDate])
+            ->orderBy('inventory_date', 'asc')
+            ->orderBy('id', 'asc')
+            ->chunk(200, function ($input) use (&$processedResults, &$runningSaldo, &$runningSaldoNilai) {
+            $processedInventory = $input->map(function ($inventory) use (&$runningSaldo, &$runningSaldoNilai) {
                 $findTransaction = TransactionsCode::getNumberAndNameTransaction($inventory->transaction_code, $inventory->transaction_id);
                 $inventory->transaction_name = $findTransaction['transaction_name'];
                 $inventory->transaction_no = $findTransaction['transaction_no'];
+                $runningSaldo += ((float) $inventory->qty_in - (float) $inventory->qty_out);
+                $runningSaldoNilai += ((float) $inventory->total_in - (float) $inventory->total_out);
+                $inventory->saldo = $runningSaldo;
+                $inventory->saldo_nilai = $runningSaldoNilai;
                 return $inventory;
             });
             $processedResults = $processedResults->concat($processedInventory);
         });
         $paginateInventory = $processedResults->forPage($page,$perpage)->values()->toArray();
         $totalCount = $processedResults->count();
-        if($paginateInventory)
+        if($totalCount > 0)
         {
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';

@@ -198,18 +198,19 @@ class InventoryRepo extends ElequentRepository
 
     public function getStokByDate($productId, $warehouseId, $unitId, $date)
     {
-        // TODO: Implement getStokByDate() method.
-        $tableName = Inventory::getTableName();
-        $sql = "SELECT SUM(qty_in) as qtyIn,SUM(qty_out) as qtyOut FROM $tableName WHERE unit_id='$unitId' AND warehouse_id = '$warehouseId' AND product_id = '$productId' AND inventory_date <= '$date'";
-        $res = DB::select($sql);
-        $total = 0;
-        if(count($res) > 0)
-        {
-            $qtyIn = $res[0]->qtyIn;
-            $qtyOut = $res[0]->qtyOut;
-            $total = $qtyIn - $qtyOut;
+        $query = Inventory::where('product_id', $productId)
+            ->where('inventory_date', '<=', $date);
+
+        if (!empty($warehouseId)) {
+            $query->where('warehouse_id', $warehouseId);
         }
-        return $total;
+
+        $stock = $query->select(
+            DB::raw('COALESCE(SUM(qty_in), 0) as qty_in'),
+            DB::raw('COALESCE(SUM(qty_out), 0) as qty_out')
+        )->first();
+
+        return ((float) $stock->qty_in) - ((float) $stock->qty_out);
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Icso\Accounting\Models\Pembelian\Order;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\Tax;
 use Icso\Accounting\Models\Master\Unit;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProductItem;
 use Illuminate\Database\Eloquent\Model;
 
 class PurchaseOrderProduct extends Model
@@ -25,5 +26,11 @@ class PurchaseOrderProduct extends Model
 
     public function tax(){
         return $this->belongsTo(Tax::class, 'tax_id');
+    }
+
+    public function items()
+    {
+        return $this->hasMany(PurchaseReceivedProductItem::class, 'source_product_id')
+            ->where('source_type', 'purchase_invoice');
     }
 }

@@ -209,6 +209,9 @@ class ReceiveRepo extends ElequentRepository
                                 'receive_product_id' => $resItem->id,
                                 'product_id'         => $item->product_id,
                                 'warehouse_id'       => $request->warehouse_id,
+                                'source_type'        => 'purchase_receive',
+                                'source_id'          => $recId,
+                                'source_product_id'  => $resItem->id,
                                 'identity_value'     => trim($row['identity_value']),
                                 'expired_date'       => !empty($row['expired_date'])
                                     ? $row['expired_date']

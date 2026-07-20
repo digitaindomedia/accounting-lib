@@ -19,6 +19,7 @@ use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicingReceived;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrderProduct;
 use Icso\Accounting\Models\Pembelian\Pembayaran\PurchasePaymentInvoice;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
+use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProductItem;
 use Icso\Accounting\Models\Pembelian\UangMuka\PurchaseDownPayment;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -71,7 +72,7 @@ class InvoiceRepo extends ElequentRepository
                     }
                 }
             });
-        })->with(['vendor', 'invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.product.productconvertion','invoicereceived.receive.receiveproduct.product.productconvertion.unit','invoicereceived.receive.receiveproduct.product.productconvertion.base_unit','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','orderproduct', 'orderproduct.product','orderproduct.product.productconvertion','orderproduct.product.productconvertion.unit','orderproduct.product.productconvertion.base_unit','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])
+        })->with(['vendor', 'invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.product.productconvertion','invoicereceived.receive.receiveproduct.product.productconvertion.unit','invoicereceived.receive.receiveproduct.product.productconvertion.base_unit','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','orderproduct', 'orderproduct.items', 'orderproduct.product','orderproduct.product.productconvertion','orderproduct.product.productconvertion.unit','orderproduct.product.productconvertion.base_unit','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])
             ->orderBy('invoice_date','desc')->offset($page)->limit($perpage)->get();
     }
 
@@ -100,7 +101,7 @@ class InvoiceRepo extends ElequentRepository
         $userId = $request->user_id;
         $oldData = null;
         if (!empty($request->id)) {
-            $oldData = $this->findOne($request->id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray();
+            $oldData = $this->findOne($request->id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.items', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray();
         }
         $data = $this->gatherInputData($request, $oldData);
 
@@ -117,7 +118,7 @@ class InvoiceRepo extends ElequentRepository
                     $this->deleteAdditional($request->id);
                 }
 
-                $this->handleOrderProducts($request->orderproduct, $idInvoice, $data['tax_type'], $data['invoice_date'], $data['note'], $userId, $data['warehouse_id'], $request->input_type, $inventoryRepo);
+                $this->handleOrderProducts($request->orderproduct, $idInvoice, $data['tax_type'], $data['invoice_date'], $data['note'], $userId, $data['warehouse_id'], $data['invoice_type'], $inventoryRepo);
                 $this->handleDownPayments($request->dp, $idInvoice, $request);
                 $this->handleReceivedProducts($request->receive, $idInvoice);
 
@@ -138,7 +139,7 @@ class InvoiceRepo extends ElequentRepository
                     'model_type' => PurchaseInvoicing::class,
                     'model_id' => $idInvoice,
                     'old_values' => $oldData,
-                    'new_values' => $this->findOne($idInvoice, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray(),
+                    'new_values' => $this->findOne($idInvoice, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.items', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])?->toArray(),
                     'request_payload' => RequestAuditHelper::sanitize($request),
                     'ip_address' => $request->ip(),
                     'user_agent' => $request->userAgent(),
@@ -281,26 +282,34 @@ class InvoiceRepo extends ElequentRepository
         }
     }
 
-    public function handleOrderProducts($orderProducts, string $invoiceId, string $taxType, string $invoiceDate, string $note, string $userId, string $warehouseId, string $inputType, InventoryRepo $inventoryRepo)
+    public function handleOrderProducts($orderProducts, string $invoiceId, string $taxType, string $invoiceDate, string $note, string $userId, string $warehouseId, string $invoiceType, InventoryRepo $inventoryRepo)
     {
         if (!empty($orderProducts)) {
             $products = json_decode(json_encode($orderProducts));
             if (count($products) > 0) {
                 foreach ($products as $item) {
-                    $this->saveOrderProduct($item, $invoiceId, $taxType, $invoiceDate, $note, $userId, $warehouseId, $inputType, $inventoryRepo);
+                    $this->saveOrderProduct($item, $invoiceId, $taxType, $invoiceDate, $note, $userId, $warehouseId, $invoiceType, $inventoryRepo);
                 }
             }
         }
     }
 
-    public function saveOrderProduct($item, string $invoiceId, string $taxType, string $invoiceDate, string $note, string $userId, string $warehouseId,string $inputType, InventoryRepo $inventoryRepo)
+    public function saveOrderProduct($item, string $invoiceId, string $taxType, string $invoiceDate, string $note, string $userId, string $warehouseId,string $invoiceType, InventoryRepo $inventoryRepo)
     {
         $total = $item->subtotal ? Utility::remove_commas($item->subtotal) : 0;
         $hargaBeli = $item->price ? Utility::remove_commas($item->price) : 0;
         $findProduct = null;
 
-        if($inputType == ProductType::ITEM){
+        if($invoiceType == ProductType::ITEM){
             $findProduct = Product::find($item->product_id);
+        }
+
+        $identityItems = $this->resolveIdentityItems($item);
+        $isIdentityTracking = $findProduct && $findProduct->usesIdentityTracking();
+
+        if ($isIdentityTracking) {
+            $identityQty = $this->validateIdentityItems($identityItems, $findProduct);
+            $item->qty = $identityQty;
         }
 
         $arrItem = [
@@ -325,7 +334,7 @@ class InvoiceRepo extends ElequentRepository
         $resItem = PurchaseOrderProduct::create($arrItem);
 
         if($resItem){
-            if($inputType == ProductType::ITEM && $findProduct) {
+            if($invoiceType == ProductType::ITEM && $findProduct) {
                 if ($findProduct->product_type == ProductType::ITEM) {
                     if (!empty($item->tax_id) && $taxType == TypeEnum::TAX_TYPE_INCLUDE) {
                         $pembagi = ($item->tax_percentage + 100) / 100;
@@ -333,10 +342,82 @@ class InvoiceRepo extends ElequentRepository
                         $hpp = $subtotalHpp / $item->qty;
                     }
                     $this->addInventory($item, $invoiceDate, $note, $userId, $warehouseId, $inventoryRepo, $hpp, $invoiceId, $resItem->id);
+                    if ($isIdentityTracking) {
+                        $this->createInvoiceIdentityItems($identityItems, $item, $warehouseId, $invoiceId, $resItem->id);
+                    }
                 }
             }
         }
         return $resItem;
+    }
+
+    private function resolveIdentityItems($item): array
+    {
+        $identityItems = $item->identities ?? $item->items ?? [];
+        if (empty($identityItems)) {
+            return [];
+        }
+
+        return json_decode(json_encode($identityItems), true) ?: [];
+    }
+
+    private function validateIdentityItems(array $identityItems, Product $product): float
+    {
+        if (empty($identityItems)) {
+            throw new Exception("Produk {$product->item_name} wajib mengisi {$product->identity_label}");
+        }
+
+        $usedIdentity = [];
+        $qty = 0;
+
+        foreach ($identityItems as $row) {
+            $identityValue = trim($row['identity_value'] ?? '');
+            $rowQty = (float) ($row['qty'] ?? 0);
+
+            if ($identityValue === '') {
+                throw new Exception("{$product->identity_label} tidak boleh kosong");
+            }
+
+            if ($rowQty <= 0) {
+                throw new Exception("Qty {$product->identity_label} harus > 0");
+            }
+
+            if (in_array($identityValue, $usedIdentity)) {
+                throw new Exception("{$product->identity_label} duplikat: {$identityValue}");
+            }
+
+            if (PurchaseReceivedProductItem::where('product_id', $product->id)
+                ->where('identity_value', $identityValue)
+                ->exists()) {
+                throw new Exception("{$product->identity_label} sudah digunakan: {$identityValue}");
+            }
+
+            $usedIdentity[] = $identityValue;
+            $qty += $rowQty;
+        }
+
+        return $qty;
+    }
+
+    private function createInvoiceIdentityItems(array $identityItems, $item, string $warehouseId, string $invoiceId, string $orderProductId): void
+    {
+        foreach ($identityItems as $row) {
+            PurchaseReceivedProductItem::create([
+                'receive_product_id' => null,
+                'product_id'         => $item->product_id,
+                'warehouse_id'       => $warehouseId,
+                'source_type'        => 'purchase_invoice',
+                'source_id'          => $invoiceId,
+                'source_product_id'  => $orderProductId,
+                'identity_value'     => trim($row['identity_value']),
+                'expired_date'       => !empty($row['expired_date']) ? $row['expired_date'] : null,
+                'qty'                => (float) $row['qty'],
+                'qty_left'           => (float) $row['qty'],
+                'status'             => StatusEnum::OPEN,
+                'created_at'         => now(),
+                'updated_at'         => now(),
+            ]);
+        }
     }
 
     private function addInventory($item, string $invoiceDate, string $note, string $userId, string $warehouseId, InventoryRepo $inventoryRepo, float $hpp, string $invoiceId, string $resItemId)
@@ -465,6 +546,7 @@ class InvoiceRepo extends ElequentRepository
 
     public function deleteAdditional($id)
     {
+        $this->assertInvoiceIdentityCanBeReplaced($id);
         $dpIds = PurchaseInvoicingDp::where(array('invoice_id' => $id))->pluck('dp_id')->all();
         $findReceived = PurchaseInvoicingReceived::where(array('invoice_id' => $id))->get();
         if(!empty($findReceived)) {
@@ -484,6 +566,9 @@ class InvoiceRepo extends ElequentRepository
             throw new Exception('Jurnal invoice pembelian gagal dihapus');
         }
         PurchaseOrderProduct::where('invoice_id','=',$id)->delete();
+        PurchaseReceivedProductItem::where('source_type', 'purchase_invoice')
+            ->where('source_id', $id)
+            ->delete();
         PurchaseInvoicingReceived::where(array('invoice_id' => $id))->delete();
         PurchaseInvoicingDp::where(array('invoice_id' => $id))->delete();
         foreach ($dpIds as $dpId) {
@@ -493,9 +578,21 @@ class InvoiceRepo extends ElequentRepository
         Inventory::where('transaction_code','=',TransactionsCode::INVOICE_PEMBELIAN)->where('transaction_id','=',$id)->delete();
     }
 
+    private function assertInvoiceIdentityCanBeReplaced($invoiceId): void
+    {
+        $usedIdentity = PurchaseReceivedProductItem::where('source_type', 'purchase_invoice')
+            ->where('source_id', $invoiceId)
+            ->whereColumn('qty_left', '<', 'qty')
+            ->exists();
+
+        if ($usedIdentity) {
+            throw new Exception('Invoice pembelian tidak bisa diedit/dihapus karena batch/identity sudah digunakan');
+        }
+    }
+
     public function destroy(int $id, int $userId): bool
     {
-        $invoice = $this->findOne($id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+        $invoice = $this->findOne($id, [], ['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.items', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if (!$invoice) {
             return false;
         }

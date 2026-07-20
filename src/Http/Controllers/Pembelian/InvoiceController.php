@@ -246,7 +246,7 @@ class InvoiceController extends Controller
     public function show(Request $request){
         $purchaseReceivedRepo = new ReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
         $id = $request->id;
-        $res = $this->invoiceRepo->findOne($id,array(),['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
+        $res = $this->invoiceRepo->findOne($id,array(),['vendor','warehouse','invoicereceived.receive.order','invoicereceived','invoicereceived.receive.warehouse','invoicereceived.receive.receiveproduct','invoicereceived.receive.receiveproduct.unit','invoicereceived.receive.receiveproduct.product','invoicereceived.receive.receiveproduct.tax','invoicereceived.receive.receiveproduct.tax.taxgroup','invoicereceived.receive.receiveproduct.tax.taxgroup.tax','order','warehouse','vendor','orderproduct', 'orderproduct.items', 'orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit']);
         if($res){
             if(!empty($res->invoicereceived)){
                 foreach ($res->invoicereceived as $item){

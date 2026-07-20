@@ -381,9 +381,7 @@ class CoaRepo extends ElequentRepository
                 $dariTanggal = $extr[0]."-01-01";
                 $d = new DateTime($untilDate, new \DateTimeZone('UTC'));
                 $d->modify('first day of previous month');
-                $year = $d->format('Y'); //2012
-                $month = $d->format('m'); //12
-                $sampaiTanggal = $year."-".$month."-31";
+                $sampaiTanggal = $d->format('Y-m-t');
                 $saldoCoaItemSaldoLaba = JurnalTransaksiRepo::labaRugi($dariTanggal,$sampaiTanggal);
                 $saldoCoaItem = $saldoCoaItem + $saldoCoaItemSaldoLaba['ebt'];
             }

@@ -11,6 +11,7 @@ use Icso\Accounting\Repositories\Pembelian\Bast\BastRepo;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -120,26 +121,45 @@ class BastController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $bastId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $bastId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$bastId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[BastController][deleteAll] ID BAST pembelian tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
                 try {
-                    $deleted = $this->purchaseBastRepo->destroy((int) $bastId, (int) $request->user_id);
+                    $deleted = $this->purchaseBastRepo->destroy((int) $bastId, $userId);
                     if ($deleted) {
                         $successDelete = $successDelete + 1;
                     } else {
                         $failedDelete = $failedDelete + 1;
+                        Log::error('[BastController][deleteAll] BAST pembelian gagal dihapus', [
+                            'bast_id' => (int) $bastId,
+                            'user_id' => $userId,
+                        ]);
                     }
                 }
-                catch (\Exception $e) {
+                catch (\Throwable $e) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[BastController][deleteAll] Error hapus BAST pembelian', [
+                        'bast_id' => (int) $bastId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }

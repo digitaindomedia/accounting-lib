@@ -209,9 +209,7 @@ class NeracaTExport implements FromCollection, WithHeadings, WithMapping, Should
                 $dariTanggal = $extr[0] . "-01-01";
                 $d = new DateTime($this->untilDate, new \DateTimeZone('UTC'));
                 $d->modify('first day of previous month');
-                $year = $d->format('Y');
-                $month = $d->format('m');
-                $sampaiTanggal = $year . "-" . $month . "-31";
+                $sampaiTanggal = $d->format('Y-m-t');
                 $saldoCoaItemSaldoLaba = JurnalTransaksiRepo::labaRugi($dariTanggal, $sampaiTanggal);
                 $saldoCoaItem += $saldoCoaItemSaldoLaba['ebt'];
             } else if ($item->coa_category == 'saldo_laba_bulan_berjalan') {

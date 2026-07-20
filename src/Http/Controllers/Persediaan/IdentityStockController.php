@@ -4,6 +4,7 @@ namespace Icso\Accounting\Http\Controllers\Persediaan;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceivedProductItem;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class IdentityStockController extends Controller
 {
@@ -28,6 +29,27 @@ class IdentityStockController extends Controller
                 '=',
                 'als_purchase_receive_product_items.warehouse_id'
             )
+            ->leftJoin(
+                'als_purchase_receive_product',
+                'als_purchase_receive_product.id',
+                '=',
+                'als_purchase_receive_product_items.receive_product_id'
+            )
+            ->leftJoin(
+                'als_purchase_receive',
+                function ($join) {
+                    $join->on('als_purchase_receive.id', '=', 'als_purchase_receive_product_items.source_id')
+                        ->where('als_purchase_receive_product_items.source_type', '=', 'purchase_receive')
+                        ->orOn('als_purchase_receive.id', '=', 'als_purchase_receive_product.receive_id');
+                }
+            )
+            ->leftJoin(
+                'als_purchase_invoice',
+                function ($join) {
+                    $join->on('als_purchase_invoice.id', '=', 'als_purchase_receive_product_items.source_id')
+                        ->where('als_purchase_receive_product_items.source_type', '=', 'purchase_invoice');
+                }
+            )
             ->where('als_purchase_receive_product_items.product_id', $productId)
             ->when($warehouseId, function ($query) use ($warehouseId) {
                 $query->where(
@@ -40,6 +62,18 @@ class IdentityStockController extends Controller
             ->select([
                 'als_purchase_receive_product_items.*',
                 'als_warehouse.warehouse_name',
+                DB::raw("CASE
+                    WHEN als_purchase_receive_product_items.source_type = 'purchase_invoice' THEN 'Invoice Pembelian'
+                    ELSE 'Penerimaan'
+                END as source_label"),
+                DB::raw("CASE
+                    WHEN als_purchase_receive_product_items.source_type = 'purchase_invoice' THEN als_purchase_invoice.invoice_no
+                    ELSE als_purchase_receive.receive_no
+                END as source_no"),
+                DB::raw("CASE
+                    WHEN als_purchase_receive_product_items.source_type = 'purchase_invoice' THEN als_purchase_invoice.invoice_date
+                    ELSE als_purchase_receive.receive_date
+                END as source_date"),
             ]);
 
         // 🔍 SEARCH batch / serial

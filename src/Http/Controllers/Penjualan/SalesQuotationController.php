@@ -6,6 +6,7 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Repositories\Penjualan\Quotation\SalesQuotationRepository;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class SalesQuotationController extends Controller
@@ -127,10 +128,22 @@ class SalesQuotationController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $ids = $request->ids;
+        $ids = $request->input('ids', $request->input('params.ids', []));
         if (!is_array($ids)) {
             $ids = explode(',', $ids);
         }
+        $ids = array_values(array_filter(array_map(function ($id) use ($request) {
+            $quotationId = is_array($id) ? ($id['id'] ?? null) : $id;
+            if (!$quotationId) {
+                Log::error('[SalesQuotationController][deleteAll] ID quotation penjualan tidak valid', [
+                    'payload_id' => $id,
+                    'user_id' => (int) $request->user_id,
+                ]);
+                return null;
+            }
+            return (int) $quotationId;
+        }, $ids)));
+
         $res = $this->salesQuotationService->deleteAllData($ids);
 
         if ($res) {

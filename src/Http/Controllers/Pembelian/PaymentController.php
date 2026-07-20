@@ -15,6 +15,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PaymentController extends Controller
@@ -213,25 +214,44 @@ class PaymentController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $paymentId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $paymentId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$paymentId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[PaymentController][deleteAll] ID pembayaran pembelian tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
                 try {
-                    $deleted = $this->paymentRepo->destroy((int) $paymentId, (int) $request->user_id);
+                    $deleted = $this->paymentRepo->destroy((int) $paymentId, $userId);
                     if ($deleted) {
                         $successDelete = $successDelete + 1;
                     } else {
                         $failedDelete = $failedDelete + 1;
+                        Log::error('[PaymentController][deleteAll] Pembayaran pembelian gagal dihapus', [
+                            'payment_id' => (int) $paymentId,
+                            'user_id' => $userId,
+                        ]);
                     }
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[PaymentController][deleteAll] Error hapus pembayaran pembelian', [
+                        'payment_id' => (int) $paymentId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }

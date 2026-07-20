@@ -11,6 +11,7 @@ use Illuminate\Routing\Controller;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class SpkController extends Controller
@@ -155,26 +156,45 @@ class SpkController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $spkId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $spkId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$spkId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[SpkController][deleteAll] ID SPK penjualan tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
                 try {
-                    $deleted = $this->salesSpkRepo->destroy((int) $spkId, (int) $request->user_id);
+                    $deleted = $this->salesSpkRepo->destroy((int) $spkId, $userId);
                     if ($deleted) {
                         $successDelete = $successDelete + 1;
                     } else {
                         $failedDelete = $failedDelete + 1;
+                        Log::error('[SpkController][deleteAll] SPK penjualan gagal dihapus', [
+                            'spk_id' => (int) $spkId,
+                            'user_id' => $userId,
+                        ]);
                     }
                 }
-                catch (\Exception $e) {
+                catch (\Throwable $e) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[SpkController][deleteAll] Error hapus SPK penjualan', [
+                        'spk_id' => (int) $spkId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }

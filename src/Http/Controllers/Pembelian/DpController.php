@@ -8,6 +8,7 @@ use Icso\Accounting\Exports\PurchaseDpReportExport;
 use Icso\Accounting\Http\Requests\CreatePurchaseDpRequest;
 use Icso\Accounting\Repositories\Pembelian\Downpayment\DpRepo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -91,18 +92,45 @@ class DpController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
 
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         foreach ($reqData as $id) {
-            $dpId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+            $dpId = is_array($id) ? ($id['id'] ?? null) : $id;
             if (!$dpId) {
                 $failedDelete++;
+                Log::error('[DpController][deleteAll] ID uang muka pembelian tidak valid', [
+                    'payload_id' => $id,
+                    'user_id' => $userId,
+                ]);
                 continue;
             }
-            $res = $this->dpRepo->destroy((int) $dpId, (int) $request->user_id);
-            $res ? $successDelete++ : $failedDelete++;
+            try {
+                $res = $this->dpRepo->destroy((int) $dpId, $userId);
+                if($res){
+                    $successDelete++;
+                } else {
+                    $failedDelete++;
+                    Log::error('[DpController][deleteAll] Uang muka pembelian gagal dihapus', [
+                        'dp_id' => (int) $dpId,
+                        'user_id' => $userId,
+                    ]);
+                }
+            }
+            catch (\Throwable $e) {
+                $failedDelete++;
+                Log::error('[DpController][deleteAll] Error hapus uang muka pembelian', [
+                    'dp_id' => (int) $dpId,
+                    'user_id' => $userId,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         $this->data['status'] = $successDelete > 0;

@@ -18,6 +18,7 @@ use Icso\Accounting\Utils\Helpers;
 use Icso\Accounting\Utils\TransactionsCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -112,21 +113,45 @@ class RequestController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $requestId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $requestId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$requestId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[RequestController][deleteAll] ID permintaan pembelian tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
-                $res = $this->requestRepo->destroy((int) $requestId, (int) $request->user_id);
-                if($res){
-                    $successDelete = $successDelete + 1;
-                } else {
+                try {
+                    $res = $this->requestRepo->destroy((int) $requestId, $userId);
+                    if($res){
+                        $successDelete = $successDelete + 1;
+                    } else {
+                        $failedDelete = $failedDelete + 1;
+                        Log::error('[RequestController][deleteAll] Permintaan pembelian gagal dihapus', [
+                            'request_id' => (int) $requestId,
+                            'user_id' => $userId,
+                        ]);
+                    }
+                }
+                catch (\Throwable $e) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[RequestController][deleteAll] Error hapus permintaan pembelian', [
+                        'request_id' => (int) $requestId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }

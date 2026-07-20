@@ -159,29 +159,45 @@ class AdjustmentController extends Controller
 
     public function deleteAll(Request $request): JsonResponse
     {
-        $ids = $request->ids;
-        if (!is_array($ids) || empty($ids)) {
-             return response()->json(['status' => false, 'message' => 'Data ID tidak valid', 'data' => []]);
+        $ids = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
+        if (!is_array($ids)) {
+            $ids = json_decode(json_encode($ids), true) ?: [];
+        }
+        if (empty($ids)) {
+	             return response()->json(['status' => false, 'message' => 'Data ID tidak valid', 'data' => []]);
         }
 
         $successDelete = 0;
         $failedDelete = 0;
 
         foreach ($ids as $id) {
-            $adjustmentId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+            $adjustmentId = is_array($id) ? ($id['id'] ?? null) : $id;
             if (!$adjustmentId) {
                 $failedDelete++;
+                Log::error('[AdjustmentController][deleteAll] ID adjustment tidak valid', [
+                    'payload_id' => $id,
+                    'user_id' => $userId,
+                ]);
                 continue;
             }
             try {
-                $deleted = $this->adjustmentRepo->destroy((int) $adjustmentId, (int) $request->user_id);
+                $deleted = $this->adjustmentRepo->destroy((int) $adjustmentId, $userId);
                 if ($deleted) {
                     $successDelete++;
                 } else {
                     $failedDelete++;
+                    Log::error('[AdjustmentController][deleteAll] Adjustment gagal dihapus', [
+                        'adjustment_id' => (int) $adjustmentId,
+                        'user_id' => $userId,
+                    ]);
                 }
-            } catch (\Exception $e) {
-                Log::error("Error deleting adjustment $adjustmentId in bulk: " . $e->getMessage());
+            } catch (\Throwable $e) {
+                Log::error('[AdjustmentController][deleteAll] Error hapus adjustment', [
+                    'adjustment_id' => (int) $adjustmentId,
+                    'user_id' => $userId,
+                    'message' => $e->getMessage(),
+                ]);
                 $failedDelete++;
             }
         }

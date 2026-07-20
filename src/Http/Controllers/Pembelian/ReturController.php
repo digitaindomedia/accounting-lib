@@ -14,6 +14,7 @@ use Icso\Accounting\Utils\Helpers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -165,26 +166,45 @@ class ReturController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $returId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $returId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$returId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[ReturController][deleteAll] ID retur pembelian tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
                 try {
-                    $deleted = $this->returRepo->destroy((int) $returId, (int) $request->user_id);
+                    $deleted = $this->returRepo->destroy((int) $returId, $userId);
                     if ($deleted) {
                         $successDelete = $successDelete + 1;
                     } else {
                         $failedDelete = $failedDelete + 1;
+                        Log::error('[ReturController][deleteAll] Retur pembelian gagal dihapus', [
+                            'retur_id' => (int) $returId,
+                            'user_id' => $userId,
+                        ]);
                     }
                 }
-                catch (\Exception $e) {
+                catch (\Throwable $e) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[ReturController][deleteAll] Error hapus retur pembelian', [
+                        'retur_id' => (int) $returId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }

@@ -18,6 +18,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PemakaianController extends Controller
@@ -144,30 +145,44 @@ class PemakaianController extends Controller
 
     public function deleteAll(Request $request): JsonResponse
     {
-        $request->validate([
-            'ids' => 'required|array'
-        ]);
-
-        $reqData = $request->input('ids');
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
 
         if (count($reqData) > 0) {
             foreach ($reqData as $id) {
                 try {
-                    $pemakaianId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                    $pemakaianId = is_array($id) ? ($id['id'] ?? null) : $id;
                     if (!$pemakaianId) {
                         $failedDelete++;
+                        Log::error('[PemakaianController][deleteAll] ID pemakaian stok tidak valid', [
+                            'payload_id' => $id,
+                            'user_id' => $userId,
+                        ]);
                         continue;
                     }
 
-                    $deleted = $this->pemakaianRepo->destroy((int) $pemakaianId, (int) $request->user_id);
+                    $deleted = $this->pemakaianRepo->destroy((int) $pemakaianId, $userId);
                     if ($deleted) {
                         $successDelete++;
                     } else {
                         $failedDelete++;
+                        Log::error('[PemakaianController][deleteAll] Pemakaian stok gagal dihapus', [
+                            'pemakaian_id' => (int) $pemakaianId,
+                            'user_id' => $userId,
+                        ]);
                     }
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
+                    Log::error('[PemakaianController][deleteAll] Error hapus pemakaian stok', [
+                        'pemakaian_id' => isset($pemakaianId) ? (int) $pemakaianId : null,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                     $failedDelete++;
                 }
             }

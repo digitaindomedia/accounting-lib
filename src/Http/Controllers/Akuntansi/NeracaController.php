@@ -5,6 +5,7 @@ namespace Icso\Accounting\Http\Controllers\Akuntansi;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Exports\NeracaListExport;
 use Icso\Accounting\Exports\NeracaTExport;
+use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Akuntansi\SaldoAwal;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
@@ -27,12 +28,12 @@ class NeracaController extends Controller
     }
 
     public function show(Request $request){
+        $untilDate =  $request->filter_date;
         $findPeriode = SaldoAwal::where(array('is_default' => Constants::AKTIF))->first();
-        $fromDate = date('Y-m-d');
+        $fromDate = JurnalTransaksi::where('transaction_date', '<=', $untilDate)->min('transaction_date') ?? $untilDate;
         if(!empty($findPeriode)){
             $fromDate = $findPeriode->saldo_date;
         }
-        $untilDate =  $request->filter_date;
         $periode =  $request->periode;
         $waktu =  $request->waktu;
         $res = $this->coaRepo->findAllByWhere(array('neraca' => TypeEnum::IS_NERACA),array());
@@ -68,9 +69,7 @@ class NeracaController extends Controller
                         $dariTanggal = $extr[0]."-01-01";
                         $d = new DateTime($untilDate, new \DateTimeZone('UTC'));
                         $d->modify('first day of previous month');
-                        $year = $d->format('Y'); //2012
-                        $month = $d->format('m'); //12
-                        $sampaiTanggal = $year."-".$month."-31";
+                        $sampaiTanggal = $d->format('Y-m-t');
                         $saldoCoaItemSaldoLaba = JurnalTransaksiRepo::labaRugi($dariTanggal,$sampaiTanggal);
                         $saldoCoaItem = $saldoCoaItem + $saldoCoaItemSaldoLaba['ebt'];
                     }

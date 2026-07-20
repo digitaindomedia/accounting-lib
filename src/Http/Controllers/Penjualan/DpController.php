@@ -11,6 +11,7 @@ use Illuminate\Routing\Controller;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 
 class DpController extends Controller
@@ -137,26 +138,45 @@ class DpController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = json_decode(json_encode($request->ids));
+        $reqData = $request->input('ids', $request->input('params.ids', []));
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
+
+        if (!is_array($reqData)) {
+            $reqData = json_decode(json_encode($reqData), true) ?: [];
+        }
+
         if(count($reqData) > 0){
             foreach ($reqData as $id){
-                $dpId = is_array($id) ? ($id['id'] ?? null) : ($id->id ?? $id);
+                $dpId = is_array($id) ? ($id['id'] ?? null) : $id;
                 if (!$dpId) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[DpController][deleteAll] ID uang muka penjualan tidak valid', [
+                        'payload_id' => $id,
+                        'user_id' => $userId,
+                    ]);
                     continue;
                 }
                 try {
-                    $deleted = $this->dpRepo->destroy((int) $dpId, (int) $request->user_id);
+                    $deleted = $this->dpRepo->destroy((int) $dpId, $userId);
                     if ($deleted) {
                         $successDelete = $successDelete + 1;
                     } else {
                         $failedDelete = $failedDelete + 1;
+                        Log::error('[DpController][deleteAll] Uang muka penjualan gagal dihapus', [
+                            'dp_id' => (int) $dpId,
+                            'user_id' => $userId,
+                        ]);
                     }
                 }
-                catch (\Exception $e) {
+                catch (\Throwable $e) {
                     $failedDelete = $failedDelete + 1;
+                    Log::error('[DpController][deleteAll] Error hapus uang muka penjualan', [
+                        'dp_id' => (int) $dpId,
+                        'user_id' => $userId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }

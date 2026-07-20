@@ -182,16 +182,11 @@ class JurnalTransaksiRepo extends ElequentRepository
                     'id' => $item->id,
                     'coa_name' => $item->coa_name
                 );
-                $subSaldo = 0;
+                $subSaldo = self::sumSaldoJurnalItem($item->id, $fromDate, $untilDate);
                 $getAllChild = Coa::where(array('coa_parent' => $item->id))->get();
                 if(count($getAllChild) > 0){
                     foreach ($getAllChild as $child){
-                        $saldo = 0;
-                        if(empty($untilDate)){
-                            $saldo = self::sumSaldoJurnal($child->id, $fromDate,$untilDate,"<");
-                        } else {
-                            $saldo = self::sumSaldoJurnal($child->id, $fromDate,$untilDate);
-                        }
+                        $saldo = self::sumSaldoJurnalRecursive($child->id, $fromDate, $untilDate);
 
                         $arrData[] = array(
                             'coa_code' =>$child->coa_code,
@@ -221,6 +216,27 @@ class JurnalTransaksiRepo extends ElequentRepository
             'total' => $grandTotal,
             'coa' => $arrData
         );
+    }
+
+    private static function sumSaldoJurnalRecursive($coaId, $fromDate, $untilDate)
+    {
+        $saldo = self::sumSaldoJurnalItem($coaId, $fromDate, $untilDate);
+        $children = Coa::where(array('coa_parent' => $coaId))->get();
+
+        foreach ($children as $child) {
+            $saldo = $saldo + self::sumSaldoJurnalRecursive($child->id, $fromDate, $untilDate);
+        }
+
+        return $saldo;
+    }
+
+    private static function sumSaldoJurnalItem($coaId, $fromDate, $untilDate)
+    {
+        if(empty($untilDate)){
+            return self::sumSaldoJurnal($coaId, $fromDate, $untilDate, "<");
+        }
+
+        return self::sumSaldoJurnal($coaId, $fromDate, $untilDate);
     }
 
     public static function deleteJurnalTransaksi($transactionCode,$idTransaction){

@@ -509,7 +509,7 @@ class JurnalRepo extends ElequentRepository
                 $request->due_date = $data['jurnal_date'];
                 $request->user_id = $data['user_id'];
                 $request->coa_id = $data['coa_id'];
-                $request->invoice_type = $data['invoice_type'];
+                $request->invoice_type = $data['invoice_type'] ?? 'item';
                 $request->input_type = InputType::JURNAL;
                 $resPurchaseInvoice = $purchaseInvoiceRepo->store($request);
             }
@@ -663,6 +663,7 @@ class JurnalRepo extends ElequentRepository
                         'jurnal_date' => $jurnalDate,
                         'user_id' => $userId,
                         'coa_id' => $val->coa_id,
+                        'invoice_type' => 'item',
                         'jurnal_akun_id' => $resItemAkun->id
                     );
                     $this->createDataSession($sess, $passData);

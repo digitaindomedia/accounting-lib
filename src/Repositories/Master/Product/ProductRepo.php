@@ -39,6 +39,12 @@ class ProductRepo extends ElequentRepository
             });
         })->when(!empty($where['product_type']), function ($query) use ($where) {
             $query->where('product_type', $where['product_type']);
+        })->when(!empty($where['item_status']), function ($query) use ($where) {
+            if ($where['item_status'] === Constants::AKTIF) {
+                $query->whereIn('item_status', [Constants::AKTIF, 'AKTIF']);
+            } else {
+                $query->where('item_status', $where['item_status']);
+            }
         })->when(!empty($where['category_id']), function ($query) use ($where) {
             $query->whereHas('categories', function ($q) use ($where) {
                 $q->where('category_id', $where['category_id']);
@@ -64,6 +70,12 @@ class ProductRepo extends ElequentRepository
             });
         })->when(!empty($where['product_type']), function ($query) use ($where) {
             $query->where('product_type', $where['product_type']);
+        })->when(!empty($where['item_status']), function ($query) use ($where) {
+            if ($where['item_status'] === Constants::AKTIF) {
+                $query->whereIn('item_status', [Constants::AKTIF, 'AKTIF']);
+            } else {
+                $query->where('item_status', $where['item_status']);
+            }
         })->when(!empty($where['category_id']), function ($query) use ($where) {
             $query->whereHas('categories', function ($q) use ($where) {
                 $q->where('category_id', $where['category_id']);

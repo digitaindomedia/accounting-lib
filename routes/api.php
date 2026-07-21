@@ -126,6 +126,7 @@ Route::group([
     Route::get('product-find-by-id',[ProductController::class, 'show']);
     Route::delete('product-delete-by-id',[ProductController::class, 'destroy']);
     Route::delete('product-delete-all',[ProductController::class, 'deleteAll']);
+    Route::patch('product-toggle-status',[ProductController::class, 'toggleStatus']);
     Route::get('product-convertion-get-by-product',[ProductController::class, 'getAllProductConvertion']);
     Route::post('product-convertion-save-data',[ProductController::class, 'storeProductConvertion']);
     Route::get('product-count',[ProductController::class, 'getCountProduct']);

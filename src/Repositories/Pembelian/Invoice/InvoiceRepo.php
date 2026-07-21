@@ -176,7 +176,7 @@ class InvoiceRepo extends ElequentRepository
             'tax_type' => $request->tax_type ?? '',
             'discount_type' => $request->discount_type ?? '',
             'vendor_id' => $request->vendor_id,
-            'invoice_type' => $request->invoice_type,
+            'invoice_type' => $request->invoice_type ?? ProductType::ITEM,
             'input_type' => $request->input_type,
             'order_id' => $request->order_id ?? '0',
             'dp_nominal' => $request->dp_nominal ?? '0',

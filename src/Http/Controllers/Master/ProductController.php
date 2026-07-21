@@ -11,6 +11,7 @@ use Icso\Accounting\Models\Master\ProductConvertion;
 use Icso\Accounting\Models\Master\ProductMeta;
 use Icso\Accounting\Repositories\Master\Product\ProductConvertionRepo;
 use Icso\Accounting\Repositories\Master\Product\ProductRepo;
+use Icso\Accounting\Utils\Constants;
 use Icso\Accounting\Utils\ProductType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,7 +38,7 @@ class ProductController extends Controller
         $page = $request->page;
         $perpage = $request->perpage;
 
-        $filters = $request->only(['product_type', 'category_id']);
+        $filters = $request->only(['product_type', 'category_id', 'item_status']);
         return compact('search', 'page', 'perpage', 'filters');
     }
 
@@ -169,6 +170,48 @@ class ProductController extends Controller
             $this->data['message'] = 'Data gagal dihapus';
             $this->data['data'] = array();
         }
+        return response()->json($this->data);
+    }
+
+    public function toggleStatus(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'id' => 'required',
+            'item_status' => 'required|in:' . Constants::AKTIF . ',' . Constants::INAKTIF,
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => $validator->errors()->first(),
+            ]);
+        }
+
+        try {
+            $product = Product::find($request->id);
+            if (!$product) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Data produk tidak ditemukan',
+                ]);
+            }
+
+            $product->item_status = $request->item_status;
+            $product->updated_by = $request->user_id;
+            $product->updated_at = now();
+            $product->save();
+
+            $this->data['status'] = true;
+            $this->data['message'] = $request->item_status === Constants::AKTIF
+                ? 'Produk berhasil diaktifkan'
+                : 'Produk berhasil dinonaktifkan';
+            $this->data['data'] = $product;
+        } catch (\Exception $e) {
+            Log::error('[ProductController][toggleStatus] ' . $e->getMessage());
+            $this->data['status'] = false;
+            $this->data['message'] = 'Status produk gagal diubah';
+        }
+
         return response()->json($this->data);
     }
 

@@ -3,6 +3,7 @@ namespace Icso\Accounting\Repositories\Akuntansi\Jurnal;
 
 
 use Exception;
+use Icso\Accounting\Enums\InvoiceStatusEnum;
 use Faker\Core\File;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Models\Akuntansi\BukuPembantu;
@@ -211,10 +212,12 @@ class JurnalRepo extends ElequentRepository
                 return false;
             }
 
-        }catch (\Exception $e) {
+        }catch (\Throwable $e) {
             // Rollback Transaction
-            Log::error($e->getMessage());
-            DB::rollBack();
+            Log::error('[JurnalRepo][store] ' . $e->getMessage());
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             return false;
         }
     }
@@ -363,7 +366,7 @@ class JurnalRepo extends ElequentRepository
                 $jurnalTransaksiRepo->create($arrJurnal);
 
                 //data session adalah data baik pelunasan atau penambahan
-                if (!empty($val->data_session)) {
+                if (!empty($dataSession)) {
                     $sess = $val->data_session;
                     $passData = array(
                         'debet' => $nomDebet,
@@ -395,7 +398,7 @@ class JurnalRepo extends ElequentRepository
             if ($sess->var_type == VarType::PELUNASAN) {
                 $customerId = $sess->var_vendor->id;
                // $customerName = $sess->var_customer->customer_name;
-                $invoiceNo = $sess->var_no_ref;
+                $invoiceNo = $sess->var_no_ref ?? '';
                 $invoiceId = '0';
                 $findInvoice = $salesInvoiceRepo->findWhere(array('invoice_no' => $invoiceNo));
                 if(!empty($findInvoice)){
@@ -426,8 +429,8 @@ class JurnalRepo extends ElequentRepository
             else {
                 $customerId = $sess->var_vendor->id;
                 $customerName = $sess->var_vendor->vendor_name;
-                $invoiceNo = $sess->var_no_ref;
-                $ket = $sess->var_note_ref;
+                $invoiceNo = $sess->var_no_ref ?? '';
+                $ket = $sess->var_note_ref ?? '';
                 $nominal = 0;
                 if($data['debet'] != '0')
                 {
@@ -452,17 +455,23 @@ class JurnalRepo extends ElequentRepository
                     $request->invoice_type = 'item';
                     $request->input_type = InputType::SALES;
                     $resSalesInvoice = $salesInvoiceRepo->store($request);
+                    if (!$resSalesInvoice) {
+                        throw new Exception('Gagal membuat invoice penjualan dari data session jurnal');
+                    }
                 }
             }
         } else if($sess->var_kontak == 'supplier'){
             if($sess->var_type == VarType::PELUNASAN)
             {
                 $supplierId = $sess->var_vendor->id;
-                $invoiceNo = $sess->var_no_ref;
+                $invoiceNo = $sess->var_no_ref ?? '';
                 $invoiceId = '0';
                 $findPurchaseInvoice = $purchaseInvoiceRepo->findWhere(array('invoice_no' => $invoiceNo));
                 if(!empty($findPurchaseInvoice)){
                     $invoiceId = $findPurchaseInvoice->id;
+                }
+                if (empty($invoiceNo) || empty($findPurchaseInvoice)) {
+                    throw new Exception('Invoice pembelian untuk pelunasan supplier tidak ditemukan');
                 }
                 $nominal = 0;
                 if($data['debet'] != '0')
@@ -486,8 +495,8 @@ class JurnalRepo extends ElequentRepository
             } else {
                 $supplierId = $sess->var_vendor->id;
                 $supplierName = $sess->var_vendor->vendor_name;
-                $invoiceNo = $sess->var_no_ref;
-                $ket = $sess->var_note_ref;
+                $invoiceNo = $sess->var_no_ref ?? '';
+                $ket = $sess->var_note_ref ?? '';
                 $nominal = 0;
                 if($data['debet'] != '0')
                 {
@@ -497,21 +506,41 @@ class JurnalRepo extends ElequentRepository
                 {
                     $nominal = $data['kredit'];
                 }
-                $request = new Request();
-                $request->jurnal_id = $data['jurnal_id'];
-                $request->note = $ket;
-                $request->subtotal = $nominal;
-                $request->grandtotal = $nominal;
-                $request->vendor_id = $supplierId;
-                $request->supplier_name = $supplierName;
-                $request->invoice_no = $invoiceNo;
-                $request->invoice_date = $data['jurnal_date'];
-                $request->due_date = $data['jurnal_date'];
-                $request->user_id = $data['user_id'];
-                $request->coa_id = $data['coa_id'];
-                $request->invoice_type = $data['invoice_type'] ?? 'item';
-                $request->input_type = InputType::JURNAL;
-                $resPurchaseInvoice = $purchaseInvoiceRepo->store($request);
+                DB::statement('SET FOREIGN_KEY_CHECKS=0');
+                try {
+                    $resPurchaseInvoice = PurchaseInvoicing::create([
+                        'jurnal_id' => $data['jurnal_id'],
+                        'note' => $ket,
+                        'subtotal' => $nominal,
+                        'grandtotal' => $nominal,
+                        'vendor_id' => $supplierId,
+                        'invoice_no' => $invoiceNo,
+                        'invoice_date' => $data['jurnal_date'],
+                        'due_date' => $data['jurnal_date'],
+                        'created_by' => $data['user_id'],
+                        'updated_by' => $data['user_id'],
+                        'coa_id' => $data['coa_id'],
+                        'invoice_type' => $data['invoice_type'] ?? 'item',
+                        'input_type' => InputType::JURNAL,
+                        'invoice_status' => InvoiceStatusEnum::BELUM_LUNAS,
+                        'order_id' => '0',
+                        'dp_nominal' => '0',
+                        'discount' => '0',
+                        'discount_type' => '',
+                        'discount_total' => '0',
+                        'tax_total' => '0',
+                        'tax_type' => '',
+                        'dpp_total' => '0',
+                        'warehouse_id' => '0',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                } finally {
+                    DB::statement('SET FOREIGN_KEY_CHECKS=1');
+                }
+                if (!$resPurchaseInvoice) {
+                    throw new Exception('Gagal membuat invoice pembelian dari data session jurnal');
+                }
             }
         }
         else if($sess->var_kontak == 'custom')
@@ -653,7 +682,7 @@ class JurnalRepo extends ElequentRepository
                 $jurnalTransaksiRepo->create($arrJurnal);
 
                 //data session adalah data baik pelunasan atau penambahan
-                if (!empty($val->data_session)) {
+                if (!empty($dataSession)) {
                     $sess = $val->data_session;
                     $passData = array(
                         'debet' => $nomDebet,

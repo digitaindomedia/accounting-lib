@@ -997,6 +997,9 @@ class InvoiceRepo extends ElequentRepository
         $invoiceRepo = new self(new PurchaseInvoicing(), app(ActivityLogService::class));
         $paymentInvoiceRepo = new PaymentInvoiceRepo(new PurchasePaymentInvoice());
         $findInvoice = $invoiceRepo->findOne($idInvoice);
+        if (empty($findInvoice)) {
+            return;
+        }
         $paid = $paymentInvoiceRepo->getAllPaymentByInvoiceId($idInvoice);
         if($paid >= $findInvoice->grandtotal) {
             $invoiceRepo->update(array('invoice_status' => StatusEnum::LUNAS), $idInvoice);

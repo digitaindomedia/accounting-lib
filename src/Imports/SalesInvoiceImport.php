@@ -153,11 +153,7 @@ class SalesInvoiceImport implements ToCollection
 
     public function insertInvoiceEntry($invoiceNo, $invoiceDate, $note, $warehouseId, $vendorId, $discount,$discountType,$taxType,$itemCode,$qty,$unitCode,$price,$diskonItem,$diskonItemType,$taxPercentage)
     {
-        $discountVal = 0;
-        if(isset($discount) && $discount !== ''){
-             $discountVal = Utility::remove_commas($discount);
-             if($discountVal === '') $discountVal = 0;
-        }
+        $discountVal = $this->normalizeNumericValue($discount);
 
         $arrData = [
             'invoice_no' => $invoiceNo,
@@ -208,29 +204,14 @@ class SalesInvoiceImport implements ToCollection
             $taxId = TaxRepo::getTaxId($taxPercentage);
         }
 
-        $subtotal = Helpers::hitungSubtotal($qty,$price,$diskonItem,$diskonItemType);
-        
-        $priceVal = 0;
-        if(isset($price) && $price !== ''){
-             $priceVal = Utility::remove_commas($price);
-             if($priceVal === '') $priceVal = 0;
-        }
-        
-        $discountVal = 0;
-        if(isset($diskonItem) && $diskonItem !== ''){
-             $discountVal = Utility::remove_commas($diskonItem);
-             if($discountVal === '') $discountVal = 0;
-        }
-        
-        $subtotalVal = 0;
-        if(isset($subtotal) && $subtotal !== ''){
-             $subtotalVal = Utility::remove_commas($subtotal);
-             if($subtotalVal === '') $subtotalVal = 0;
-        }
+        $qtyVal = $this->normalizeNumericValue($qty);
+        $priceVal = $this->normalizeNumericValue($price);
+        $discountVal = $this->normalizeNumericValue($diskonItem);
+        $subtotalVal = Helpers::hitungSubtotal($qtyVal,$priceVal,$discountVal,$diskonItemType);
 
         SalesOrderProduct::create([
-            'qty' => $qty,
-            'qty_left' => $qty,
+            'qty' => $qtyVal,
+            'qty_left' => $qtyVal,
             'product_id' => $productId,
             'unit_id' => $unitId,
             'tax_id' => $taxId,
@@ -244,6 +225,26 @@ class SalesInvoiceImport implements ToCollection
             'order_id' => 0,
             'invoice_id' => $invoiceId
         ]);
+    }
+
+    private function normalizeNumericValue($value): int|float
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return $value;
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0;
+        }
+
+        $value = Utility::remove_commas($value);
+
+        return is_numeric($value) ? $value + 0 : 0;
     }
 
     private function resolveProductUnitId(Product $product, $unitCode)

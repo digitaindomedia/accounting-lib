@@ -186,8 +186,12 @@ class Helpers
 
     public static function hitungSubtotal($qty,$price,$discount,$discountType): mixed
     {
+        $qty = self::normalizeNumericValue($qty);
+        $price = self::normalizeNumericValue($price);
+        $discount = self::normalizeNumericValue($discount);
+
         $subtotal = $qty * $price;
-        if(!empty($discount)){
+        if($discount != 0){
             if($discountType == TypeEnum::DISCOUNT_TYPE_PERCENT){
                 $discount = ($discount/100) * $subtotal;
             }
@@ -198,13 +202,36 @@ class Helpers
 
     public static function hitungGrandTotal($subtotal,$discount,$discountType): mixed
     {
-        if(!empty($discount)){
+        $subtotal = self::normalizeNumericValue($subtotal);
+        $discount = self::normalizeNumericValue($discount);
+
+        if($discount != 0){
             if($discountType == TypeEnum::DISCOUNT_TYPE_PERCENT){
                 $discount = ($discount/100) * $subtotal;
             }
         }
         $subtotal = $subtotal - $discount;
         return ['grandtotal' => $subtotal, 'discount' => $discount];
+    }
+
+    private static function normalizeNumericValue($value): int|float
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return $value;
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0;
+        }
+
+        $value = Utility::remove_commas($value);
+
+        return is_numeric($value) ? $value + 0 : 0;
     }
 
     public static function getNamaUser($idUser)

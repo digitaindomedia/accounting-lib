@@ -13,6 +13,7 @@ use Icso\Accounting\Utils\ProductType;
 use Icso\Accounting\Utils\VendorType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -96,14 +97,23 @@ class VendorController extends Controller
 
     public function destroy(Request $request)
     {
-        $id = $request->id;
+        $id = (int) $request->id;
+        $userId = (int) $request->user_id;
+
+        if (empty($id) || empty($userId)) {
+            $this->data['status'] = false;
+            $this->data['message'] = empty($id) ? 'ID vendor wajib diisi' : 'User ID wajib diisi';
+
+            return response()->json($this->data);
+        }
+
         try
         {
             $data = Vendor::find($id);
             if($data)
             {
                 if($data->canDelete()){
-                    $deleted = $this->vendorRepo->destroy($id, $request->user_id);
+                    $deleted = $this->vendorRepo->destroy($id, $userId);
                     if ($deleted) {
                         $this->data['status'] = true;
                         $this->data['message'] = 'Data berhasil dihapus ';
@@ -120,8 +130,8 @@ class VendorController extends Controller
                 $this->data['status'] = false;
                 $this->data['message'] = 'Data gagal dihapus';
             }
-        } catch (\Exception $e) {
-            echo $e->getMessage();
+        } catch (\Throwable $e) {
+            Log::error('[VendorController][destroy] ' . $e->getMessage());
             $this->data['status'] = false;
             $this->data['message'] = 'Terjadi kesalahan dalam hapus data';
         }

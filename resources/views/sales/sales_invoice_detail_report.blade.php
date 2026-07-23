@@ -1,4 +1,11 @@
-@php use Icso\Accounting\Enums\TypeEnum; @endphp
+@php
+    $separator = \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat();
+    $totalSubtotal = 0;
+    $totalDiscount = 0;
+    $totalTax = 0;
+    $totalGrandTotal = 0;
+    $totalHpp = 0;
+@endphp
 <!DOCTYPE html>
 <html>
 <head>
@@ -18,158 +25,93 @@
         th {
             background-color: #f2f2f2;
         }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .font-bold {
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
 <table>
     <thead>
     <tr>
-        <td style="text-align: center" colspan="6">Laporan Invoice Penjualan</td>
+        <td class="text-center font-bold" colspan="10">Rekapan Invoice Penjualan</td>
     </tr>
     <tr>
-        <td style="text-align: center" colspan="6">
+        <td class="text-center" colspan="10">
             {{ \Icso\Accounting\Utils\Utility::convert_tanggal($params['fromDate'])}}
             - {{\Icso\Accounting\Utils\Utility::convert_tanggal($params['untilDate'])}}</td>
     </tr>
     <tr>
-        <td style="text-align: center" colspan="6"></td>
+        <td class="text-center" colspan="10"></td>
     </tr>
     <tr>
+        <th>No</th>
         <th>Nomor Transaksi</th>
         <th>Tanggal</th>
         <th>No Order/Pengiriman</th>
         <th>Nama Customer</th>
+        <th class="text-right">Subtotal</th>
+        <th class="text-right">Diskon</th>
+        <th class="text-right">Pajak</th>
+        <th class="text-right">Grand Total</th>
+        <th class="text-right">Total HPP</th>
     </tr>
     </thead>
     <tbody>
-    @foreach ($data as $post)
-        <tr>
-            <td>
-                {{$post->invoice_no}}
-            </td>
-            <td>
-                {{$post->invoice_date}}
-            </td>
-            <td>
-                @php
-                    $deliveryNos = !empty($post->invoicedelivery)
-                        ? $post->invoicedelivery->map(function ($item) {
-                            return !empty($item->delivery) ? $item->delivery->delivery_no : null;
-                        })->filter()->implode(', ')
-                        : '';
-                @endphp
-                {{ !empty($deliveryNos) ? $deliveryNos : (!empty($post->order) ? $post->order->order_no : "-") }}
-            </td>
-            <td>
-                {{ $post->vendor->vendor_company_name }}
-            </td>
-        </tr>
+    @forelse ($data as $post)
         @php
-            $arrTax = [];
-            $colspan = 5;
-        @endphp
-        <tr>
-            <td>Barang</td>
-            <td>Qty</td>
-            <td style="text-align: right">Harga</td>
-            <td style="text-align: right">HPP</td>
-            <td style="text-align: right">Diskon</td>
-            <td style="text-align: right">Subtotal</td>
-        </tr>
-        @if(empty($post->order))
-            @foreach ($post->orderproduct as $item)
-                @php
-                    $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, $item->tax_group);
-                    $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($item->subtotal,$item->tax_id,$item->tax_type,$item->tax_percentage);
-                @endphp
-                <tr>
-                    <td>{{ !empty($item->product) ? $item->product->item_name."(".$item->product->item_code.")" : $item->service_name }}</td>
-                    <td>
-                        {{ $item->qty }}
-                        {{ !empty($item->unit) && !empty($item->unit->unit_code) ? $item->unit->unit_code : "" }}
-                    </td>
-                    <td style="text-align: right">{{ number_format($item->price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                    <td style="text-align: right">{{ number_format($item->hpp_price ?? 0, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                    <td style="text-align: right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
-                    <td style="text-align: right">{{ number_format($item->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                </tr>
-                @php
-                    if(!empty($item->tax_id)){
-                        $arrTax[] = array(
-                            'id' => $item->tax_id,
-                            'name' => $taxname,
-                            'total' => $taxCalc[TypeEnum::PPN]
-                        );
-                    }
-                @endphp
-            @endforeach
-        @else
-            @foreach ($post->invoicedelivery as $item)
-                @foreach($item->delivery->deliveryproduct as $val)
-                    @php
-                        $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($val->tax_id, $val->tax_percentage, $val->tax_group);
-                        $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($val->subtotal,$val->tax_id,$val->tax_type,$val->tax_percentage);
-                        if(!empty($val->tax_id)){
-                            $arrTax[] = array(
-                                'id' => $val->tax_id,
-                                'name' => $taxname,
-                                'total' => $taxCalc[TypeEnum::PPN]
-                            );
-                        }
-                    @endphp
-                    <tr>
-                        <td>{{ !empty($val->product) ? $val->product->item_name."(".$val->product->item_code.")" : "" }}</td>
-                        <td>
-                            {{ $val->qty }}
-                            {{ !empty($val->unit) && !empty($val->unit->unit_code) ? $val->unit->unit_code : "" }}
-                        </td>
-                        <td style="text-align: right">{{ number_format($val->sell_price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                        <td style="text-align: right">{{ number_format($val->hpp_price ?? 0, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                        <td style="text-align: right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($val->discount, $val->discount_type) }}</td>
-                        <td style="text-align: right">{{ number_format($val->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}</td>
-                    </tr>
-                @endforeach
-            @endforeach
-        @endif
+            $deliveryNos = !empty($post->invoicedelivery)
+                ? $post->invoicedelivery->map(function ($item) {
+                    return !empty($item->delivery) ? $item->delivery->delivery_no : null;
+                })->filter()->implode(', ')
+                : '';
 
-        <tr>
-            <td colspan="{{$colspan}}" style="text-align: right">Subtotal</td>
-            <td style="text-align: right">{{number_format($post->subtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
-        </tr>
-        <tr>
-            <td style="text-align: right" colspan="{{$colspan}}">Diskon</td>
-            <td style="text-align: right">{{number_format($post->total_discount, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
-        </tr>
-        @php
-            if(!empty($arrTax)){
-                $resultTax = \Icso\Accounting\Utils\Helpers::sumTotalsByTaxId($arrTax);
-                if(!empty($resultTax)){
-                    foreach ($resultTax as $item){
+            $subtotal = (float) ($post->subtotal ?? 0);
+            $discount = (float) ($post->discount_total ?? $post->total_discount ?? 0);
+            $tax = (float) ($post->tax_total ?? 0);
+            $grandTotal = (float) ($post->grandtotal ?? 0);
+            $hpp = (float) ($post->hpp_total ?? 0);
+
+            $totalSubtotal += $subtotal;
+            $totalDiscount += $discount;
+            $totalTax += $tax;
+            $totalGrandTotal += $grandTotal;
+            $totalHpp += $hpp;
         @endphp
         <tr>
-            <td style="text-align: right" colspan="{{$colspan}}">{{$item['name']}}</td>
-            <td style="text-align: right">{{number_format($item['total'], \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
+            <td>{{ $loop->iteration }}</td>
+            <td>{{ $post->invoice_no }}</td>
+            <td>{{ $post->invoice_date }}</td>
+            <td>{{ !empty($deliveryNos) ? $deliveryNos : (!empty($post->order) ? $post->order->order_no : "-") }}</td>
+            <td>{{ optional($post->vendor)->vendor_company_name ?? optional($post->vendor)->vendor_name }}</td>
+            <td class="text-right">{{ number_format($subtotal, $separator) }}</td>
+            <td class="text-right">{{ number_format($discount, $separator) }}</td>
+            <td class="text-right">{{ number_format($tax, $separator) }}</td>
+            <td class="text-right">{{ number_format($grandTotal, $separator) }}</td>
+            <td class="text-right">{{ number_format($hpp, $separator) }}</td>
         </tr>
-        @php
-            }
-        }
-    }
-        @endphp
+    @empty
         <tr>
-            <td style="text-align: right" colspan="{{$colspan}}">Grand Total</td>
-            <td style="text-align: right">{{number_format($post->grandtotal, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
+            <td class="text-center" colspan="10">Data tidak ditemukan</td>
         </tr>
-        <tr>
-            <td style="text-align: right" colspan="{{$colspan}}">Total HPP</td>
-            <td style="text-align: right">{{number_format($post->hpp_total ?? 0, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat())}}</td>
-        </tr>
-        <tr>
-            <td colspan="6"></td>
-        </tr>
-        <tr>
-            <td colspan="6"></td>
-        </tr>
-    @endforeach
+    @endforelse
+    <tr>
+        <td class="text-right font-bold" colspan="5">Total</td>
+        <td class="text-right font-bold">{{ number_format($totalSubtotal, $separator) }}</td>
+        <td class="text-right font-bold">{{ number_format($totalDiscount, $separator) }}</td>
+        <td class="text-right font-bold">{{ number_format($totalTax, $separator) }}</td>
+        <td class="text-right font-bold">{{ number_format($totalGrandTotal, $separator) }}</td>
+        <td class="text-right font-bold">{{ number_format($totalHpp, $separator) }}</td>
+    </tr>
     </tbody>
 </table>
 </body>

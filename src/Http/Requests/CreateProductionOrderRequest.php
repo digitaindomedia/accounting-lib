@@ -31,6 +31,8 @@ class CreateProductionOrderRequest extends FormRequest
             'output_unit_id' => ['required'],
             'planned_qty' => ['required', 'numeric', 'gt:0'],
             'actual_qty' => ['nullable', 'numeric', 'gte:0'],
+            'status_production' => ['nullable', 'in:draft,finished,cancelled'],
+            'manual_material_override' => ['nullable', 'boolean'],
             'materials' => ['nullable', 'array'],
             'materials.*.product_id' => ['required_with:materials'],
             'materials.*.unit_id' => ['required_with:materials'],

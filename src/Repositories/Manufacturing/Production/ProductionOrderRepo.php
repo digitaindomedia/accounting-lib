@@ -107,7 +107,8 @@ class ProductionOrderRepo extends ElequentRepository
             ? Utility::changeDateFormat($request->production_date)
             : date('Y-m-d');
         $plannedQty = (float) $request->planned_qty;
-        $actualQty = !empty($request->actual_qty) ? (float) $request->actual_qty : $plannedQty;
+        $actualQty = $this->requestHasValue($request, 'actual_qty') ? (float) $request->actual_qty : $plannedQty;
+        $statusProduction = !empty($request->status_production) ? $request->status_production : 'draft';
 
         $arrData = [
             'ref_no' => !empty($request->ref_no) ? $request->ref_no : $this->generateRefNo(),
@@ -118,7 +119,7 @@ class ProductionOrderRepo extends ElequentRepository
             'output_unit_id' => $request->output_unit_id,
             'planned_qty' => $plannedQty,
             'actual_qty' => $actualQty,
-            'status_production' => !empty($request->status_production) ? $request->status_production : 'finished',
+            'status_production' => $statusProduction,
             'source_type' => !empty($request->source_type) ? $request->source_type : 'manual',
             'source_id' => !empty($request->source_id) ? $request->source_id : 0,
             'coa_id' => !empty($request->coa_id) ? $request->coa_id : 0,
@@ -143,16 +144,28 @@ class ProductionOrderRepo extends ElequentRepository
 
             $materials = $this->resolveMaterials($request, $plannedQty, $actualQty);
             $results = $this->resolveResults($request, $actualQty);
+            $totalResultGood = array_reduce($results, function ($total, $item) {
+                return $total + $this->numericValue($item, 'qty_good', 0);
+            }, 0);
+
+            if (!empty($results) && abs($actualQty - $totalResultGood) > 0.0001) {
+                throw new \RuntimeException('Qty aktual harus sama dengan total qty good.');
+            }
 
             $materialRows = [];
             foreach ($materials as $item) {
+                $qtyPlanned = $this->numericValue($item, 'qty_planned', 0);
+                $qtyActual = $this->hasValue($item, 'qty_actual')
+                    ? $this->numericValue($item, 'qty_actual', 0)
+                    : $qtyPlanned;
+
                 $materialRows[] = ProductionOrderMaterial::create([
                     'production_order_id' => $productionId,
                     'bom_item_id' => $item->bom_item_id ?? 0,
                     'product_id' => $item->product_id,
                     'unit_id' => $item->unit_id,
-                    'qty_planned' => !empty($item->qty_planned) ? $item->qty_planned : 0,
-                    'qty_actual' => !empty($item->qty_actual) ? $item->qty_actual : (!empty($item->qty_planned) ? $item->qty_planned : 0),
+                    'qty_planned' => $qtyPlanned,
+                    'qty_actual' => $qtyActual,
                     'hpp' => 0,
                     'subtotal' => 0,
                     'line_type' => $item->line_type ?? 'material',
@@ -166,8 +179,8 @@ class ProductionOrderRepo extends ElequentRepository
                     'production_order_id' => $productionId,
                     'product_id' => $item->product_id,
                     'unit_id' => $item->unit_id,
-                    'qty_good' => !empty($item->qty_good) ? $item->qty_good : 0,
-                    'qty_waste' => !empty($item->qty_waste) ? $item->qty_waste : 0,
+                    'qty_good' => $this->numericValue($item, 'qty_good', 0),
+                    'qty_waste' => $this->numericValue($item, 'qty_waste', 0),
                     'hpp' => 0,
                     'subtotal' => 0,
                     'result_role' => $item->result_role ?? 'main',
@@ -175,7 +188,17 @@ class ProductionOrderRepo extends ElequentRepository
                 ]);
             }
 
-            $this->postingInventoryAndJournal($productionId, $materialRows, $resultRows);
+            if ($statusProduction === 'finished') {
+                $totalGoodQty = array_reduce($resultRows, function ($total, $item) {
+                    return $total + (float) $item->qty_good;
+                }, 0);
+
+                if ($totalGoodQty <= 0) {
+                    throw new \RuntimeException('Qty good harus lebih dari 0 saat produksi selesai.');
+                }
+
+                $this->postingInventoryAndJournal($productionId, $materialRows, $resultRows);
+            }
 
             DB::commit();
             return true;
@@ -198,7 +221,7 @@ class ProductionOrderRepo extends ElequentRepository
 
     protected function resolveMaterials(Request $request, float $plannedQty, float $actualQty): array
     {
-        if (!empty($request->materials)) {
+        if (!empty($request->materials) && (empty($request->bom_id) || $request->boolean('manual_material_override'))) {
             return $this->normalizeArrayInput($request->materials);
         }
 
@@ -397,6 +420,21 @@ class ProductionOrderRepo extends ElequentRepository
         }
 
         return $rows;
+    }
+
+    protected function requestHasValue(Request $request, string $field): bool
+    {
+        return $request->has($field) && $request->input($field) !== null && $request->input($field) !== '';
+    }
+
+    protected function hasValue(object $row, string $field): bool
+    {
+        return property_exists($row, $field) && $row->{$field} !== null && $row->{$field} !== '';
+    }
+
+    protected function numericValue(object $row, string $field, float $default = 0): float
+    {
+        return $this->hasValue($row, $field) ? (float) $row->{$field} : $default;
     }
 
     protected function generateRefNo(): string

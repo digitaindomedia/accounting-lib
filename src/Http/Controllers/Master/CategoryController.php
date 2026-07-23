@@ -6,10 +6,8 @@ use Icso\Accounting\Exports\CategoryExport;
 use Icso\Accounting\Http\Requests\CreateCategoryRequest;
 use Icso\Accounting\Models\Master\Category;
 use Icso\Accounting\Repositories\Master\CategoryRepo;
-use Icso\Accounting\Services\ActivityLogService;
-use Icso\Accounting\Utils\RequestAuditHelper;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -95,28 +93,30 @@ class CategoryController extends Controller
 
     public function destroy(Request $request)
     {
-        $id = $request->id;
+        $id = (int) $request->id;
+        $userId = (int) $request->user_id;
+
+        if (empty($id) || empty($userId)) {
+            $this->data['status'] = false;
+            $this->data['message'] = empty($id) ? 'ID kategori wajib diisi' : 'User ID wajib diisi';
+
+            return response()->json($this->data);
+        }
+
         try
         {
             $data = Category::find($id);
             if($data)
             {
                 if($data->canDelete()){
-                    $oldData = $data;
-                    $data->delete();
-                    ActivityLogService::insertLog([
-                        'user_id'         => $request->user_id,
-                        'action'          => 'Hapus data master kategori dengan nama '.$oldData->category_name,
-                        'model_type'      => Category::class,
-                        'model_id'        => $id,
-                        'old_values'      => $oldData,
-                        'new_values'      => null,
-                        'request_payload' => RequestAuditHelper::sanitize(request()),
-                        'ip_address'      => request()->ip(),
-                        'user_agent'      => request()->userAgent(),
-                    ]);
-                    $this->data['status'] = true;
-                    $this->data['message'] = 'Data berhasil dihapus ';
+                    $deleted = $this->categoryRepo->destroy($id, $userId);
+                    if ($deleted) {
+                        $this->data['status'] = true;
+                        $this->data['message'] = 'Data berhasil dihapus ';
+                    } else {
+                        $this->data['status'] = false;
+                        $this->data['message'] = 'Data gagal dihapus';
+                    }
                 } else {
                     $this->data['status'] = false;
                     $this->data['message'] = 'Data tidak bisa dihapus ';
@@ -127,8 +127,8 @@ class CategoryController extends Controller
                 $this->data['status'] = false;
                 $this->data['message'] = 'Data tidak ditemukan';
             }
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('[CategoryController][destroy] ' . $e->getMessage());
             $this->data['status'] = false;
             $this->data['message'] = 'Terjadi kesalahan dalam hapus data';
         }
@@ -137,18 +137,32 @@ class CategoryController extends Controller
 
     public function deleteAll(Request $request)
     {
-        $reqData = $request->ids;
+        $reqData = $request->ids ?? [];
+        $userId = (int) $request->user_id;
         $successDelete = 0;
         $failedDelete = 0;
-        if(count($reqData) > 0){
+
+        if (empty($userId)) {
+            $this->data['status'] = false;
+            $this->data['message'] = 'User ID wajib diisi';
+            $this->data['data'] = array();
+
+            return response()->json($this->data);
+        }
+
+        if(is_array($reqData) && count($reqData) > 0){
             foreach ($reqData as $res){
-                $id = $res['id'];
+                $id = (int) ($res['id'] ?? 0);
                 $data = Category::find($id);
                 if($data)
                 {
                     if($data->canDelete()) {
-                        $data->delete();
-                        $successDelete = $successDelete + 1;
+                        $deleted = $this->categoryRepo->destroy($id, $userId);
+                        if ($deleted) {
+                            $successDelete = $successDelete + 1;
+                        } else {
+                            $failedDelete = $failedDelete + 1;
+                        }
                     }
                     else {
                         $failedDelete = $failedDelete + 1;

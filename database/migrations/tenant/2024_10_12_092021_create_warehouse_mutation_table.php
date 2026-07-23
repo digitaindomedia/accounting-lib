@@ -24,6 +24,7 @@ return new class extends Migration
             $table->string('mutation_type', 30);
             $table->string('reason', 30)->nullable();
             $table->unsignedBigInteger('mutation_out_id');
+            $table->unsignedBigInteger('quotation_id')->default(0);
             $table->dateTime('created_at')->default(now());
             $table->unsignedBigInteger('created_by');
             $table->dateTime('updated_at')->default(now());

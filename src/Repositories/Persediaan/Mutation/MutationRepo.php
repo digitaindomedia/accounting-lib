@@ -93,6 +93,7 @@ class MutationRepo extends ElequentRepository
             $oldData = $this->findOne($id, [], [
                 'fromwarehouse',
                 'mutation',
+                'mutation.mutationproduct',
                 'towarehouse',
                 'mutationproduct',
                 'salesquotation',
@@ -101,6 +102,10 @@ class MutationRepo extends ElequentRepository
             ])?->toArray();
         }
         $arrData = $this->prepareMutationData($request, $userId);
+        if (!$this->isMutationInQuantityValid($request)) {
+            Log::warning('[MutationRepo][store] Qty mutasi masuk melebihi sisa mutasi keluar');
+            return false;
+        }
         DB::beginTransaction();
         try {
             $res = $this->saveMutation($arrData, $id, $userId);
@@ -234,6 +239,54 @@ class MutationRepo extends ElequentRepository
                 MutationProduct::create($arrItem);
             }
         }
+    }
+
+    private function isMutationInQuantityValid(Request $request): bool
+    {
+        if ($request->mutation_type !== VarType::MUTATION_TYPE_IN || empty($request->mutation_out_id)) {
+            return true;
+        }
+
+        if (empty($request->mutationproduct)) {
+            return true;
+        }
+
+        $products = is_array($request->mutationproduct)
+            ? json_decode(json_encode($request->mutationproduct))
+            : $request->mutationproduct;
+
+        $requestedQtyByProductUnit = collect($products)
+            ->groupBy(fn ($item) => $item->product_id . '-' . $item->unit_id)
+            ->map(fn ($rows) => $rows->sum(fn ($row) => !empty($row->qty) ? (float) Utility::remove_commas($row->qty) : 0));
+
+        $mutationOutQtyByProductUnit = MutationProduct::where('mutation_id', $request->mutation_out_id)
+            ->get()
+            ->groupBy(fn ($row) => $row->product_id . '-' . $row->unit_id)
+            ->map(fn ($rows) => $rows->sum('qty'));
+
+        $mutationInIds = Mutation::where('mutation_out_id', $request->mutation_out_id)
+            ->where('mutation_type', VarType::MUTATION_TYPE_IN)
+            ->when(!empty($request->id), fn ($query) => $query->where('id', '!=', $request->id))
+            ->pluck('id');
+
+        $receivedQtyByProductUnit = collect();
+        if ($mutationInIds->isNotEmpty()) {
+            $receivedQtyByProductUnit = MutationProduct::whereIn('mutation_id', $mutationInIds)
+                ->get()
+                ->groupBy(fn ($row) => $row->product_id . '-' . $row->unit_id)
+                ->map(fn ($rows) => $rows->sum('qty'));
+        }
+
+        foreach ($requestedQtyByProductUnit as $key => $requestedQty) {
+            $qtyOut = (float) $mutationOutQtyByProductUnit->get($key, 0);
+            $alreadyReceivedQty = (float) $receivedQtyByProductUnit->get($key, 0);
+
+            if ($qtyOut <= 0 || ($alreadyReceivedQty + (float) $requestedQty) > ($qtyOut + 0.00001)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function handleFileUploads($request, $idAdjustment)

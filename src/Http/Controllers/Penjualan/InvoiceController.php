@@ -955,7 +955,8 @@ class InvoiceController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params);
 
-        $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage, $where);
+        $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
+        $data = $this->invoiceRepo->getAllDataBy($search, 0, $total, $where);
         $data = $this->attachHppToInvoiceData($data);
         if($type == 'excel'){
             return $this->downloadExcel($data, $params, $filename);
@@ -972,7 +973,7 @@ class InvoiceController extends Controller
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_invoice_detail_report', [
             'data' => $data,
             'params' => $params,
-        ])->setPaper('a4', 'portrait');
+        ])->setPaper('a4', 'landscape');
 
         if ($request->get('mode') === 'print') {
             return $pdf->stream($filename);

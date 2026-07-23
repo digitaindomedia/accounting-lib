@@ -108,7 +108,12 @@ class CategoryRepo extends ElequentRepository{
 
     public function destroy(int $id, int $userId): bool
     {
-        $oldData = $this->findOne($id)?->toArray();
+        $category = $this->findOne($id);
+        if (!$category || !$category->canDelete()) {
+            return false;
+        }
+
+        $oldData = $category->toArray();
 
         DB::beginTransaction();
         try {
@@ -118,7 +123,7 @@ class CategoryRepo extends ElequentRepository{
             // 🔥 ACTIVITY LOG
             $this->activityLog->log([
                 'user_id'         => $userId,
-                'action'          => 'Hapus data master kategori dengan nama '.$oldData->category_name,
+                'action'          => 'Hapus data master kategori dengan nama '.($oldData['category_name'] ?? ''),
                 'model_type'      => Category::class,
                 'model_id'        => $id,
                 'old_values'      => $oldData,

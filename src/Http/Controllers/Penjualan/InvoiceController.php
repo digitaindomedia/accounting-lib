@@ -3,6 +3,7 @@
 namespace Icso\Accounting\Http\Controllers\Penjualan;
 
 use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Exports\BaseReportExport;
 use Icso\Accounting\Exports\KartuPiutangExcelExport;
 use Icso\Accounting\Exports\SalesInvoiceExport;
 use Icso\Accounting\Exports\SalesInvoiceReportExport;
@@ -993,6 +994,43 @@ class InvoiceController extends Controller
 
     public function exportReportPdf(Request $request){
         return $this->exportReportAsFormat($request,'laporan-invoice-penjualan.pdf', 'pdf');
+    }
+
+    private function exportDetailReportAsFormat(Request $request, string $filename, string $type = 'excel')
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
+        $exportPage = is_numeric($page) ? (int) $page : 0;
+        $exportPerpage = is_numeric($perpage) && (int) $perpage > 0 ? (int) $perpage : $total;
+        $data = $this->invoiceRepo->getAllDataBy($search, $exportPage, $exportPerpage, $where);
+        $data = $this->attachHppToInvoiceData($data);
+
+        if ($type === 'excel') {
+            return Excel::download(new BaseReportExport($data, $params, 'accounting::sales.sales_invoice_detail_item_report'), $filename);
+        }
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::sales.sales_invoice_detail_item_report', [
+            'data' => $data,
+            'params' => $params,
+        ])->setPaper('a4', 'landscape');
+
+        if ($request->get('mode') === 'print') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
+    }
+
+    public function exportDetailReportExcel(Request $request)
+    {
+        return $this->exportDetailReportAsFormat($request, 'laporan-invoice-penjualan-detail.xlsx');
+    }
+
+    public function exportDetailReportPdf(Request $request)
+    {
+        return $this->exportDetailReportAsFormat($request, 'laporan-invoice-penjualan-detail.pdf', 'pdf');
     }
 
     public function exportKartuPiutangExcel(Request $request)

@@ -73,7 +73,7 @@ class PurchaseReceivedController extends Controller
     }
 
     public function show(Request $request){
-        $res = $this->purchaseReceiveRepo->findOne($request->id,array(),['order','order.aset_tetap_coa','order.akumulasi_penyusutan_coa','order.penyusutan_coa']);
+        $res = $this->purchaseReceiveRepo->findOne($request->id,array(),['order','order.aset_tetap_coa','order.akumulasi_penyusutan_coa','order.penyusutan_coa','depression']);
         if($res){
             $this->data['status'] = true;
             $this->data['message'] = 'Data berhasil ditemukan';
@@ -81,6 +81,30 @@ class PurchaseReceivedController extends Controller
         } else {
             $this->data['status'] = false;
             $this->data['message'] = "Data gagal disimpan";
+            $this->data['data'] = '';
+        }
+        return response()->json($this->data);
+    }
+
+    public function runDepression(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $id = (int) $request->id;
+        $userId = (int) $request->user_id;
+        DB::beginTransaction();
+        try {
+            $res = $this->purchaseReceiveRepo->runDepression($id, $userId);
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            $res = false;
+        }
+        if($res){
+            $this->data['status'] = true;
+            $this->data['message'] = 'Depresiasi berhasil dijalankan';
+            $this->data['data'] = $this->purchaseReceiveRepo->findOne($id,array(),['order','order.aset_tetap_coa','order.akumulasi_penyusutan_coa','order.penyusutan_coa','depression']);
+        } else {
+            $this->data['status'] = false;
+            $this->data['message'] = "Depresiasi gagal dijalankan";
             $this->data['data'] = '';
         }
         return response()->json($this->data);

@@ -477,6 +477,8 @@ Route::group([
         Route::get('export-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportPdf']);
         Route::get('export-pdf-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportReportPdf']);
         Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportReportExcel']);
+        Route::get('export-pdf-detail-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportDetailReportPdf']);
+        Route::get('export-excel-detail-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportDetailReportExcel']);
         Route::get('export-kartu-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangExcel']);
         Route::get('export-kartu-piutang-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangSummaryPdf']);
         Route::get('export-saldo-awal-piutang-excel', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnal']);
@@ -603,6 +605,7 @@ Route::group([
         Route::get('get-all-list', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'getAllData']);
         Route::get('find-by-id', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'show']);
         Route::post('save-data', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'store']);
+        Route::post('run-depression', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'runDepression']);
         Route::delete('delete', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'destroy']);
         Route::delete('delete-all', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'deleteAll']);
         Route::get('export-excel', [\Icso\Accounting\Http\Controllers\AsetTetap\Pembelian\PurchaseReceivedController::class, 'export']);

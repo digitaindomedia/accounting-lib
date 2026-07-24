@@ -6,6 +6,7 @@ use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\AsetTetap\Pembelian\Depression;
 use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseReceive;
 use Icso\Accounting\Models\AsetTetap\Pembelian\PurchaseReceiveMeta;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
@@ -101,7 +102,7 @@ class ReceiveRepo extends ElequentRepository
         if(empty($receivedNo)){
             $receivedNo = self::generateCodeTransaction(new PurchaseReceive(),KeyNomor::NO_PENERIMAAN_PEMBELIAN_ASET_TETAP,'receive_no','receive_date');
         }
-        $receivedDate = !empty($request->received_date) ? Utility::changeDateFormat($request->receive_date) : date("Y-m-d");
+        $receivedDate = !empty($request->receive_date) ? Utility::changeDateFormat($request->receive_date) : date("Y-m-d");
         $note = !empty($request->note) ? $request->note : "";
         $orderId = $request->order_id;
         $userId = $request->user_id;
@@ -153,6 +154,9 @@ class ReceiveRepo extends ElequentRepository
                             }
                         }
                     }
+                }
+                if ((string) $susutNow === '1') {
+                    $this->runDepression($recId, (int) $userId);
                 }
                 DB::commit();
 
@@ -296,5 +300,25 @@ class ReceiveRepo extends ElequentRepository
             Log::error('[AsetTetap\\Pembelian\\ReceiveRepo][destroy] ' . $e->getMessage());
             return false;
         }
+    }
+
+    public function runDepression(int $id, int $userId): bool
+    {
+        $receive = $this->findOne($id, [], ['order']);
+        if (!$receive || !$receive->order) {
+            return false;
+        }
+
+        $penyusutanDate = !empty($receive->penyusutan_date) ? $receive->penyusutan_date : date('Y-m-d');
+        $depressionRepo = new DepressionRepo(new Depression());
+        $depressionRepo->insertData($receive->order, $receive->id, $penyusutanDate, $userId);
+
+        $receive->susut_skrg = '1';
+        $receive->penyusutan_date = $penyusutanDate;
+        $receive->updated_by = $userId;
+        $receive->updated_at = date('Y-m-d H:i:s');
+        $receive->save();
+
+        return true;
     }
 }

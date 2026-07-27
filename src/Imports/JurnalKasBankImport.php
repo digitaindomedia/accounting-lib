@@ -193,6 +193,8 @@ class JurnalKasBankImport implements ToCollection
 
     private function createJurnalAkunAndTransaksi($jurnalId, $noJurnal, $jurnalDate, $note, $coa, $transTypeEnum, $nominal, &$totalBal)
     {
+        $totalBal += (float) $nominal;
+
         if (!$coa) {
             return;
         }
@@ -228,8 +230,6 @@ class JurnalKasBankImport implements ToCollection
             'kredit' => $kredit,
             'note' => $note,
         ]);
-
-        $totalBal += $nominal;
     }
 
     public function updateNominalKasBank($idJurnal, $totalBal)

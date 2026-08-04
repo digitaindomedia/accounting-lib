@@ -126,7 +126,7 @@ abstract class ElequentRepository implements BaseRepository
         if(SettingRepo::getOption('reset_number') == SettingEnum::RESET_NUMBER_YEAR){
             $jumlahData = $model::whereYear($fieldDate, date('Y'))->count();
         } else {
-            $jumlahData = $model::whereMonth($fieldDate, date('m'))->count();
+            $jumlahData = $model::whereMonth($fieldDate, date('m'))->whereYear($fieldDate, date('Y'))->count();
         }
         $values = $model::pluck($fieldName)
             ->filter(fn ($item) => ! is_null($item))

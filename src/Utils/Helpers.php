@@ -23,24 +23,23 @@ class Helpers
         $invoiceDate = !empty($invoiceDate) ? Utility::changeDateFormat($invoiceDate) : date('Y-m-d');
 
         if (empty($vendorId)) {
-            return $invoiceDate;
+            return date('Y-m-d');
         }
 
-        $vendor = Vendor::select('aging', 'aging_by')->find($vendorId);
-        if (empty($vendor) || empty($vendor->aging) || (int) $vendor->aging <= 0) {
-            return $invoiceDate;
+        $vendor = Vendor::select('vendor_duration', 'vendor_duration_by')->find($vendorId);
+        if (empty($vendor) || empty($vendor->vendor_duration) || (int) $vendor->vendor_duration <= 0) {
+            return date('Y-m-d');
         }
 
-        $unit = self::normalizeAgingUnit($vendor->aging_by);
-        return date('Y-m-d', strtotime('+' . (int) $vendor->aging . ' ' . $unit, strtotime($invoiceDate)));
+        $unit = self::normalizeDurationUnit($vendor->vendor_duration_by);
+        return date('Y-m-d', strtotime('+' . (int) $vendor->vendor_duration . ' ' . $unit, strtotime($invoiceDate)));
     }
 
-    private static function normalizeAgingUnit($agingBy): string
+    private static function normalizeDurationUnit($durationBy): string
     {
-        $agingBy = strtolower(trim((string) $agingBy));
+        $durationBy = strtolower(trim((string) $durationBy));
 
-        return match ($agingBy) {
-            'week', 'weeks', 'minggu' => 'weeks',
+        return match ($durationBy) {
             'month', 'months', 'bulan' => 'months',
             'year', 'years', 'tahun' => 'years',
             default => 'days',

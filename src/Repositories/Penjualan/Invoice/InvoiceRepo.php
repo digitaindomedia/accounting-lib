@@ -211,12 +211,13 @@ class InvoiceRepo extends ElequentRepository
         $invoiceNo = $request->invoice_no ?: self::generateCodeTransaction(new SalesInvoicing(), KeyNomor::NO_INVOICE_PENJUALAN, 'invoice_no', 'invoice_date');
         $vendorId = !empty($request->vendor_id) ? $request->vendor_id : SettingRepo::getDefaultCustomer();
         $warehouseId = !empty($request->warehouse_id) ? $request->warehouse_id : SettingRepo::getDefaultWarehouse();
+        $invoiceDate = $request->invoice_date ? Utility::changeDateFormat($request->invoice_date) : date('Y-m-d');
 
         return [
-            'invoice_date'  => $request->invoice_date ? Utility::changeDateFormat($request->invoice_date) : date('Y-m-d'),
+            'invoice_date'  => $invoiceDate,
             'invoice_no'    => $invoiceNo,
             'note'          => $request->note ?? '',
-            'due_date'      => $request->due_date ? $request->due_date : date('Y-m-d'),
+            'due_date'      => Helpers::resolveInvoiceDueDate($request->due_date, $invoiceDate, $vendorId),
             'updated_by'    => $request->user_id,
             'updated_at'    => date('Y-m-d H:i:s'),
             'vendor_id'     => $vendorId,

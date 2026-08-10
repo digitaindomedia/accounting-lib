@@ -5,6 +5,7 @@ namespace Icso\Accounting\Utils;
 
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\User;
 use Icso\Accounting\Models\UserInfo;
 use Icso\Accounting\Repositories\Master\TaxRepo;
@@ -13,6 +14,39 @@ use Icso\Accounting\Services\ActivityLogService;
 
 class Helpers
 {
+    public static function resolveInvoiceDueDate($dueDate, $invoiceDate, $vendorId): string
+    {
+        if (!empty($dueDate)) {
+            return Utility::changeDateFormat($dueDate);
+        }
+
+        $invoiceDate = !empty($invoiceDate) ? Utility::changeDateFormat($invoiceDate) : date('Y-m-d');
+
+        if (empty($vendorId)) {
+            return $invoiceDate;
+        }
+
+        $vendor = Vendor::select('aging', 'aging_by')->find($vendorId);
+        if (empty($vendor) || empty($vendor->aging) || (int) $vendor->aging <= 0) {
+            return $invoiceDate;
+        }
+
+        $unit = self::normalizeAgingUnit($vendor->aging_by);
+        return date('Y-m-d', strtotime('+' . (int) $vendor->aging . ' ' . $unit, strtotime($invoiceDate)));
+    }
+
+    private static function normalizeAgingUnit($agingBy): string
+    {
+        $agingBy = strtolower(trim((string) $agingBy));
+
+        return match ($agingBy) {
+            'week', 'weeks', 'minggu' => 'weeks',
+            'month', 'months', 'bulan' => 'months',
+            'year', 'years', 'tahun' => 'years',
+            default => 'days',
+        };
+    }
+
     public static function hitungProporsi($totalAtas, $totalBawah, $diskonFix)
     {
         $bagi = $totalAtas / $totalBawah;

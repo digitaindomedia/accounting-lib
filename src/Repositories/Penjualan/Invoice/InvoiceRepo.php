@@ -217,7 +217,7 @@ class InvoiceRepo extends ElequentRepository
             'invoice_date'  => $invoiceDate,
             'invoice_no'    => $invoiceNo,
             'note'          => $request->note ?? '',
-            'due_date'      => Helpers::resolveInvoiceDueDate($request->due_date, $invoiceDate, $vendorId),
+            'due_date'      => Helpers::resolveInvoiceDueDate(null, $invoiceDate, $vendorId),
             'updated_by'    => $request->user_id,
             'updated_at'    => date('Y-m-d H:i:s'),
             'vendor_id'     => $vendorId,

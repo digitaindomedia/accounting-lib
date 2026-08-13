@@ -2,6 +2,7 @@
 
 namespace Icso\Accounting\Models\Manufacturing;
 
+use Icso\Accounting\Models\Master\Category;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Master\Unit;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,11 @@ class ProductionOrderMaterial extends Model
     public function bomItem(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(BomItem::class, 'bom_item_id');
+    }
+
+    public function sourceCategory(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'source_category_id');
     }
 
     public function product(): \Illuminate\Database\Eloquent\Relations\BelongsTo

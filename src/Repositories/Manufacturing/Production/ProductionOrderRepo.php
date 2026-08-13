@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Log;
 class ProductionOrderRepo extends ElequentRepository
 {
     protected $model;
+    protected string $lastError = '';
 
     public function __construct(ProductionOrder $model)
     {
@@ -59,6 +60,7 @@ class ProductionOrderRepo extends ElequentRepository
                 'materials',
                 'materials.product',
                 'materials.unit',
+                'materials.sourceCategory',
                 'results',
                 'results.product',
                 'results.unit',
@@ -99,8 +101,14 @@ class ProductionOrderRepo extends ElequentRepository
             ->count();
     }
 
+    public function getLastError(): string
+    {
+        return $this->lastError;
+    }
+
     public function store(Request $request, array $other = [])
     {
+        $this->lastError = '';
         $id = $request->id;
         $userId = $request->user_id;
         $productionDate = !empty($request->production_date)
@@ -162,10 +170,15 @@ class ProductionOrderRepo extends ElequentRepository
                 $materialRows[] = ProductionOrderMaterial::create([
                     'production_order_id' => $productionId,
                     'bom_item_id' => $item->bom_item_id ?? 0,
+                    'material_source_type' => $item->material_source_type ?? 'product',
+                    'source_product_id' => $item->source_product_id ?? ($item->product_id ?? null),
+                    'source_category_id' => $item->source_category_id ?? null,
                     'product_id' => $item->product_id,
                     'unit_id' => $item->unit_id,
                     'qty_planned' => $qtyPlanned,
                     'qty_actual' => $qtyActual,
+                    'requested_qty_planned' => $this->numericValue($item, 'requested_qty_planned', $qtyPlanned),
+                    'requested_qty_actual' => $this->numericValue($item, 'requested_qty_actual', $qtyActual),
                     'hpp' => 0,
                     'subtotal' => 0,
                     'line_type' => $item->line_type ?? 'material',
@@ -179,6 +192,7 @@ class ProductionOrderRepo extends ElequentRepository
                     'production_order_id' => $productionId,
                     'product_id' => $item->product_id,
                     'unit_id' => $item->unit_id,
+                    'qty_planned' => $this->numericValue($item, 'qty_planned', $this->numericValue($item, 'qty_good', 0)),
                     'qty_good' => $this->numericValue($item, 'qty_good', 0),
                     'qty_waste' => $this->numericValue($item, 'qty_waste', 0),
                     'hpp' => 0,
@@ -203,6 +217,7 @@ class ProductionOrderRepo extends ElequentRepository
             DB::commit();
             return true;
         } catch (\Throwable $e) {
+            $this->lastError = $e->getMessage();
             Log::error($e->getMessage());
             DB::rollBack();
             return false;
@@ -222,7 +237,12 @@ class ProductionOrderRepo extends ElequentRepository
     protected function resolveMaterials(Request $request, float $plannedQty, float $actualQty): array
     {
         if (!empty($request->materials) && (empty($request->bom_id) || $request->boolean('manual_material_override'))) {
-            return $this->normalizeArrayInput($request->materials);
+            return $this->expandManualMaterialRows(
+                $this->normalizeArrayInput($request->materials),
+                (int) $request->warehouse_id,
+                !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'),
+                $request->status_production === 'finished'
+            );
         }
 
         $bom = null;
@@ -240,15 +260,127 @@ class ProductionOrderRepo extends ElequentRepository
 
         foreach ($bom->items as $item) {
             $wasteFactor = 1 + (((float) $item->waste_percentage) / 100);
+            $rowPlannedQty = ((float) $item->qty) * $plannedFactor * $wasteFactor;
+            $rowActualQty = ((float) $item->qty) * $actualFactor * $wasteFactor;
             $rows[] = (object) [
                 'bom_item_id' => $item->id,
+                'material_source_type' => 'product',
+                'source_product_id' => $item->product_id,
+                'source_category_id' => null,
                 'product_id' => $item->product_id,
                 'unit_id' => $item->unit_id,
-                'qty_planned' => ((float) $item->qty) * $plannedFactor * $wasteFactor,
-                'qty_actual' => ((float) $item->qty) * $actualFactor * $wasteFactor,
+                'qty_planned' => $rowPlannedQty,
+                'qty_actual' => $rowActualQty,
+                'requested_qty_planned' => $rowPlannedQty,
+                'requested_qty_actual' => $rowActualQty,
                 'line_type' => $item->item_role ?: 'material',
                 'note' => $item->note,
             ];
+        }
+
+        return $rows;
+    }
+
+    protected function expandManualMaterialRows(array $items, int $warehouseId, string $productionDate, bool $strictStock): array
+    {
+        $rows = [];
+
+        foreach ($items as $item) {
+            $sourceType = $item->material_source_type ?? (!empty($item->category_id) || !empty($item->source_category_id) ? 'category' : 'product');
+            if ($sourceType === 'category') {
+                array_push($rows, ...$this->resolveCategoryMaterialRows($item, $warehouseId, $productionDate, $strictStock));
+                continue;
+            }
+
+            if (empty($item->product_id)) {
+                throw new \RuntimeException('Produk bahan masih kosong.');
+            }
+
+            $qtyPlanned = $this->numericValue($item, 'qty_planned', 0);
+            $qtyActual = $this->hasValue($item, 'qty_actual') ? $this->numericValue($item, 'qty_actual', 0) : $qtyPlanned;
+            $rows[] = (object) [
+                'bom_item_id' => $item->bom_item_id ?? 0,
+                'material_source_type' => 'product',
+                'source_product_id' => $item->source_product_id ?? $item->product_id,
+                'source_category_id' => null,
+                'product_id' => $item->product_id,
+                'unit_id' => $item->unit_id,
+                'qty_planned' => $qtyPlanned,
+                'qty_actual' => $qtyActual,
+                'requested_qty_planned' => $qtyPlanned,
+                'requested_qty_actual' => $qtyActual,
+                'line_type' => $item->line_type ?? 'material',
+                'note' => $item->note ?? null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    protected function resolveCategoryMaterialRows(object $item, int $warehouseId, string $productionDate, bool $strictStock): array
+    {
+        $categoryId = $item->source_category_id ?? $item->category_id ?? null;
+        if (empty($categoryId)) {
+            throw new \RuntimeException('Kategori bahan masih kosong.');
+        }
+        if (empty($item->unit_id)) {
+            throw new \RuntimeException('Satuan bahan kategori masih kosong.');
+        }
+
+        $requestedPlannedQty = $this->numericValue($item, 'qty_planned', 0);
+        $requestedActualQty = $this->hasValue($item, 'qty_actual') ? $this->numericValue($item, 'qty_actual', 0) : $requestedPlannedQty;
+        $splitQty = $requestedActualQty > 0 ? $requestedActualQty : $requestedPlannedQty;
+        if ($splitQty <= 0) {
+            return [];
+        }
+
+        $inventoryRepo = new InventoryRepo(new Inventory());
+        $products = Product::whereHas('categories', function ($query) use ($categoryId) {
+            $query->where('als_category.id', $categoryId);
+        })->orderBy('id')->get();
+
+        if ($products->isEmpty()) {
+            throw new \RuntimeException('Tidak ada produk dalam kategori bahan yang dipilih.');
+        }
+
+        $remaining = $splitQty;
+        $rows = [];
+        foreach ($products as $product) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $availableStock = $inventoryRepo->getStokByDate($product->id, $warehouseId, $item->unit_id, $productionDate);
+            if ($availableStock <= 0) {
+                continue;
+            }
+
+            $consumeQty = min($availableStock, $remaining);
+            $ratio = $splitQty > 0 ? ($consumeQty / $splitQty) : 0;
+            $rows[] = (object) [
+                'bom_item_id' => $item->bom_item_id ?? 0,
+                'material_source_type' => 'category',
+                'source_product_id' => null,
+                'source_category_id' => $categoryId,
+                'product_id' => $product->id,
+                'unit_id' => $item->unit_id,
+                'qty_planned' => $requestedPlannedQty * $ratio,
+                'qty_actual' => $requestedActualQty > 0 ? $consumeQty : 0,
+                'requested_qty_planned' => $requestedPlannedQty,
+                'requested_qty_actual' => $requestedActualQty,
+                'line_type' => $item->line_type ?? 'material',
+                'note' => $item->note ?? null,
+            ];
+
+            $remaining -= $consumeQty;
+        }
+
+        if ($remaining > 0.0001 && $strictStock) {
+            throw new \RuntimeException('Stok produk dalam kategori bahan tidak mencukupi.');
+        }
+
+        if (empty($rows)) {
+            throw new \RuntimeException('Stok produk dalam kategori bahan tidak tersedia.');
         }
 
         return $rows;
@@ -264,6 +396,7 @@ class ProductionOrderRepo extends ElequentRepository
             (object) [
                 'product_id' => $request->product_id,
                 'unit_id' => $request->output_unit_id,
+                'qty_planned' => $actualQty,
                 'qty_good' => $actualQty,
                 'qty_waste' => 0,
                 'result_role' => 'main',

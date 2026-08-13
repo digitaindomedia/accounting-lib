@@ -69,7 +69,7 @@ class ProductionOrderController extends Controller
         $res = $this->productionOrderRepo->store($request);
 
         $this->data['status'] = $res;
-        $this->data['message'] = $res ? 'Data berhasil disimpan' : 'Data gagal disimpan';
+        $this->data['message'] = $res ? 'Data berhasil disimpan' : ($this->productionOrderRepo->getLastError() ?: 'Data gagal disimpan');
         $this->data['data'] = '';
 
         return response()->json($this->data, $res ? 200 : 500);
@@ -86,6 +86,7 @@ class ProductionOrderController extends Controller
             'materials',
             'materials.product',
             'materials.unit',
+            'materials.sourceCategory',
             'results',
             'results.product',
             'results.unit',

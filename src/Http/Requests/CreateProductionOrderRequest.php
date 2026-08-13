@@ -34,13 +34,18 @@ class CreateProductionOrderRequest extends FormRequest
             'status_production' => ['nullable', 'in:draft,finished,cancelled'],
             'manual_material_override' => ['nullable', 'boolean'],
             'materials' => ['nullable', 'array'],
-            'materials.*.product_id' => ['required_with:materials'],
+            'materials.*.material_source_type' => ['nullable', 'in:product,category'],
+            'materials.*.product_id' => ['nullable'],
+            'materials.*.source_product_id' => ['nullable'],
+            'materials.*.category_id' => ['nullable'],
+            'materials.*.source_category_id' => ['nullable'],
             'materials.*.unit_id' => ['required_with:materials'],
             'materials.*.qty_actual' => ['nullable', 'numeric', 'gte:0'],
             'materials.*.qty_planned' => ['nullable', 'numeric', 'gte:0'],
             'results' => ['nullable', 'array'],
             'results.*.product_id' => ['required_with:results'],
             'results.*.unit_id' => ['required_with:results'],
+            'results.*.qty_planned' => ['nullable', 'numeric', 'gte:0'],
             'results.*.qty_good' => ['nullable', 'numeric', 'gte:0'],
             'results.*.qty_waste' => ['nullable', 'numeric', 'gte:0'],
         ];
@@ -62,7 +67,6 @@ class CreateProductionOrderRequest extends FormRequest
             'planned_qty.required' => 'Qty rencana produksi masih kosong.',
             'planned_qty.gt' => 'Qty rencana produksi harus lebih besar dari nol.',
             'materials.required' => 'Bahan produksi masih kosong jika BOM belum dipilih.',
-            'materials.*.product_id.required_with' => 'Produk bahan pada salah satu item masih kosong.',
             'materials.*.unit_id.required_with' => 'Satuan bahan pada salah satu item masih kosong.',
         ];
     }

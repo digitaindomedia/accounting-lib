@@ -13,6 +13,7 @@ use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
 use Illuminate\Http\Request;
@@ -127,6 +128,9 @@ class ProductionOrderRepo extends ElequentRepository
             'output_unit_id' => $request->output_unit_id,
             'planned_qty' => $plannedQty,
             'actual_qty' => $actualQty,
+            'hpp_allocation_method' => in_array($request->hpp_allocation_method, ['qty', 'percentage'], true)
+                ? $request->hpp_allocation_method
+                : 'qty',
             'status_production' => $statusProduction,
             'source_type' => !empty($request->source_type) ? $request->source_type : 'manual',
             'source_id' => !empty($request->source_id) ? $request->source_id : 0,
@@ -195,6 +199,7 @@ class ProductionOrderRepo extends ElequentRepository
                     'qty_planned' => $this->numericValue($item, 'qty_planned', $this->numericValue($item, 'qty_good', 0)),
                     'qty_good' => $this->numericValue($item, 'qty_good', 0),
                     'qty_waste' => $this->numericValue($item, 'qty_waste', 0),
+                    'hpp_allocation_percentage' => $this->numericValue($item, 'hpp_allocation_percentage', 0),
                     'hpp' => 0,
                     'subtotal' => 0,
                     'result_role' => $item->result_role ?? 'main',
@@ -461,11 +466,36 @@ class ProductionOrderRepo extends ElequentRepository
             $totalGoodQty += (float) $item->qty_good;
         }
 
+        $hppAllocationMethod = $find->hpp_allocation_method ?: 'qty';
+        if ($hppAllocationMethod === 'percentage') {
+            $totalPercentage = 0;
+            foreach ($resultRows as $item) {
+                $percentage = (float) $item->hpp_allocation_percentage;
+                $qtyGood = (float) $item->qty_good;
+
+                if ($percentage > 0 && $qtyGood <= 0) {
+                    throw new \RuntimeException('Qty Good hasil dengan persentase alokasi HPP harus lebih dari 0.');
+                }
+
+                $totalPercentage += $percentage;
+            }
+
+            if (abs($totalPercentage - 100) > 0.0001) {
+                throw new \RuntimeException('Total persentase alokasi HPP harus 100%.');
+            }
+        }
+
         $resultHpp = $totalGoodQty > 0 ? $totalMaterialValue / $totalGoodQty : 0;
 
         foreach ($resultRows as $item) {
             $qtyGood = (float) $item->qty_good;
             $subtotal = $resultHpp * $qtyGood;
+
+            if ($hppAllocationMethod === 'percentage') {
+                $subtotal = $totalMaterialValue * ((float) $item->hpp_allocation_percentage / 100);
+                $resultHpp = $qtyGood > 0 ? $subtotal / $qtyGood : 0;
+            }
+
             $item->update([
                 'hpp' => $resultHpp,
                 'subtotal' => $subtotal,
@@ -572,7 +602,11 @@ class ProductionOrderRepo extends ElequentRepository
 
     protected function generateRefNo(): string
     {
-        $nextId = ((int) ProductionOrder::max('id')) + 1;
-        return 'PROD-' . date('Ymd') . '-' . str_pad((string) $nextId, 4, '0', STR_PAD_LEFT);
+        return self::generateCodeTransaction(
+            new ProductionOrder(),
+            KeyNomor::NO_PRODUCTION_ORDER,
+            'ref_no',
+            'production_date'
+        );
     }
 }

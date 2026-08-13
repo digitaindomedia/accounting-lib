@@ -102,6 +102,10 @@ class ProductionOrderController extends Controller
     public function destroy(Request $request): JsonResponse
     {
         $id = $request->input('id');
+        if (empty($id) || empty($this->productionOrderRepo->findOne($id))) {
+            return response()->json(['status' => false, 'message' => 'Data produksi tidak ditemukan.', 'data' => []], 404);
+        }
+
         DB::beginTransaction();
         try {
             $this->productionOrderRepo->deleteAdditional($id);
@@ -110,35 +114,42 @@ class ProductionOrderController extends Controller
             return response()->json(['status' => true, 'message' => 'Data berhasil dihapus', 'data' => []]);
         } catch (\Throwable $e) {
             DB::rollBack();
-            return response()->json(['status' => false, 'message' => 'Data gagal dihapus', 'data' => []], 500);
+            return response()->json(['status' => false, 'message' => 'Data gagal dihapus: ' . $e->getMessage(), 'data' => []], 500);
         }
     }
 
     public function deleteAll(Request $request): JsonResponse
     {
         $request->validate(['ids' => 'required|array']);
-        $successDelete = 0;
-        $failedDelete = 0;
-
-        foreach ($request->input('ids') as $id) {
-            DB::beginTransaction();
-            try {
-                $this->productionOrderRepo->deleteAdditional($id);
-                $this->productionOrderRepo->delete($id);
-                DB::commit();
-                $successDelete++;
-            } catch (\Throwable $e) {
-                DB::rollBack();
-                $failedDelete++;
-            }
+        $ids = array_values(array_filter($request->input('ids'), fn ($id) => !empty($id)));
+        if (empty($ids)) {
+            return response()->json(['status' => false, 'message' => 'Data produksi yang akan dihapus masih kosong.', 'data' => []], 422);
         }
 
-        return response()->json([
-            'status' => $successDelete > 0,
-            'message' => $successDelete > 0
-                ? "$successDelete Data berhasil dihapus <br /> $failedDelete Data tidak bisa dihapus"
-                : 'Data gagal dihapus',
-            'data' => [],
-        ]);
+        DB::beginTransaction();
+        try {
+            foreach ($ids as $id) {
+                if (empty($this->productionOrderRepo->findOne($id))) {
+                    throw new \RuntimeException('Salah satu data produksi tidak ditemukan.');
+                }
+
+                $this->productionOrderRepo->deleteAdditional($id);
+                $this->productionOrderRepo->delete($id);
+            }
+
+            DB::commit();
+            return response()->json([
+                'status' => true,
+                'message' => count($ids) . ' data berhasil dihapus.',
+                'data' => [],
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Data gagal dihapus: ' . $e->getMessage(),
+                'data' => [],
+            ], 500);
+        }
     }
 }

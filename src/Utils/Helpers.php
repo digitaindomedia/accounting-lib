@@ -5,6 +5,7 @@ namespace Icso\Accounting\Utils;
 
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Master\Tax;
+use Icso\Accounting\Models\Master\Vendor;
 use Icso\Accounting\Models\User;
 use Icso\Accounting\Models\UserInfo;
 use Icso\Accounting\Repositories\Master\TaxRepo;
@@ -13,6 +14,38 @@ use Icso\Accounting\Services\ActivityLogService;
 
 class Helpers
 {
+    public static function resolveInvoiceDueDate($dueDate, $invoiceDate, $vendorId): string
+    {
+        if (!empty($dueDate)) {
+            return Utility::changeDateFormat($dueDate);
+        }
+
+        $invoiceDate = !empty($invoiceDate) ? Utility::changeDateFormat($invoiceDate) : date('Y-m-d');
+
+        if (empty($vendorId)) {
+            return date('Y-m-d');
+        }
+
+        $vendor = Vendor::select('vendor_duration', 'vendor_duration_by')->find($vendorId);
+        if (empty($vendor) || empty($vendor->vendor_duration) || (int) $vendor->vendor_duration <= 0) {
+            return date('Y-m-d');
+        }
+
+        $unit = self::normalizeDurationUnit($vendor->vendor_duration_by);
+        return date('Y-m-d', strtotime('+' . (int) $vendor->vendor_duration . ' ' . $unit, strtotime($invoiceDate)));
+    }
+
+    private static function normalizeDurationUnit($durationBy): string
+    {
+        $durationBy = strtolower(trim((string) $durationBy));
+
+        return match ($durationBy) {
+            'month', 'months', 'bulan' => 'months',
+            'year', 'years', 'tahun' => 'years',
+            default => 'days',
+        };
+    }
+
     public static function hitungProporsi($totalAtas, $totalBawah, $diskonFix)
     {
         $bagi = $totalAtas / $totalBawah;

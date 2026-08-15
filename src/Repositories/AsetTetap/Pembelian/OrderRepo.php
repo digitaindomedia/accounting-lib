@@ -33,8 +33,10 @@ class OrderRepo extends ElequentRepository
         $model = new $this->model;
         // $paymentInvoiceRepo = new PaymentInvoiceRepo(new PurchasePaymentInvoice());
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('nama_aset', 'like', '%' .$search. '%');
-            $query->orWhere('no_aset', 'like', '%' .$search. '%');
+            $query->where(function ($que) use ($search) {
+                $que->where('nama_aset', 'like', '%' .$search. '%')
+                    ->orWhere('no_aset', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
@@ -55,8 +57,10 @@ class OrderRepo extends ElequentRepository
         // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('nama_aset', 'like', '%' .$search. '%');
-            $query->orWhere('no_aset', 'like', '%' .$search. '%');
+            $query->where(function ($que) use ($search) {
+                $que->where('nama_aset', 'like', '%' .$search. '%')
+                    ->orWhere('no_aset', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){

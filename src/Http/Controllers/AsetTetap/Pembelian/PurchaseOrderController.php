@@ -33,7 +33,21 @@ class PurchaseOrderController extends Controller
         $fromDate = $request->from_date;
         $untilDate = $request->until_date;
         $from = $request->from;
+        $coaId = $request->coa_id;
+        $isSaldoAwal = $request->is_saldo_awal;
         $where = array();
+        if($coaId !== null && $coaId !== ''){
+            $where[] = array(
+                'method' => 'where',
+                'value' => [['aset_tetap_coa_id', '=', $coaId]]
+            );
+        }
+        if($isSaldoAwal !== null && $isSaldoAwal !== ''){
+            $where[] = array(
+                'method' => 'where',
+                'value' => [['is_saldo_awal', '=', $isSaldoAwal]]
+            );
+        }
         if(!empty($from)) {
             if ($from == TransactionsCode::PENERIMAAN) {
                 $where[] = array(
@@ -240,11 +254,12 @@ class PurchaseOrderController extends Controller
     public function importSaldoAwal(Request $request)
     {
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv',
+            'file' => 'required|mimes:xlsx,xls',
             'user_id' => 'required',
+            'coa_id' => 'required',
         ]);
 
-        $import = new SaldoAwalAsetTetapImport($request->user_id);
+        $import = new SaldoAwalAsetTetapImport($request->user_id, $request->coa_id);
         Excel::import($import, $request->file('file'));
 
         if ($errors = $import->getErrors()) {

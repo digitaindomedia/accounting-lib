@@ -15,20 +15,31 @@ use Maatwebsite\Excel\Concerns\ToCollection;
 class SaldoAwalAsetTetapImport implements ToCollection
 {
     protected $userId;
+    protected $coaId;
     protected $orderRepo;
+    protected $coaAsetSaldoAwal;
     private $errors = [];
     private $success = [];
     private $totalRows = 0;
     private $successCount = 0;
 
-    public function __construct($userId)
+    public function __construct($userId, $coaId)
     {
         $this->userId = $userId;
+        $this->coaId = $coaId;
+        $this->coaAsetSaldoAwal = Coa::where('id', $coaId)
+            ->where('coa_category', 'aset_tetap')
+            ->first();
         $this->orderRepo = new OrderRepo(new PurchaseOrder(), app(ActivityLogService::class));
     }
 
     public function collection(Collection $rows)
     {
+        if (!$this->coaAsetSaldoAwal) {
+            $this->errors[] = 'Akun aset tetap saldo awal tidak valid atau bukan kategori Aset Tetap.';
+            return;
+        }
+
         foreach ($rows as $index => $row) {
             if ($index === 0) {
                 continue;
@@ -47,7 +58,6 @@ class SaldoAwalAsetTetapImport implements ToCollection
             $asetDate = Helpers::formatDateExcel($row[0]);
             $namaAset = trim($row[1]);
             $nilaiBeli = Utility::remove_commas($row[2]);
-            $coaAset = Coa::where('coa_code', trim($row[3]))->first();
             $coaAkumulasi = Coa::where('coa_code', trim($row[4]))->first();
             $coaPenyusutan = Coa::where('coa_code', trim($row[5]))->first();
             $persentase = $this->normalizeNumericValue($row[6] ?? null);
@@ -60,7 +70,7 @@ class SaldoAwalAsetTetapImport implements ToCollection
             $req->aset_tetap_date = $asetDate;
             $req->tanggal_input_aset = $asetDate;
             $req->harga_beli = $nilaiBeli;
-            $req->aset_tetap_coa_id = $coaAset->id;
+            $req->aset_tetap_coa_id = $this->coaAsetSaldoAwal->id;
             $req->akumulasi_penyusutan_coa_id = $coaAkumulasi->id;
             $req->penyusutan_coa_id = $coaPenyusutan->id;
             $req->note = $note;
@@ -114,8 +124,19 @@ class SaldoAwalAsetTetapImport implements ToCollection
             return true;
         }
 
-        if (!Coa::where('coa_code', trim($row[3]))->exists()) {
+        $coaAset = Coa::where('coa_code', trim($row[3]))->first();
+        if (!$coaAset) {
             $this->errors[] = 'Baris ' . ($index + 1) . ': Kode Akun Aset tidak ditemukan.';
+            return true;
+        }
+
+        if ((string) $coaAset->id !== (string) $this->coaAsetSaldoAwal->id) {
+            $this->errors[] = 'Baris ' . ($index + 1) . ': Kode Akun Aset harus sama dengan akun saldo awal yang sedang dibuka (' . $this->coaAsetSaldoAwal->coa_code . ' - ' . $this->coaAsetSaldoAwal->coa_name . ').';
+            return true;
+        }
+
+        if ($coaAset->coa_category !== 'aset_tetap') {
+            $this->errors[] = 'Baris ' . ($index + 1) . ': Kode Akun Aset bukan kategori Aset Tetap.';
             return true;
         }
 

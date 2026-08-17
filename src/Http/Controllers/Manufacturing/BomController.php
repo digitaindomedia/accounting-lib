@@ -2,13 +2,18 @@
 
 namespace Icso\Accounting\Http\Controllers\Manufacturing;
 
+use Icso\Accounting\Exports\SampleBomExport;
 use Icso\Accounting\Http\Requests\CreateBomRequest;
+use Icso\Accounting\Imports\BomImport;
 use Icso\Accounting\Repositories\Manufacturing\Bom\BomRepo;
 use Icso\Accounting\Utils\Helpers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BomController extends Controller
 {
@@ -104,6 +109,48 @@ class BomController extends Controller
                 : 'Data gagal dihapus',
             'data' => [],
         ]);
+    }
+
+    public function downloadSample(): BinaryFileResponse
+    {
+        return Excel::download(new SampleBomExport(), 'sample_bom.xlsx');
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+        ]);
+
+        try {
+            $userId = $request->user_id;
+            $import = new BomImport($userId);
+            Excel::import($import, $request->file('file'));
+
+            if ($errors = $import->getErrors()) {
+                return response()->json([
+                    'status'       => false,
+                    'success'      => $import->getSuccessCount(),
+                    'messageError' => $errors,
+                    'errors'       => count($errors),
+                    'imported'     => $import->getTotalRows(),
+                ]);
+            }
+
+            return response()->json([
+                'status'   => true,
+                'success'  => $import->getSuccessCount(),
+                'errors'   => 0,
+                'message'  => 'File berhasil diimport',
+                'imported' => $import->getTotalRows(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('BOM import error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Terjadi kesalahan saat import file: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function preview(Request $request): JsonResponse

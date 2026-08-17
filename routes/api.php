@@ -210,6 +210,8 @@ Route::group([
             Route::get('preview', [BomController::class, 'preview']);
             Route::delete('delete-by-id', [BomController::class, 'destroy']);
             Route::delete('delete-all', [BomController::class, 'deleteAll']);
+            Route::post('import', [BomController::class, 'import']);
+            Route::get('download-sample', [BomController::class, 'downloadSample']);
         });
 
         Route::prefix('production-order')->group(function () {

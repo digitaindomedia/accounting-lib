@@ -267,12 +267,28 @@ class ProductionOrderRepo extends ElequentRepository
             $wasteFactor = 1 + (((float) $item->waste_percentage) / 100);
             $rowPlannedQty = ((float) $item->qty) * $plannedFactor * $wasteFactor;
             $rowActualQty = ((float) $item->qty) * $actualFactor * $wasteFactor;
+            $sourceType = $item->material_source_type ?: 'product';
+
+            if ($sourceType === 'category') {
+                array_push($rows, ...$this->resolveCategoryMaterialRows((object) [
+                    'bom_item_id' => $item->id,
+                    'material_source_type' => 'category',
+                    'source_category_id' => $item->source_category_id,
+                    'unit_id' => $item->unit_id,
+                    'qty_planned' => $rowPlannedQty,
+                    'qty_actual' => $rowActualQty,
+                    'line_type' => $item->item_role ?: 'material',
+                    'note' => $item->note,
+                ], (int) $request->warehouse_id, !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'), $request->status_production === 'finished'));
+                continue;
+            }
+
             $rows[] = (object) [
                 'bom_item_id' => $item->id,
                 'material_source_type' => 'product',
-                'source_product_id' => $item->product_id,
+                'source_product_id' => $item->source_product_id ?: $item->product_id,
                 'source_category_id' => null,
-                'product_id' => $item->product_id,
+                'product_id' => $item->source_product_id ?: $item->product_id,
                 'unit_id' => $item->unit_id,
                 'qty_planned' => $rowPlannedQty,
                 'qty_actual' => $rowActualQty,

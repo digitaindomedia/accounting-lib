@@ -4,6 +4,7 @@ namespace Icso\Accounting\Repositories\Manufacturing\Bom;
 
 use Icso\Accounting\Models\Manufacturing\Bom;
 use Icso\Accounting\Models\Manufacturing\BomItem;
+use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Utils\ManufacturingMode;
@@ -36,7 +37,7 @@ class BomRepo extends ElequentRepository
             ->when(!empty($where), function ($query) use ($where) {
                 $query->where($where);
             })
-            ->with(['product', 'outputUnit', 'items', 'items.product', 'items.unit'])
+            ->with(['product', 'outputUnit', 'items', 'items.product', 'items.sourceCategory', 'items.unit'])
             ->orderBy('updated_at', 'desc');
 
         if ($perpage > 0) {
@@ -100,9 +101,24 @@ class BomRepo extends ElequentRepository
 
             $items = $this->normalizeItems($request->items);
             foreach ($items as $index => $item) {
+                $sourceType = $item->material_source_type ?? (!empty($item->category_id) || !empty($item->source_category_id) ? 'category' : 'product');
+                $sourceCategoryId = $item->source_category_id ?? $item->category_id ?? null;
+                $sourceProductId = $item->source_product_id ?? $item->product_id ?? null;
+
+                if ($sourceType === 'category' && empty($sourceCategoryId)) {
+                    throw new \RuntimeException('Kategori bahan pada salah satu item masih kosong.');
+                }
+
+                if ($sourceType === 'product' && empty($sourceProductId)) {
+                    throw new \RuntimeException('Produk bahan pada salah satu item masih kosong.');
+                }
+
                 BomItem::create([
                     'bom_id' => $bomId,
-                    'product_id' => $item->product_id,
+                    'material_source_type' => $sourceType,
+                    'source_product_id' => $sourceType === 'product' ? $sourceProductId : null,
+                    'source_category_id' => $sourceType === 'category' ? $sourceCategoryId : null,
+                    'product_id' => $sourceType === 'product' ? $sourceProductId : null,
                     'unit_id' => $item->unit_id,
                     'qty' => $item->qty,
                     'waste_percentage' => $item->waste_percentage ?? 0,
@@ -150,7 +166,7 @@ class BomRepo extends ElequentRepository
 
     public function previewRequirements(int $bomId, float $outputQty, ?int $warehouseId = null, ?string $stockDate = null): array
     {
-        $bom = Bom::with(['product', 'outputUnit', 'items', 'items.product', 'items.unit'])->find($bomId);
+        $bom = Bom::with(['product', 'outputUnit', 'items', 'items.product', 'items.sourceCategory', 'items.unit'])->find($bomId);
         if (empty($bom)) {
             return [];
         }
@@ -164,15 +180,48 @@ class BomRepo extends ElequentRepository
         foreach ($bom->items as $item) {
             $wasteFactor = 1 + (((float) $item->waste_percentage) / 100);
             $requiredQty = ((float) $item->qty) * $factor * $wasteFactor;
-            $availableStock = $inventoryRepo->getStokByDate($item->product_id, $warehouseId ?: 0, $item->unit_id, $stockDate);
-            $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $stockDate);
-            $estimatedCost = $requiredQty * $hpp;
+            $sourceType = $item->material_source_type ?: 'product';
+            $availableStock = 0;
+            $hpp = 0;
+            $estimatedCost = 0;
+
+            if ($sourceType === 'category') {
+                $categoryId = (int) $item->source_category_id;
+                $products = Product::whereHas('categories', function ($query) use ($categoryId) {
+                    $query->where('als_category.id', $categoryId);
+                })->orderBy('id')->get();
+
+                $remaining = $requiredQty;
+                foreach ($products as $product) {
+                    $stock = $inventoryRepo->getStokByDate($product->id, $warehouseId ?: 0, $item->unit_id, $stockDate);
+                    $availableStock += $stock;
+                    if ($remaining <= 0 || $stock <= 0) {
+                        continue;
+                    }
+
+                    $consumeQty = min($stock, $remaining);
+                    $productHpp = $inventoryRepo->movingAverageByDate($product->id, $item->unit_id, $stockDate);
+                    $estimatedCost += $consumeQty * $productHpp;
+                    $remaining -= $consumeQty;
+                }
+
+                $hpp = $requiredQty > 0 ? ($estimatedCost / min($requiredQty, max($availableStock, 0.0001))) : 0;
+            } else {
+                $availableStock = $inventoryRepo->getStokByDate($item->product_id, $warehouseId ?: 0, $item->unit_id, $stockDate);
+                $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $stockDate);
+                $estimatedCost = $requiredQty * $hpp;
+            }
+
             $estimatedMaterialCost += $estimatedCost;
 
             $materials[] = [
                 'bom_item_id' => $item->id,
+                'material_source_type' => $sourceType,
+                'source_product_id' => $item->source_product_id,
+                'source_category_id' => $item->source_category_id,
                 'product_id' => $item->product_id,
                 'product_name' => $item->product->item_name ?? '',
+                'category_name' => $item->sourceCategory->category_name ?? '',
                 'unit_id' => $item->unit_id,
                 'unit_name' => $item->unit->unit_name ?? '',
                 'qty_per_output' => (float) $item->qty,

@@ -532,12 +532,22 @@ class OrderRepo extends ElequentRepository
         $orderRepo = new self(new PurchaseOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($id);
         if(!empty($find)){
-            if(in_array($find->order_status, [StatusEnum::PENERIMAAN, StatusEnum::CLOSE]))
+            if(
+                in_array($find->order_status, [StatusEnum::PENERIMAAN, StatusEnum::CLOSE])
+                && !self::hasUninvoicedReceivedByOrder($id)
+            )
             {
                 self::changeStatusOrderById($id);
             }
         }
 
+    }
+
+    private static function hasUninvoicedReceivedByOrder($idOrder): bool
+    {
+        return PurchaseReceived::where('order_id', $idOrder)
+            ->whereDoesntHave('invoicereceived')
+            ->exists();
     }
 
     public function findInUseInBastById($idOrder){

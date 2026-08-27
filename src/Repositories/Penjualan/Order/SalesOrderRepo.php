@@ -461,12 +461,26 @@ class SalesOrderRepo extends ElequentRepository
         $orderRepo = new self(new SalesOrder(), app(ActivityLogService::class));
         $find = $orderRepo->findOne($id);
         if(!empty($find)){
-            if($find->order_status == StatusEnum::DELIVERY)
+            if(
+                $find->order_status == StatusEnum::DELIVERY
+                && !self::hasUninvoicedDeliveryByOrder($id)
+            )
             {
                 self::changeStatusOrderById($id);
             }
         }
 
+    }
+
+    private static function hasUninvoicedDeliveryByOrder($idOrder): bool
+    {
+        return SalesDelivery::where('order_id', $idOrder)
+            ->whereNotExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('als_sales_invoice_delivery as sid')
+                    ->whereColumn('sid.delivery_id', 'als_sales_delivery.id');
+            })
+            ->exists();
     }
 
     private function syncQuotationProductQtyLeft($quotationId, $orderProducts)

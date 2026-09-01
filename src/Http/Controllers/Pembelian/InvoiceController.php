@@ -220,6 +220,34 @@ class InvoiceController extends Controller
         return response()->json($this->data);
     }
 
+    public function updateSaldoAwal(Request $request)
+    {
+        $userId = $request->user_id;
+        $id = $request->id;
+        $invoiceDate = $request->invoice_date;
+        $invoiceNo = $request->invoice_no;
+        $vendorId = $request->vendor_id;
+        $note = !empty($request->note) ? $request->note : '';
+        $nominal = Utility::remove_commas($request->nominal);
+        $arrData = array(
+            'invoice_date' => $invoiceDate,
+            'invoice_no' => $invoiceNo,
+            'note' => $note,
+            'subtotal' => $nominal,
+            'grandtotal' => $nominal,
+        );
+        $res = $this->invoiceRepo->update($arrData,$id);
+        if($res){
+            $this->data['status'] = true;
+            $this->data['message'] = 'Data berhasil disimpan';
+            $this->data['data'] = '';
+        } else {
+            $this->data['status'] = false;
+            $this->data['message'] = 'Data gagal disimpan';
+        }
+        return response()->json($this->data);
+    }
+
     public function store(CreatePurchaseInvoiceRequest $request){
         try {
             $res = $this->invoiceRepo->store($request);
@@ -738,7 +766,7 @@ class InvoiceController extends Controller
             'file' => 'required|mimes:xlsx,xls,csv',
         ]);
         $userId = $request->user_id;
-        $import = new JurnalPurchaseInvoiceImport($userId);
+        $import = new JurnalPurchaseInvoiceImport($userId, $request->coa_id);
         Excel::import($import, $request->file('file'));
 
         if ($errors = $import->getErrors()) {

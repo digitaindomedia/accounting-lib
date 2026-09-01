@@ -229,6 +229,7 @@ Route::group([
         Route::get('get-by-id',[InvoiceController::class, 'show']);
         Route::get('completion',[InvoiceController::class, 'completion']);
         Route::post('save-saldo-awal',[InvoiceController::class, 'storeSaldoAwal']);
+        Route::post('update-saldo-awal',[InvoiceController::class, 'updateSaldoAwal']);
         Route::post('save-data',[InvoiceController::class, 'store']);
         Route::post('save-data-faktur-pajak',[InvoiceController::class, 'saveFakturPajak']);
         Route::get('report-kartu-hutang',[InvoiceController::class, 'kartuHutang']);

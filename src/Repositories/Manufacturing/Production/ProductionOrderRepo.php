@@ -2,17 +2,20 @@
 
 namespace Icso\Accounting\Repositories\Manufacturing\Production;
 
+use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\Manufacturing\Bom;
 use Icso\Accounting\Models\Manufacturing\ProductionOrder;
 use Icso\Accounting\Models\Manufacturing\ProductionOrderMaterial;
 use Icso\Accounting\Models\Manufacturing\ProductionOrderResult;
+use Icso\Accounting\Models\Master\Category;
 use Icso\Accounting\Models\Master\Product;
 use Icso\Accounting\Models\Persediaan\Inventory;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Repositories\Persediaan\Inventory\Interface\InventoryRepo;
+use Icso\Accounting\Repositories\Utils\SettingRepo;
 use Icso\Accounting\Utils\KeyNomor;
 use Icso\Accounting\Utils\TransactionsCode;
 use Icso\Accounting\Utils\Utility;
@@ -241,12 +244,14 @@ class ProductionOrderRepo extends ElequentRepository
 
     protected function resolveMaterials(Request $request, float $plannedQty, float $actualQty): array
     {
+        $strictStock = $request->status_production === 'finished' && $this->isStockMinusDisallowed();
+
         if (!empty($request->materials) && (empty($request->bom_id) || $request->boolean('manual_material_override'))) {
             return $this->expandManualMaterialRows(
                 $this->normalizeArrayInput($request->materials),
                 (int) $request->warehouse_id,
                 !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'),
-                $request->status_production === 'finished'
+                $strictStock
             );
         }
 
@@ -279,7 +284,7 @@ class ProductionOrderRepo extends ElequentRepository
                     'qty_actual' => $rowActualQty,
                     'line_type' => $item->item_role ?: 'material',
                     'note' => $item->note,
-                ], (int) $request->warehouse_id, !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'), $request->status_production === 'finished'));
+                ], (int) $request->warehouse_id, !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'), $strictStock));
                 continue;
             }
 
@@ -359,20 +364,27 @@ class ProductionOrderRepo extends ElequentRepository
         $products = Product::whereHas('categories', function ($query) use ($categoryId) {
             $query->where('als_category.id', $categoryId);
         })->orderBy('id')->get();
+        $categoryName = Category::find($categoryId)?->category_name ?? ('ID ' . $categoryId);
 
         if ($products->isEmpty()) {
-            throw new \RuntimeException('Tidak ada produk dalam kategori bahan yang dipilih.');
+            throw new \RuntimeException('Tidak ada produk dalam kategori bahan "' . $categoryName . '".');
         }
 
         $remaining = $splitQty;
         $rows = [];
+        $totalAvailableStock = 0;
+        $emptyStockProducts = [];
+        $fallbackMinusProduct = null;
         foreach ($products as $product) {
             if ($remaining <= 0) {
                 break;
             }
 
             $availableStock = $inventoryRepo->getStokByDate($product->id, $warehouseId, $item->unit_id, $productionDate);
+            $totalAvailableStock += max(0, (float) $availableStock);
             if ($availableStock <= 0) {
+                $fallbackMinusProduct ??= $product;
+                $emptyStockProducts[] = $this->formatProductName($product);
                 continue;
             }
 
@@ -396,12 +408,40 @@ class ProductionOrderRepo extends ElequentRepository
             $remaining -= $consumeQty;
         }
 
+        if ($remaining > 0.0001 && !$strictStock) {
+            $fallbackMinusProduct ??= $products->first();
+            $ratio = $splitQty > 0 ? ($remaining / $splitQty) : 0;
+            $rows[] = (object) [
+                'bom_item_id' => $item->bom_item_id ?? 0,
+                'material_source_type' => 'category',
+                'source_product_id' => null,
+                'source_category_id' => $categoryId,
+                'product_id' => $fallbackMinusProduct->id,
+                'unit_id' => $item->unit_id,
+                'qty_planned' => $requestedPlannedQty * $ratio,
+                'qty_actual' => $requestedActualQty > 0 ? $remaining : 0,
+                'requested_qty_planned' => $requestedPlannedQty,
+                'requested_qty_actual' => $requestedActualQty,
+                'line_type' => $item->line_type ?? 'material',
+                'note' => $item->note ?? null,
+            ];
+
+            $remaining = 0;
+        }
+
         if ($remaining > 0.0001 && $strictStock) {
-            throw new \RuntimeException('Stok produk dalam kategori bahan tidak mencukupi.');
+            throw new \RuntimeException(
+                'Stok kategori "' . $categoryName . '" tidak mencukupi. ' .
+                'Kebutuhan: ' . $this->formatQty($splitQty) . ', tersedia: ' . $this->formatQty($totalAvailableStock) . ', kekurangan: ' . $this->formatQty($remaining) . '. ' .
+                $this->formatEmptyStockProductMessage($emptyStockProducts)
+            );
         }
 
         if (empty($rows)) {
-            throw new \RuntimeException('Stok produk dalam kategori bahan tidak tersedia.');
+            throw new \RuntimeException(
+                'Stok kategori "' . $categoryName . '" tidak tersedia. ' .
+                $this->formatEmptyStockProductMessage($emptyStockProducts)
+            );
         }
 
         return $rows;
@@ -614,6 +654,57 @@ class ProductionOrderRepo extends ElequentRepository
     protected function numericValue(object $row, string $field, float $default = 0): float
     {
         return $this->hasValue($row, $field) ? (float) $row->{$field} : $default;
+    }
+
+    protected function isStockMinusDisallowed(): bool
+    {
+        $settingKeys = [
+            SettingEnum::STOCK_MINUS,
+            SettingEnum::STOK_TIDAK_BOLEH_MINUS,
+            'stok_tidak_boleh_minus',
+            'stok_tidak_boleh_kurang',
+            'stock_not_allowed_minus',
+        ];
+
+        $value = '';
+        foreach ($settingKeys as $settingKey) {
+            $value = SettingRepo::getOptionValue($settingKey);
+            if ($value !== '') {
+                break;
+            }
+        }
+
+        return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'on'], true);
+    }
+
+    protected function formatProductName(Product $product): string
+    {
+        $code = trim((string) ($product->item_code ?? ''));
+        $name = trim((string) ($product->item_name ?? ('ID ' . $product->id)));
+
+        return $code !== '' ? $name . ' (' . $code . ')' : $name;
+    }
+
+    protected function formatQty(float $qty): string
+    {
+        return rtrim(rtrim(number_format($qty, 4, '.', ''), '0'), '.');
+    }
+
+    protected function formatEmptyStockProductMessage(array $emptyStockProducts): string
+    {
+        $emptyStockProducts = array_values(array_unique(array_filter($emptyStockProducts)));
+        if (empty($emptyStockProducts)) {
+            return '';
+        }
+
+        $shownProducts = array_slice($emptyStockProducts, 0, 5);
+        $message = 'Produk stok kosong: ' . implode(', ', $shownProducts);
+        $remainingCount = count($emptyStockProducts) - count($shownProducts);
+        if ($remainingCount > 0) {
+            $message .= ', dan ' . $remainingCount . ' produk lainnya';
+        }
+
+        return $message . '.';
     }
 
     protected function generateRefNo(): string

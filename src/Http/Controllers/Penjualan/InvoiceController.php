@@ -376,6 +376,7 @@ class InvoiceController extends Controller
         $arrData = array(
             'invoice_date' => $invoiceDate,
             'invoice_no' => $invoiceNo,
+            'vendor_id' => $vendorId,
             'note' => $note,
             'subtotal' => $nominal,
             'grandtotal' => $nominal,

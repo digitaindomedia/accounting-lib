@@ -9,7 +9,6 @@ use DateTime;
 use Icso\Accounting\Enums\JurnalStatusEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
 use Icso\Accounting\Models\AsetTetap\Pembelian\Depression;
-use Icso\Accounting\Models\Persediaan\Adjustment;
 use Icso\Accounting\Repositories\Akuntansi\JurnalTransaksiRepo;
 use Icso\Accounting\Repositories\ElequentRepository;
 use Icso\Accounting\Utils\KeyNomor;
@@ -29,11 +28,18 @@ class DepressionRepo extends ElequentRepository
     public function insertData($order, $receiveId,$penyusutanDate,$userId)
     {
         $jurnalTransaksiRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
-        $nilaiResidu = $order->nilai_residu;
-        $hargaBeli = $order->harga_beli;
-        $masa = $order->masa_manfaat;
+        if ((string) $order->status_penyusutan === '0') {
+            return;
+        }
+
+        $nilaiResidu = (float) $order->nilai_residu;
+        $hargaBeli = (float) $order->harga_beli;
+        $masa = (float) $order->masa_manfaat;
         $pilihanNilai = $order->pilihan_nilai;
-        $nilaiPenyusutan = $order->nilai_penyusutan;
+        $nilaiPenyusutan = (float) $order->nilai_penyusutan;
+        if (empty($pilihanNilai) && !empty($order->metode_penyusutan)) {
+            $pilihanNilai = $order->metode_penyusutan === 'pertahun' ? 'masa' : 'persen';
+        }
         $now = date("Y-m-d");
         $start    = (new DateTime($penyusutanDate))->modify('first day of this month');
         $end      = (new DateTime($now))->modify('first day of next month');
@@ -45,13 +51,22 @@ class DepressionRepo extends ElequentRepository
         $end_y      = $now;
         $getRangeYear   = range(gmdate('Y', strtotime($start_y)), gmdate('Y', strtotime($end_y)));
         $arrHitung = array();
-        $totalBulan = $masa;
+        $totalBulan = 0;
         if($pilihanNilai == 'masa') {
+            if ($masa <= 0) {
+                return;
+            }
             $totalBulan = $masa * 12;
         } else if($pilihanNilai == 'masa_bulan') {
+            if ($masa <= 0) {
+                return;
+            }
             $totalBulan = $masa;
         }
         else {
+            if ($nilaiPenyusutan <= 0) {
+                return;
+            }
             $tahun = 100 / $nilaiPenyusutan;
             $totalBulan = $tahun * 12;
         }
@@ -63,7 +78,7 @@ class DepressionRepo extends ElequentRepository
                 $jumlahPakai = $this->getLeftNumberOfMonth($penyusutanDate);
             }
             $hitungSusut = 0;
-            if ($masa != '0') {
+            if ($masa > 0) {
                 if($order->is_saldo_awal == '1'){
                     if ($pilihanNilai == 'masa' || $pilihanNilai == 'masa_bulan') {
                         $hitungSusut = ($hargaBeli - ($nilaiResidu + $order->nilai_akum_penyusutan)) / $totalBulan;
@@ -81,7 +96,7 @@ class DepressionRepo extends ElequentRepository
                 }
 
             }
-            if ($nilaiPenyusutan != '0') {
+            if ($nilaiPenyusutan > 0) {
                 $persen = $nilaiPenyusutan / 100;
                 $hit = ($hargaBeli - $nilaiResidu) * $persen;
                 $hitungSusut = ($jumlahPakai / 12) * $hit;
@@ -109,7 +124,7 @@ class DepressionRepo extends ElequentRepository
                         }
                     }
                     if ($hit['tahun'] == $thn) {
-                        $noJurnal = self::generateCodeTransaction(new Adjustment(), KeyNomor::NO_DEPRESIASI_ASET_TETAP, 'jurnal_no', 'depression_date');
+                        $noJurnal = self::generateCodeTransaction(new Depression(), KeyNomor::NO_DEPRESIASI_ASET_TETAP, 'jurnal_no', 'depression_date');
                         $isInserted = Depression::where(array('receive_id' => $receiveId, 'depression_date' => $tgl));
                         if ($isInserted->count() == 0) {
                             $arrDataDepresiasi = array(

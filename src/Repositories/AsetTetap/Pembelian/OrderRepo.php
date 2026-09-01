@@ -96,6 +96,11 @@ class OrderRepo extends ElequentRepository
         }
 
         $asetTetapDate = Utility::changeDateFormat($request->aset_tetap_date);
+        $metodePenyusutan = !empty($request->metode_penyusutan) ? $request->metode_penyusutan : '';
+        $pilihanNilai = !empty($request->pilihan_nilai) ? $request->pilihan_nilai : '';
+        if (empty($pilihanNilai) && !empty($metodePenyusutan)) {
+            $pilihanNilai = $metodePenyusutan === 'pertahun' ? 'masa' : 'persen';
+        }
 
         $arrData = array(
             'no_aset' => $asetNo,
@@ -109,11 +114,11 @@ class OrderRepo extends ElequentRepository
             'nilai_penyusutan' => !empty($request->nilai_penyusutan) ? $request->nilai_penyusutan : 0,
             'akumulasi_penyusutan_coa_id' => !empty($request->akumulasi_penyusutan_coa_id) ? $request->akumulasi_penyusutan_coa_id : 0,
             'penyusutan_coa_id' => !empty($request->penyusutan_coa_id) ? $request->penyusutan_coa_id : 0,
-            'metode_penyusutan' => !empty($request->metode_penyusutan) ? $request->metode_penyusutan : '',
+            'metode_penyusutan' => $metodePenyusutan,
             'tanggal_mulai_penyusutan' => !empty($request->tanggal_mulai_penyusutan) ? $request->tanggal_mulai_penyusutan : null,
             'masa_manfaat' => !empty($request->masa_manfaat) ? $request->masa_manfaat : 0,
             'nilai_residu' => !empty($request->nilai_residu) ? Utility::remove_commas($request->nilai_residu) : 0,
-            'pilihan_nilai' => !empty($request->pilihan_nilai) ? $request->pilihan_nilai : '',
+            'pilihan_nilai' => $pilihanNilai,
             'dpp' => !empty($request->dpp) ? Utility::remove_commas($request->dpp) : 0,
             'ppn' => !empty($request->ppn) ? Utility::remove_commas($request->ppn) : 0,
             'nilai_akum_penyusutan' => !empty($request->nilai_akum_penyusutan) ? Utility::remove_commas($request->nilai_akum_penyusutan) : 0,

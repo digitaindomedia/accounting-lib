@@ -292,10 +292,13 @@ class InvoiceController extends Controller
         try {
             if (count($invoice) > 0) {
                 foreach ($invoice as $i => $item) {
+                    $invoiceDate = !empty($item->invoice_date) && strtotime($item->invoice_date) !== false
+                        ? date("Y-m-d", strtotime($item->invoice_date))
+                        : date("Y-m-d");
                     $req = new Request();
                     $req->coa_id = $coaId;
                     $req->user_id = $userId;
-                    $req->invoice_date = date("Y-m-d", strtotime($item->invoice_date));
+                    $req->invoice_date = $invoiceDate;
                     $req->invoice_no = $item->invoice_no;
                     $req->note = $item->note;
                     $req->vendor_id = $item->vendor_id;

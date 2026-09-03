@@ -162,7 +162,7 @@ class InventoryController extends Controller
             if (count($stock) > 0) {
                 $findSaldoAwalData = SaldoAwal::where(array('is_default' => '1'))->first();
                 $saldoAwalDate = date('Y-m-d H:i:s');
-                if(!empty($findSaldoAwalData)){
+                if(!empty($findSaldoAwalData) && !empty($findSaldoAwalData->saldo_date) && strtotime($findSaldoAwalData->saldo_date) !== false){
                     $saldoAwalDate = $findSaldoAwalData->saldo_date." ".date('H:i:s');
                 }
                 foreach ($stock as $i => $item) {

@@ -103,10 +103,13 @@ class BukuPembantuController extends Controller
             if (count($bukuPembantu) > 0) {
                 DB::statement('SET FOREIGN_KEY_CHECKS=0;');
                 foreach ($bukuPembantu as $i => $item) {
+                    $refDate = !empty($item->ref_date) && strtotime($item->ref_date) !== false
+                        ? date("Y-m-d", strtotime($item->ref_date))
+                        : date("Y-m-d");
                     $req = new Request();
                     $req->coa_id = $coaId;
                     $req->user_id = $userId;
-                    $req->ref_date = date("Y-m-d", strtotime($item->ref_date));
+                    $req->ref_date = $refDate;
                     $req->ref_no = $item->ref_no;
                     $req->note = $item->note;
                     $req->field_name = $item->field_name;

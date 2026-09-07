@@ -482,6 +482,7 @@ Route::group([
         Route::get('export-excel-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportReportExcel']);
         Route::get('export-pdf-detail-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportDetailReportPdf']);
         Route::get('export-excel-detail-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportDetailReportExcel']);
+        Route::get('export-excel-horizontal-detail-report', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportDetailReportHorizontalExcel']);
         Route::get('export-kartu-piutang', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangExcel']);
         Route::get('export-kartu-piutang-pdf', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportKartuPiutangSummaryPdf']);
         Route::get('export-saldo-awal-piutang-excel', [\Icso\Accounting\Http\Controllers\Penjualan\InvoiceController::class, 'exportJurnal']);

@@ -50,7 +50,7 @@ class SalesDelivery extends Model
 
     public function deliveryproduct(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->hasMany(SalesDeliveryProduct::class, 'delivery_id');
+        return $this->hasMany(SalesDeliveryProduct::class, 'delivery_id')->orderBy('id', 'asc');
     }
 
 

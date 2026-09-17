@@ -235,6 +235,23 @@ class BaseReportExport implements FromView, ShouldAutoSize, WithEvents
             ];
         }
 
+        if ($this->viewName === 'accounting::purchase.purchase_invoice_detail_horizontal_report') {
+            $widths = [
+                'A' => 28,
+                'B' => 20,
+                'C' => 16,
+                'D' => 34,
+                'E' => 20,
+                'F' => 14,
+                'G' => 12,
+                'H' => 12,
+                'I' => 16,
+                'J' => 16,
+                'K' => 16,
+                'L' => 18,
+            ];
+        }
+
         foreach ($widths as $column => $width) {
             if (Coordinate::columnIndexFromString($column) <= $highestColumnIndex) {
                 $sheet->getColumnDimension($column)->setAutoSize(false);
@@ -249,6 +266,7 @@ class BaseReportExport implements FromView, ShouldAutoSize, WithEvents
             'accounting::sales.sales_invoice_detail_item_report' => 'Invoice Detail',
             'accounting::sales.sales_invoice_detail_report' => 'Invoice Penjualan',
             'accounting::sales.sales_invoice_detail_item_horizontal_report' => 'Invoice Detail Menyamping',
+            'accounting::purchase.purchase_invoice_detail_horizontal_report' => 'Invoice Pembelian Detail',
         ];
 
         $title = $titles[$this->viewName] ?? class_basename($this->viewName);

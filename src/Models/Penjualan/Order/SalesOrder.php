@@ -42,7 +42,7 @@ class SalesOrder extends Model
 
     public function orderproduct(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->hasMany(SalesOrderProduct::class,'order_id');
+        return $this->hasMany(SalesOrderProduct::class,'order_id')->orderBy('id', 'asc');
     }
 
     public function ordermeta()

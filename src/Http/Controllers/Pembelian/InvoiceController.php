@@ -4,6 +4,7 @@ namespace Icso\Accounting\Http\Controllers\Pembelian;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Icso\Accounting\Enums\StatusEnum;
+use Icso\Accounting\Exports\BaseReportExport;
 use Icso\Accounting\Exports\KartuHutangExcelExport;
 use Icso\Accounting\Exports\PurchaseInvoiceExport;
 use Icso\Accounting\Exports\PurchaseInvoiceReportDetailExport;
@@ -816,6 +817,21 @@ class InvoiceController extends Controller
     {
         return $this->exportReportAsFormat($request, 'excel-purchase-invoice.xlsx');
 
+    }
+
+    public function exportReportHorizontalExcel(Request $request)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+        $data = $this->invoiceRepo->getAllDataBy($search, $page, $perpage, $where);
+
+        $receiveRepo = new ReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
+        $data = $this->processReportInvoiceData($data, $receiveRepo);
+
+        return Excel::download(
+            new BaseReportExport($data, $params, 'accounting::purchase.purchase_invoice_detail_horizontal_report'),
+            'laporan-invoice-pembelian-detail-menyamping.xlsx'
+        );
     }
 
     public function exportReportPdf(Request $request)

@@ -248,6 +248,7 @@ Route::group([
         Route::get('export-csv', [InvoiceController::class, 'exportCsv']);
         Route::get('export-pdf', [InvoiceController::class, 'exportPdf']);
         Route::get('export-excel-report', [InvoiceController::class, 'exportReportExcel']);
+        Route::get('export-excel-horizontal-report', [InvoiceController::class, 'exportReportHorizontalExcel']);
         Route::get('export-pdf-report', [InvoiceController::class, 'exportReportPdf']);
         Route::get('export-kartu-hutang', [InvoiceController::class, 'exportKartuHutangExcel']);
         Route::get('export-kartu-hutang-pdf', [InvoiceController::class, 'exportKartuHutangSummaryPdf']);

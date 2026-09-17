@@ -158,8 +158,22 @@
                 <td class="text-right">Subtotal</td>
             </tr>
 
-            @foreach ($post->invoicereceived as $item)
-                @foreach($item->receive->receiveproduct as $val)
+            @php
+                $invoiceItems = !empty($post->orderproduct) && $post->orderproduct->isNotEmpty()
+                    ? $post->orderproduct
+                    : collect();
+
+                if ($invoiceItems->isEmpty()) {
+                    foreach ($post->invoicereceived ?? [] as $item) {
+                        $receiveProducts = !empty($item->receive)
+                            ? $item->receive->receiveproduct
+                            : collect();
+                        $invoiceItems = $invoiceItems->merge($receiveProducts);
+                    }
+                }
+            @endphp
+
+            @foreach($invoiceItems as $val)
                     @php
                         $taxname = \Icso\Accounting\Utils\Helpers::getTaxName(
                             $val->tax_id,
@@ -177,14 +191,14 @@
                         <td colspan="2">
                             {{ !empty($val->product)
                                 ? $val->product->item_name.' ('.$val->product->item_code.')'
-                                : '-' }}
+                                : ($val->service_name ?? '-') }}
                         </td>
                         <td class="text-center">
                             {{ $val->qty }}
                             {{ optional($val->unit)->unit_code }}
                         </td>
                         <td class="text-right">
-                            {{ number_format($val->buy_price, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}
+                            {{ number_format($val->price ?? $val->buy_price ?? 0, \Icso\Accounting\Repositories\Utils\SettingRepo::getSeparatorFormat()) }}
                         </td>
                         <td class="text-right">
                             {{ \Icso\Accounting\Utils\Helpers::getDiscountString($val->discount, $val->discount_type) }}
@@ -203,7 +217,6 @@
                             ];
                         }
                     @endphp
-                @endforeach
             @endforeach
 
             @php

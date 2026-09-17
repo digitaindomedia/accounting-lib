@@ -933,6 +933,7 @@ class InvoiceRepo extends ElequentRepository
                     ->orWhere('invoice_id', $invoice->id);
             })
             ->with(['product', 'tax.taxgroup.tax'])
+            ->orderBy('id', 'asc')
             ->get();
 
         if ($products->isEmpty()) {

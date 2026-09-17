@@ -149,7 +149,7 @@ class InvoiceController extends Controller
                     'product.productconvertion.base_unit',
                     'tax',
                     'tax.taxgroup'
-                ])->get();
+                ])->orderBy('id', 'asc')->get();
             }
             $this->attachHppToInvoice($item);
             $paid = $this->paymentInvoiceRepo->getAllPaymentByInvoiceId($item->id);
@@ -438,7 +438,7 @@ class InvoiceController extends Controller
                         'product.productconvertion.base_unit',
                         'tax',
                         'tax.taxgroup'
-                    ])->get();
+                    ])->orderBy('id', 'asc')->get();
                     $res->orderproductservice = $invProduct;
                 }
             }

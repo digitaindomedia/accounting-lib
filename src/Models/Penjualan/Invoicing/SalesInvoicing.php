@@ -43,12 +43,12 @@ class SalesInvoicing extends Model
 
     public function invoicedelivery()
     {
-        return $this->hasMany(SalesInvoicingDelivery::class,'invoice_id');
+        return $this->hasMany(SalesInvoicingDelivery::class,'invoice_id')->orderBy('id', 'asc');
     }
 
     public function orderproduct()
     {
-        return $this->hasMany(SalesOrderProduct::class,'invoice_id');
+        return $this->hasMany(SalesOrderProduct::class,'invoice_id')->orderBy('id', 'asc');
     }
 
     public function order(): \Illuminate\Database\Eloquent\Relations\BelongsTo

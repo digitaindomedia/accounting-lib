@@ -10,6 +10,7 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class BaseReportExport implements FromView, ShouldAutoSize, WithEvents
 {
@@ -43,6 +44,7 @@ class BaseReportExport implements FromView, ShouldAutoSize, WithEvents
                 $highestColumnIndex = Coordinate::columnIndexFromString($highestColumn);
                 $fullRange = "A1:{$highestColumn}{$highestRow}";
 
+                $sheet->setTitle($this->sheetTitle());
                 $sheet->calculateColumnWidths();
 
                 $sheet->getStyle($fullRange)->applyFromArray([
@@ -169,7 +171,7 @@ class BaseReportExport implements FromView, ShouldAutoSize, WithEvents
 
                 $this->applyKnownReportColumnWidths($sheet, $highestColumnIndex);
 
-                $rightAlignedColumns = ['E', 'F', 'G', 'H', 'I', 'J'];
+                $rightAlignedColumns = ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
                 foreach ($rightAlignedColumns as $column) {
                     if (Coordinate::columnIndexFromString($column) <= $highestColumnIndex) {
                         $sheet->getStyle("{$column}:{$column}")
@@ -216,11 +218,47 @@ class BaseReportExport implements FromView, ShouldAutoSize, WithEvents
             ];
         }
 
+        if ($this->viewName === 'accounting::sales.sales_invoice_detail_item_horizontal_report') {
+            $widths = [
+                'A' => 28,
+                'B' => 20,
+                'C' => 16,
+                'D' => 34,
+                'E' => 20,
+                'F' => 14,
+                'G' => 12,
+                'H' => 12,
+                'I' => 16,
+                'J' => 16,
+                'K' => 16,
+                'L' => 18,
+            ];
+        }
+
         foreach ($widths as $column => $width) {
             if (Coordinate::columnIndexFromString($column) <= $highestColumnIndex) {
                 $sheet->getColumnDimension($column)->setAutoSize(false);
                 $sheet->getColumnDimension($column)->setWidth($width);
             }
         }
+    }
+
+    private function sheetTitle(): string
+    {
+        $titles = [
+            'accounting::sales.sales_invoice_detail_item_report' => 'Invoice Detail',
+            'accounting::sales.sales_invoice_detail_report' => 'Invoice Penjualan',
+            'accounting::sales.sales_invoice_detail_item_horizontal_report' => 'Invoice Detail Menyamping',
+        ];
+
+        $title = $titles[$this->viewName] ?? class_basename($this->viewName);
+        $title = str_replace(['*', ':', '/', '\\', '?', '[', ']'], ' ', $title);
+        $title = trim(preg_replace('/\s+/', ' ', $title));
+
+        if ($title === '') {
+            return 'Worksheet';
+        }
+
+        return mb_substr($title, 0, Worksheet::SHEET_TITLE_MAXIMUM_LENGTH);
     }
 }

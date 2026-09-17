@@ -471,6 +471,7 @@ class InvoiceController extends Controller
             'invoicedelivery.delivery.deliveryproduct',
             'invoicedelivery.delivery.deliveryproduct.unit',
             'invoicedelivery.delivery.deliveryproduct.product',
+            'invoicedelivery.delivery.deliveryproduct.product.categories',
             'invoicedelivery.delivery.deliveryproduct.product.productconvertion',
             'invoicedelivery.delivery.deliveryproduct.product.productconvertion.unit',
             'invoicedelivery.delivery.deliveryproduct.product.productconvertion.base_unit',
@@ -487,6 +488,7 @@ class InvoiceController extends Controller
             'orderproduct',
             'orderproduct.unit',
             'orderproduct.product',
+            'orderproduct.product.categories',
             'orderproduct.product.productconvertion',
             'orderproduct.product.productconvertion.unit',
             'orderproduct.product.productconvertion.base_unit',
@@ -1030,6 +1032,23 @@ class InvoiceController extends Controller
     public function exportDetailReportExcel(Request $request)
     {
         return $this->exportDetailReportAsFormat($request, 'laporan-invoice-penjualan-detail.xlsx');
+    }
+
+    public function exportDetailReportHorizontalExcel(Request $request)
+    {
+        $params = $this->setQueryParameters($request);
+        extract($params);
+
+        $total = $this->invoiceRepo->getAllTotalDataBy($search, $where);
+        $exportPage = is_numeric($page) ? (int) $page : 0;
+        $exportPerpage = is_numeric($perpage) && (int) $perpage > 0 ? (int) $perpage : $total;
+        $data = $this->invoiceRepo->getAllDataBy($search, $exportPage, $exportPerpage, $where);
+        $data = $this->attachHppToInvoiceData($data);
+
+        return Excel::download(
+            new BaseReportExport($data, $params, 'accounting::sales.sales_invoice_detail_item_horizontal_report'),
+            'laporan-invoice-penjualan-detail-menyamping.xlsx'
+        );
     }
 
     public function exportDetailReportPdf(Request $request)

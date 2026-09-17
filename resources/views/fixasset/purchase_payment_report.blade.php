@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Laporan Pembayaran Pembelian Aset Tetap</title>
+    <title>Pembayaran Aset Tetap</title>
     <style>
         table {
             width: 100%;

@@ -270,7 +270,23 @@ class JurnalRepo extends ElequentRepository
 
     public function deleteAdditionalData($id)
     {
-        // TODO: Implement deleteAdditionalData() method.
+        // Capture affected invoices before removing their journal settlements.
+        $purchaseInvoiceIds = PurchasePaymentInvoice::where('jurnal_id', $id)
+            ->distinct()->pluck('invoice_id');
+        $salesInvoiceIds = SalesPaymentInvoice::where('jurnal_id', $id)
+            ->distinct()->pluck('invoice_id');
+
+        PurchasePaymentInvoice::where('jurnal_id', $id)->delete();
+        SalesPaymentInvoice::where('jurnal_id', $id)->delete();
+
+        // Preserve payments from other sources when recalculating invoice status.
+        foreach ($purchaseInvoiceIds as $invoiceId) {
+            \Icso\Accounting\Repositories\Pembelian\Invoice\InvoiceRepo::changeStatusInvoice($invoiceId);
+        }
+        foreach ($salesInvoiceIds as $invoiceId) {
+            InvoiceRepo::changeStatusInvoice($invoiceId);
+        }
+
         $jurnalAkunRepo = new JurnalAkunRepo(new JurnalAkun());
         $jurnalTransaksiRepo = new JurnalTransaksiRepo(new JurnalTransaksi());
         $jurnalAkunRepo->deleteByWhere(array('jurnal_id' => $id));

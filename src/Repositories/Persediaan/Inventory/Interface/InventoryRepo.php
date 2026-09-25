@@ -36,6 +36,8 @@ use Illuminate\Support\Facades\DB;
 class InventoryRepo extends ElequentRepository
 {
 
+    use RebuildsInventory;
+
     protected $model;
 
     public function __construct(Inventory $model)
@@ -93,31 +95,34 @@ class InventoryRepo extends ElequentRepository
         $unitId = !empty($request->unit_id) ? $request->unit_id : 0;
 
 
-        if(!empty($qtyIn)){
-            $findProduct = Product::where(array('id' => $productId))->first();
-            if(!empty($findProduct)){
-                if($findProduct->unit_id != $unitId){
-                    $findConvertion = ProductConvertion::where(array('product_id' => $productId, 'unit_id' => $unitId))->first();
-                    if(!empty($findConvertion)){
-                        $nilai = (float) $findConvertion->nilai_terkecil;
-                        $qtyIn = $qtyIn * $nilai;
-                        $price = $price / $nilai;
-                    }
-                }
+        if ($qtyIn != 0 || $qtyOut != 0) {
+            $factor = $this->getConversionFactorToSmallest($productId, $unitId);
+            $qtyIn *= $factor;
+            $qtyOut *= $factor;
+            // A value adjustment supplies a total amount, not a unit price.
+            if ($request->adjustment_type != VarType::ADJUSTMENT_TYPE_VALUE) {
+                $price /= $factor;
             }
         }
 
-        if(!empty($qtyOut)){
-            $findProduct = Product::where(array('id' => $productId))->first();
-            if(!empty($findProduct)){
-                if($findProduct->unit_id != $unitId){
-                    $findConvertion = ProductConvertion::where(array('product_id' => $productId, 'unit_id' => $unitId))->first();
-                    if(!empty($findConvertion)){
-                        $nilai = (float) $findConvertion->nilai_terkecil;
-                        $qtyOut = $qtyOut * $nilai;
-                        $price = $price / $nilai;
-                    }
+        if (self::$rebuildCreatedAt !== null && $qtyOut > 0) {
+            $available = (float) Inventory::where('product_id', $productId)
+                ->selectRaw('COALESCE(SUM(qty_in - qty_out), 0) AS qty')->value('qty');
+            if ($qtyOut > $available + 0.00000001) {
+                $document = "{$transactionCode} (ID transaksi {$transactionId}, ID detail {$transactionSubId})";
+                if ($transactionCode === TransactionsCode::INVOICE_PENJUALAN) {
+                    $invoiceNo = SalesInvoicing::whereKey($transactionId)->value('invoice_no');
+                    $invoiceNo = trim((string) $invoiceNo) !== '' ? $invoiceNo : '(belum diisi)';
+                    $document = "{$transactionCode}, no invoice {$invoiceNo} (ID invoice {$transactionId}, ID detail {$transactionSubId})";
                 }
+                $shortage = $qtyOut - $available;
+                $lastHpp = $this->lastPositiveBalanceHpp($productId, $inventoryDate);
+                if ($lastHpp === null) {
+                    throw new \RuntimeException("Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}. HPP terakhir belum tersedia; rebuild dibatalkan.");
+                }
+                $warning = "Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}, kekurangan {$shortage} (satuan terkecil). HPP terakhir sebelum minus {$lastHpp}; HPP transaksi {$price} per satuan terkecil.";
+                self::$rebuildWarnings[] = $warning;
+                $note = trim($note . ' ' . $warning);
             }
         }
 
@@ -187,7 +192,7 @@ class InventoryRepo extends ElequentRepository
             'total_out' => $totalOut,
             'note' => $note,
             'coa_id' => $coaId,
-            'created_at' => date('Y-m-d H:i:s'),
+            'created_at' => self::$rebuildCreatedAt ?? date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
             'updated_by' => $userId,
             'created_by' => $userId
@@ -199,7 +204,7 @@ class InventoryRepo extends ElequentRepository
     public function getStokByDate($productId, $warehouseId, $unitId, $date)
     {
         $query = Inventory::where('product_id', $productId)
-            ->where('inventory_date', '<=', $date);
+            ->where('inventory_date', '<=', $this->inventoryDateCutoff($date));
 
         if (!empty($warehouseId)) {
             $query->where('warehouse_id', $warehouseId);
@@ -210,59 +215,14 @@ class InventoryRepo extends ElequentRepository
             DB::raw('COALESCE(SUM(qty_out), 0) as qty_out')
         )->first();
 
-        return ((float) $stock->qty_in) - ((float) $stock->qty_out);
+        return (((float) $stock->qty_in) - ((float) $stock->qty_out))
+            / $this->getConversionFactorToSmallest($productId, $unitId);
     }
 
-    /**
-     * Rebuild full inventory ledger from source transactions.
-     * Sequence:
-     * 1. Saldo awal
-     * 2. Penerimaan pembelian
-     * 3. Invoice pembelian tanpa penerimaan
-     * 4. Adjustment persediaan
-     * 5. Pemakaian persediaan
-     * 6. Pengiriman penjualan
-     * 7. Invoice penjualan tanpa pengiriman
-     */
-    public function recalculateStock(?string $actorId = null): array
-    {
-        DB::beginTransaction();
-        try {
-            DB::statement('SET FOREIGN_KEY_CHECKS=0');
-            DB::table(Inventory::getTableName())->delete();
-            DB::statement('SET FOREIGN_KEY_CHECKS=1');
-
-            $summary = [
-                'saldo_awal' => $this->rebuildFromStockAwal($actorId),
-                'penerimaan' => $this->rebuildFromPurchaseReceive($actorId),
-                'invoice_pembelian_tanpa_penerimaan' => $this->rebuildFromDirectPurchaseInvoice($actorId),
-                'adjustment' => $this->rebuildFromAdjustment(),
-                'pemakaian' => $this->rebuildFromStockUsage(),
-                'pengiriman' => $this->rebuildFromSalesDelivery($actorId),
-                'invoice_penjualan_tanpa_pengiriman' => $this->rebuildFromDirectSalesInvoice($actorId),
-            ];
-            $journalSummary = $this->repostAccountingJournals();
-            $journalSummary['adjustment'] = Adjustment::count();
-            $journalSummary['pemakaian'] = StockUsage::count();
-
-            DB::commit();
-            return [
-                'status' => true,
-                'summary' => $summary,
-                'journal_summary' => $journalSummary,
-                'total' => array_sum($summary),
-            ];
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            DB::statement('SET FOREIGN_KEY_CHECKS=1');
-            throw $e;
-        }
-    }
-
-    private function rebuildFromStockAwal(?string $actorId = null): int
+    private function rebuildFromStockAwal(?string $actorId = null, $sourceId = null): int
     {
         $counter = 0;
-        StockAwal::orderBy('stock_date', 'asc')
+        StockAwal::whereKey($sourceId)->orderBy('stock_date', 'asc')
             ->orderBy('id', 'asc')
             ->chunk(500, function ($rows) use (&$counter, $actorId) {
                 foreach ($rows as $row) {
@@ -284,7 +244,7 @@ class InventoryRepo extends ElequentRepository
         return $counter;
     }
 
-    private function rebuildFromPurchaseReceive(?string $actorId = null): int
+    private function rebuildFromPurchaseReceive(?string $actorId = null, $sourceId = null): int
     {
         $counter = 0;
         $receiveTable = (new PurchaseReceived())->getTable();
@@ -293,6 +253,7 @@ class InventoryRepo extends ElequentRepository
 
         DB::table($receiveProductTable . ' as rp')
             ->join($receiveTable . ' as r', 'r.id', '=', 'rp.receive_id')
+            ->where('r.id', $sourceId)
             ->leftJoin($productTable . ' as p', 'p.id', '=', 'rp.product_id')
             ->select([
                 'rp.id as receive_product_id',
@@ -333,7 +294,7 @@ class InventoryRepo extends ElequentRepository
         return $counter;
     }
 
-    private function rebuildFromDirectPurchaseInvoice(?string $actorId = null): int
+    private function rebuildFromDirectPurchaseInvoice(?string $actorId = null, $sourceId = null): int
     {
         $counter = 0;
         $invoiceTable = (new PurchaseInvoicing())->getTable();
@@ -343,9 +304,13 @@ class InventoryRepo extends ElequentRepository
 
         DB::table($orderProductTable . ' as op')
             ->join($invoiceTable . ' as i', 'i.id', '=', 'op.invoice_id')
+            ->where('i.id', $sourceId)
             ->leftJoin($invoiceReceiveTable . ' as ir', 'ir.invoice_id', '=', 'i.id')
             ->leftJoin($productTable . ' as p', 'p.id', '=', 'op.product_id')
             ->whereNull('ir.id')
+            ->where('i.input_type', InputType::PURCHASE)
+            ->where('i.invoice_type', ProductType::ITEM)
+            ->where('p.product_type', ProductType::ITEM)
             ->where('op.product_id', '!=', 0)
             ->where('op.qty', '>', 0)
             ->orderBy('i.invoice_date', 'asc')
@@ -416,12 +381,12 @@ class InventoryRepo extends ElequentRepository
         return $counter;
     }
 
-    private function rebuildFromAdjustment(): int
+    private function rebuildFromAdjustment($sourceId = null): int
     {
         $counter = 0;
         $adjustmentRepo = new AdjustmentRepo(new Adjustment(), app(ActivityLogService::class));
 
-        Adjustment::with('adjustmentproduct')
+        Adjustment::whereKey($sourceId)->with(['adjustmentproduct' => fn ($q) => $q->orderBy('id')])
             ->orderBy('adjustment_date', 'asc')
             ->orderBy('id', 'asc')
             ->chunk(200, function ($rows) use (&$counter, $adjustmentRepo) {
@@ -440,12 +405,12 @@ class InventoryRepo extends ElequentRepository
         return $counter;
     }
 
-    private function rebuildFromStockUsage(): int
+    private function rebuildFromStockUsage($sourceId = null): int
     {
         $counter = 0;
         $pemakaianRepo = new PemakaianRepo(new StockUsage(), app(ActivityLogService::class));
 
-        StockUsage::with('stockusageproduct')
+        StockUsage::whereKey($sourceId)->with(['stockusageproduct' => fn ($q) => $q->orderBy('id')])
             ->orderBy('usage_date', 'asc')
             ->orderBy('id', 'asc')
             ->chunk(200, function ($rows) use (&$counter, $pemakaianRepo) {
@@ -464,7 +429,7 @@ class InventoryRepo extends ElequentRepository
         return $counter;
     }
 
-    private function rebuildFromSalesDelivery(?string $actorId = null): int
+    private function rebuildFromSalesDelivery(?string $actorId = null, $sourceId = null): int
     {
         $counter = 0;
         $deliveryTable = (new SalesDelivery())->getTable();
@@ -473,6 +438,7 @@ class InventoryRepo extends ElequentRepository
 
         DB::table($deliveryProductTable . ' as dp')
             ->join($deliveryTable . ' as d', 'd.id', '=', 'dp.delivery_id')
+            ->where('d.id', $sourceId)
             ->leftJoin($productTable . ' as p', 'p.id', '=', 'dp.product_id')
             ->where('dp.product_id', '!=', 0)
             ->where('dp.qty', '>', 0)
@@ -516,7 +482,7 @@ class InventoryRepo extends ElequentRepository
         return $counter;
     }
 
-    private function rebuildFromDirectSalesInvoice(?string $actorId = null): int
+    private function rebuildFromDirectSalesInvoice(?string $actorId = null, $sourceId = null): int
     {
         $counter = 0;
         $invoiceTable = (new SalesInvoicing())->getTable();
@@ -526,6 +492,7 @@ class InventoryRepo extends ElequentRepository
 
         DB::table($orderProductTable . ' as op')
             ->join($invoiceTable . ' as i', 'i.id', '=', 'op.invoice_id')
+            ->where('i.id', $sourceId)
             ->leftJoin($invoiceDeliveryTable . ' as idv', 'idv.invoice_id', '=', 'i.id')
             ->leftJoin($productTable . ' as p', 'p.id', '=', 'op.product_id')
             ->whereNull('idv.id')
@@ -592,7 +559,7 @@ class InventoryRepo extends ElequentRepository
             'invoice_pembelian_skipped_invalid_detail' => 0,
             'pengiriman' => 0,
             'invoice_penjualan' => 0,
-            'invoice_penjualan_pos_skipped' => 0,
+            'invoice_penjualan_pos' => 0,
         ];
 
         $purchaseReceiveRepo = new PurchaseReceiveRepo(new PurchaseReceived(), app(ActivityLogService::class));
@@ -642,10 +609,16 @@ class InventoryRepo extends ElequentRepository
         SalesInvoicing::orderBy('invoice_date', 'asc')->orderBy('id', 'asc')->chunk(200, function ($rows) use (&$summary, $salesInvoiceRepo) {
             foreach ($rows as $row) {
                 if ($row->input_type == InputType::POS) {
-                    $summary['invoice_penjualan_pos_skipped']++;
-                    continue;
+                    DB::table('als_jurnal_transactions')
+                        ->where('transaction_code', TransactionsCode::INVOICE_PENJUALAN)
+                        ->where('transaction_id', $row->id)
+                        ->where(function ($q) {
+                            $q->whereNull('note')->orWhereNotIn('note', ['Pembayaran POS', 'Pelunasan Piutang POS']);
+                        })->delete();
+                    $summary['invoice_penjualan_pos']++;
+                } else {
+                    JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PENJUALAN, $row->id);
                 }
-                JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::INVOICE_PENJUALAN, $row->id);
                 $salesInvoiceRepo->postingJurnal($row->id, true, true);
                 $summary['invoice_penjualan']++;
             }
@@ -654,54 +627,20 @@ class InventoryRepo extends ElequentRepository
         return $summary;
     }
 
+    /** Global HPP expressed in the requested transaction unit. */
     public function movingAverageByDate($productId, $unitId, $date)
     {
-        // TODO: Implement movingAverageByDate() method.
-        $totalIn = Inventory::where([['unit_id','=',$unitId],['product_id','=',$productId],['inventory_date','<=',$date]])->orderBy('inventory_date','ASC')->sum('total_in');
-        $totalOut = Inventory::where([['unit_id','=',$unitId],['product_id','=',$productId],['inventory_date','<=',$date]])->orderBy('inventory_date','ASC')->sum('total_out');
-        $qtyIn = Inventory::where([['unit_id','=',$unitId],['product_id','=',$productId],['inventory_date','<=',$date]])->orderBy('inventory_date','ASC')->sum('qty_in');
-        $qtyOut = Inventory::where([['unit_id','=',$unitId],['product_id','=',$productId],['inventory_date','<=',$date]])->orderBy('inventory_date','ASC')->sum('qty_out');
-        $hpp = 0;
-        $total = $totalIn - $totalOut;
-        $qty = $qtyIn - $qtyOut;
-        if($qty != 0)
-        {
-            $hpp = $total / $qty;
-            if($hpp < 0)
-            {
-                $hpp = 0;
-            }
-        }
-        /* $tableName = Inventory::getTableName();
-        $sql = "SELECT SUM(total_in) as totalIn,SUM(total_out) as totalOut,SUM(qty_in) as qtyIn,SUM(qty_out) as qtyOut FROM $tableName WHERE unit_id='$unitId' AND product_id = '$productId' AND DATE(inventory_date) <= '$date' ORDER BY inventory_date ASC ";
-        $q_res = DB::select(DB::raw($sql));
-        $hpp = 0;
-        if(count($q_res) > 0)
-        {
-         //   echo $q_res[0]->totalIn;
-            $totalIn = $q_res[0]->totalIn;
-            $totalOut = $q_res[0]->totalOut;
-            $qtyIn = $q_res[0]->qtyIn;
-            $qtyOut = $q_res[0]->qtyOut;
-            $total = $totalIn - $totalOut;
-            $qty = $qtyIn - $qtyOut;
-            if($qty != 0)
-            {
-                $hpp = $total / $qty;
-                if($hpp < 0)
-                {
-                    $hpp = 0;
-                }
-            }
-
-        }*/
-        return $hpp;
+        return $this->movingAverageSmallestByDate($productId, $date)
+            * $this->getConversionFactorToSmallest($productId, $unitId);
     }
 
     public function getConversionFactorToSmallest($productId, $unitId): float
     {
         $product = Product::where('id', $productId)->first();
-        if (empty($product) || empty($unitId) || (int) $product->unit_id === (int) $unitId) {
+        if (empty($product) && self::$rebuildCreatedAt !== null) {
+            throw new \RuntimeException("Produk sumber persediaan {$productId} tidak ditemukan.");
+        }
+        if (empty($product) || empty($unitId) || (string) $product->unit_id === (string) $unitId) {
             return 1;
         }
 
@@ -710,28 +649,54 @@ class InventoryRepo extends ElequentRepository
             'unit_id' => $unitId
         ])->first();
 
-        if (empty($conversion)) {
-            return 1;
+        $factor = (float) ($conversion->nilai_terkecil ?? 0);
+        if (!is_finite($factor) || $factor <= 0) {
+            // Historical units may no longer exist in the current master.
+            if (self::$rebuildInProgress) {
+                return 1.0;
+            }
+            throw new \RuntimeException("Konversi satuan tidak valid: produk {$productId}, satuan {$unitId}.");
         }
-
-        $factor = (float) ($conversion->nilai_terkecil ?: $conversion->nilai ?: 0);
-        return $factor > 0 ? $factor : 1;
+        return $factor;
     }
 
     public function movingAverageSmallestByDate($productId, $date): float
     {
-        $totalIn = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('total_in');
-        $totalOut = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('total_out');
-        $qtyIn = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('qty_in');
-        $qtyOut = Inventory::where([['product_id','=',$productId],['inventory_date','<=',$date]])->sum('qty_out');
-
-        $qty = $qtyIn - $qtyOut;
-        if ($qty == 0) {
-            return 0;
+        $balance = Inventory::where('product_id', $productId)
+            ->where('inventory_date', '<=', $this->inventoryDateCutoff($date))
+            ->selectRaw('COALESCE(SUM(qty_in - qty_out), 0) AS qty, COALESCE(SUM(total_in - total_out), 0) AS value')
+            ->first();
+        $qty = (float) $balance->qty;
+        if ($qty <= 0.00000001) {
+            return $this->lastPositiveBalanceHpp($productId, $date) ?? 0.0;
         }
+        return max(0, (float) $balance->value / $qty);
+    }
 
-        $hpp = ($totalIn - $totalOut) / $qty;
-        return $hpp > 0 ? $hpp : 0;
+    /** Keep the last average with positive stock; receipts while still in deficit must not change it. */
+    private function lastPositiveBalanceHpp($productId, $date): ?float
+    {
+        $qty = 0.0;
+        $value = 0.0;
+        $lastHpp = null;
+        $rows = Inventory::where('product_id', $productId)
+            ->where('inventory_date', '<=', $this->inventoryDateCutoff($date))
+            ->orderBy('inventory_date')->orderBy('created_at')->orderBy('id')
+            ->cursor(['qty_in', 'qty_out', 'total_in', 'total_out']);
+        foreach ($rows as $row) {
+            $qty += (float) $row->qty_in - (float) $row->qty_out;
+            $value += (float) $row->total_in - (float) $row->total_out;
+            if ($qty > 0.00000001) {
+                $lastHpp = max(0, $value / $qty);
+            }
+        }
+        return $lastHpp;
+    }
+
+    private function inventoryDateCutoff($date): string
+    {
+        $date = (string) $date;
+        return strlen($date) === 10 ? $date . ' 23:59:59' : $date;
     }
 
     public function resolveOutgoingCost($productId, $unitId, $qty, $date): array
@@ -739,10 +704,6 @@ class InventoryRepo extends ElequentRepository
         $factor = $this->getConversionFactorToSmallest($productId, $unitId);
         $qtySmallest = (float) $qty * $factor;
         $hppSmallest = $this->movingAverageSmallestByDate($productId, $date);
-
-        if ($hppSmallest <= 0) {
-            $hppSmallest = $this->movingAverageByDate($productId, $unitId, $date);
-        }
 
         return [
             'factor' => $factor,
@@ -802,7 +763,7 @@ class InventoryRepo extends ElequentRepository
 
     public function findByTransCodeIdSubId($transactionCode, $idTransaction, $transaction_sub_id)
     {
-        $res = Inventory::where(array('transaction_code' => $transactionCode, 'transaction_sub_id' => $idTransaction))->first();
+        $res = Inventory::where(array('transaction_code' => $transactionCode, 'transaction_id' => $idTransaction, 'transaction_sub_id' => $transaction_sub_id))->first();
         return $res;
     }
 

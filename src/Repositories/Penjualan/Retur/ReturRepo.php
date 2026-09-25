@@ -261,6 +261,8 @@ class ReturRepo extends ElequentRepository
     {
         // 1. Eager Load
         $find = $this->model->with([
+            'returproduct' => fn ($q) => $q->orderBy('id'),
+            'returproduct.product',
             'returproduct.tax.taxgroup.tax',
             'returproduct.deliveryproduct.product',
             'invoice',
@@ -285,16 +287,15 @@ class ReturRepo extends ElequentRepository
         // 3. Process Products
         foreach ($find->returproduct as $item) {
             // --- Part A: Inventory Side (Cost Reversal) ---
-            if (!empty($find->delivery_id)) {
-                // Determine HPP from original Delivery
-                // We try to find the inventory log of the original delivery item to get the exact cost
-                $hpp = 0;
-                $findInStok = $inventoryRepo->findByTransCodeIdSubId(
-                    TransactionsCode::DELIVERY_ORDER,
-                    $find->delivery_id,
-                    $item->delivery_product_id
-                );
-                if ($findInStok) $hpp = $findInStok->price; // Use stored price (Moving Avg at that time)
+            if (!empty($item->product_id) && $item->product?->product_type == \Icso\Accounting\Utils\ProductType::ITEM) {
+                $sourceCode = !empty($find->delivery_id) ? TransactionsCode::DELIVERY_ORDER : TransactionsCode::INVOICE_PENJUALAN;
+                $sourceId = !empty($find->delivery_id) ? $find->delivery_id : $find->invoice_id;
+                $sourceLineId = !empty($find->delivery_id) ? $item->delivery_product_id : $item->order_product_id;
+                $findInStok = $inventoryRepo->findByTransCodeIdSubId($sourceCode, $sourceId, $sourceLineId);
+                if (!$findInStok) {
+                    throw new \RuntimeException("Sumber stok retur penjualan {$find->id}, detail {$item->id} tidak ditemukan atau belum diposting.");
+                }
+                $hpp = (float) $findInStok->nominal * $inventoryRepo->getConversionFactorToSmallest($item->product_id, $item->unit_id);
 
                 $subtotalHpp = $hpp * $item->qty;
 
@@ -309,7 +310,7 @@ class ReturRepo extends ElequentRepository
                 $reqInventory->transaction_id = $find->id;
                 $reqInventory->transaction_sub_id = $item->id;
                 $reqInventory->qty_in = $item->qty;
-                $reqInventory->warehouse_id = $find->warehouse_id ?? 0; // Ensure warehouse is passed
+                $reqInventory->warehouse_id = $find->warehouse_id ?: $findInStok->warehouse_id;
                 $reqInventory->product_id = $item->product_id;
                 $reqInventory->price = $hpp;
                 $reqInventory->note = $note;
@@ -329,7 +330,7 @@ class ReturRepo extends ElequentRepository
                 // Logic: If Delivery is not yet Invoiced, the cost is in "In Transit".
                 // If Delivery is Invoiced, the cost is in "COGS".
                 $invoicedCount = SalesInvoicingDelivery::where('delivery_id', $find->delivery_id)->count();
-                $coaCredit = ($invoicedCount > 0) ? $settings['coa_hpp'] : $settings['coa_transit'];
+                $coaCredit = (empty($find->delivery_id) || $invoicedCount > 0) ? $settings['coa_hpp'] : $settings['coa_transit'];
 
                 $journalEntries[] = [
                     'coa_id' => $coaCredit,

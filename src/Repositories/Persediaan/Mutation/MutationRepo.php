@@ -95,7 +95,7 @@ class MutationRepo extends ElequentRepository
                 'mutation',
                 'mutation.mutationproduct',
                 'towarehouse',
-                'mutationproduct',
+                'mutationproduct' => fn ($q) => $q->orderBy('id'),
                 'salesquotation',
                 'mutationproduct.product',
                 'mutationproduct.unit'
@@ -316,7 +316,7 @@ class MutationRepo extends ElequentRepository
 
     }
 
-    public function postingJurnal($idMutation)
+    public function postingJurnal($idMutation, bool $recalculateCost = false)
     {
         JurnalTransaksiRepo::deleteJurnalTransaksi(TransactionsCode::MUTATION, $idMutation);
         Inventory::where(array('transaction_code' => TransactionsCode::MUTATION, 'transaction_id' => $idMutation))->delete();
@@ -350,6 +350,23 @@ class MutationRepo extends ElequentRepository
 
             if ($hpp <= 0) {
                 $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $mutationDate);
+            }
+
+            if ($recalculateCost) {
+                if (!$isMutationIn) {
+                    $hpp = $inventoryRepo->movingAverageByDate($item->product_id, $item->unit_id, $mutationDate);
+                } elseif (!empty($find->mutation_out_id)) {
+                    $source = Inventory::where('transaction_code', TransactionsCode::MUTATION)
+                        ->where('transaction_id', $find->mutation_out_id)
+                        ->where('product_id', $item->product_id)
+                        ->selectRaw('SUM(qty_out) AS qty, SUM(total_out) AS value')->first();
+                    if (!$source || (float) $source->qty <= 0) {
+                        throw new \RuntimeException("Mutasi keluar sumber {$find->mutation_out_id} untuk produk {$item->product_id} belum tersedia.");
+                    }
+                    $hpp = ((float) $source->value / (float) $source->qty)
+                        * $inventoryRepo->getConversionFactorToSmallest($item->product_id, $item->unit_id);
+                }
+                $item->update(['price' => $hpp]);
             }
 
             $subtotal = $hpp * $qty;

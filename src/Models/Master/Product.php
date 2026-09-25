@@ -34,6 +34,14 @@ class Product extends Model
     {
         parent::boot();
 
+        static::updating(function ($product) {
+            if ($product->isDirty('unit_id')) {
+                (new \Icso\Accounting\Services\ProductUnitGuard())->assertBaseUnitUnchanged(
+                    $product->getKey(), $product->getOriginal('unit_id'), $product->unit_id
+                );
+            }
+        });
+
         static::deleting(function ($product) {
             if ($product->canDelete()) {
                 // Deletion is allowed

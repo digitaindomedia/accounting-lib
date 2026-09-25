@@ -231,32 +231,18 @@ class ProductController extends Controller
     }
 
     public function storeProductConvertion(Request $request){
-        $productConvertion = json_decode(json_encode($request->product_convertion));
         $productId = $request->product_id;
+        $request->validate(['product_convertion' => 'present|array']);
         DB::beginTransaction();
         try {
-            if (count($productConvertion) > 0) {
-                $this->productConvertionRepo->deleteByWhere(array('product_id' => $productId));
-                foreach ($productConvertion as $i => $item) {
-                    $arrData = array(
-                        'product_id' => $productId,
-                        'unit_id' => $item->unit_id,
-                        'nilai' => $item->nilai,
-                        'nilai_terkecil' => 0,
-                        'base_unit_id' => $item->base_unit_id,
-                        'price' => 0
-                    );
-                    ProductConvertion::create($arrData);
-                }
-                $resConv = ProductConvertion::where(array('product_id' => $productId))->get();
-                if(count($resConv) > 0){
-                    foreach ($resConv as $val){
-                        $conValue = $this->productConvertionRepo->convertToSmallestUnit($val->nilai,$val->base_unit_id,$productId);
-                        if(!empty($conValue)){
-                            ProductConvertion::where(array('id' => $val->id))->update(array('nilai_terkecil' => $conValue));
-                        }
-                    }
-                }
+            $product = Product::whereKey($productId)->lockForUpdate()->firstOrFail();
+            $old = ProductConvertion::where('product_id', $productId)->lockForUpdate()->get()->toArray();
+            $rows = (new \Icso\Accounting\Services\ProductUnitGuard())->prepareConversions(
+                $productId, $product->unit_id, $old, $request->input('product_convertion')
+            );
+            $this->productConvertionRepo->deleteByWhere(['product_id' => $productId]);
+            foreach ($rows as $row) {
+                ProductConvertion::create($row);
             }
             DB::commit();
             $this->data['status'] = true;

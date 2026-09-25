@@ -4,6 +4,7 @@ namespace Icso\Accounting\Utils;
 
 
 use Icso\Accounting\Models\Akuntansi\Jurnal;
+use Icso\Accounting\Models\Manufacturing\ProductionOrder;
 use Icso\Accounting\Models\Pembelian\Invoicing\PurchaseInvoicing;
 use Icso\Accounting\Models\Pembelian\Order\PurchaseOrder;
 use Icso\Accounting\Models\Pembelian\Penerimaan\PurchaseReceived;
@@ -142,6 +143,20 @@ class TransactionsCode
                 $transactionNo = $findMutation->ref_no;
             }
             $transactionName = "MUTASI GUDANG";
+        }
+        else if($transactionCode == self::PRODUCTION_MATERIAL){
+            $findProduction = ProductionOrder::where(array('id' => $transactionId))->first();
+            if(!empty($findProduction)){
+                $transactionNo = $findProduction->ref_no;
+            }
+            $transactionName = "PRODUKSI BAHAN BAKU";
+        }
+        else if($transactionCode == self::PRODUCTION_RESULT){
+            $findProduction = ProductionOrder::where(array('id' => $transactionId))->first();
+            if(!empty($findProduction)){
+                $transactionNo = $findProduction->ref_no;
+            }
+            $transactionName = "HASIL PRODUKSI";
         }
         return array(
             'transaction_name' => $transactionName,

@@ -158,6 +158,13 @@ class ProductionOrderRepo extends ElequentRepository
             }
 
             $materials = $this->resolveMaterials($request, $plannedQty, $actualQty);
+            if ($statusProduction === 'finished') {
+                $this->validateMaterialStockAvailability(
+                    $materials,
+                    (int) $request->warehouse_id,
+                    $productionDate
+                );
+            }
             $results = $this->resolveResults($request, $actualQty);
             $totalResultGood = array_reduce($results, function ($total, $item) {
                 return $total + $this->numericValue($item, 'qty_good', 0);
@@ -245,13 +252,18 @@ class ProductionOrderRepo extends ElequentRepository
     protected function resolveMaterials(Request $request, float $plannedQty, float $actualQty): array
     {
         $strictStock = $request->status_production === 'finished' && $this->isStockMinusDisallowed();
+        // Material rows are resolved before their inventory movements are stored. Keep
+        // the quantity already assigned in this production order so another category
+        // row cannot allocate the same stock again.
+        $allocatedCategoryStock = [];
 
         if (!empty($request->materials) && (empty($request->bom_id) || $request->boolean('manual_material_override'))) {
             return $this->expandManualMaterialRows(
                 $this->normalizeArrayInput($request->materials),
                 (int) $request->warehouse_id,
                 !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'),
-                $strictStock
+                $strictStock,
+                $allocatedCategoryStock
             );
         }
 
@@ -272,7 +284,10 @@ class ProductionOrderRepo extends ElequentRepository
             $wasteFactor = 1 + (((float) $item->waste_percentage) / 100);
             $rowPlannedQty = ((float) $item->qty) * $plannedFactor * $wasteFactor;
             $rowActualQty = ((float) $item->qty) * $actualFactor * $wasteFactor;
-            $sourceType = $item->material_source_type ?: 'product';
+            // Older BOM rows can have the default `product` source type while the
+            // category column is populated. The category is the authoritative source
+            // in that case, so it must be expanded into its available products.
+            $sourceType = !empty($item->source_category_id) ? 'category' : ($item->material_source_type ?: 'product');
 
             if ($sourceType === 'category') {
                 array_push($rows, ...$this->resolveCategoryMaterialRows((object) [
@@ -284,7 +299,7 @@ class ProductionOrderRepo extends ElequentRepository
                     'qty_actual' => $rowActualQty,
                     'line_type' => $item->item_role ?: 'material',
                     'note' => $item->note,
-                ], (int) $request->warehouse_id, !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'), $strictStock));
+                ], (int) $request->warehouse_id, !empty($request->production_date) ? Utility::changeDateFormat($request->production_date) : date('Y-m-d'), $strictStock, $allocatedCategoryStock));
                 continue;
             }
 
@@ -307,14 +322,69 @@ class ProductionOrderRepo extends ElequentRepository
         return $rows;
     }
 
-    protected function expandManualMaterialRows(array $items, int $warehouseId, string $productionDate, bool $strictStock): array
+    /**
+     * Finished production consumes all material rows at once. Validate the
+     * combined request so repeated products and different transaction units
+     * cannot bypass the stock-minus setting.
+     */
+    protected function validateMaterialStockAvailability(array $materials, int $warehouseId, string $productionDate): void
+    {
+        if (!$this->isStockMinusDisallowed() || empty($materials)) {
+            return;
+        }
+
+        $inventoryRepo = new InventoryRepo(new Inventory());
+        $stockRequests = [];
+        foreach ($materials as $item) {
+            $qty = (float) ($item->qty_actual ?? 0);
+            if ($qty <= 0 || empty($item->product_id) || empty($item->unit_id)) {
+                continue;
+            }
+
+            $productId = (int) $item->product_id;
+            $factor = $inventoryRepo->getConversionFactorToSmallest($productId, $item->unit_id);
+            $stockRequests[$productId] ??= [
+                'product_id' => $productId,
+                'requested_qty' => 0,
+            ];
+            $stockRequests[$productId]['requested_qty'] += $qty * $factor;
+        }
+
+        if (empty($stockRequests)) {
+            return;
+        }
+
+        $inventoryDateCutoff = strlen($productionDate) === 10
+            ? $productionDate . ' 23:59:59'
+            : $productionDate;
+        $products = Product::whereIn('id', array_keys($stockRequests))->get()->keyBy('id');
+        foreach ($stockRequests as $request) {
+            $availableQty = (float) Inventory::where('product_id', $request['product_id'])
+                ->where('warehouse_id', $warehouseId)
+                ->where('inventory_date', '<=', $inventoryDateCutoff)
+                ->sum(DB::raw('qty_in - qty_out'));
+
+            if ($availableQty + 0.00000001 < (float) $request['requested_qty']) {
+                $product = $products->get($request['product_id']);
+                throw new \RuntimeException(
+                    'Stok ' . $this->formatProductName($product ?: new Product(['id' => $request['product_id']]))
+                    . ' tidak mencukupi. Stok tersedia: ' . $this->formatQty($availableQty)
+                    . ', kebutuhan produksi: ' . $this->formatQty((float) $request['requested_qty']) . '.'
+                );
+            }
+        }
+    }
+
+    protected function expandManualMaterialRows(array $items, int $warehouseId, string $productionDate, bool $strictStock, array &$allocatedCategoryStock): array
     {
         $rows = [];
 
         foreach ($items as $item) {
-            $sourceType = $item->material_source_type ?? (!empty($item->category_id) || !empty($item->source_category_id) ? 'category' : 'product');
+            $sourceType = !empty($item->category_id) || !empty($item->source_category_id)
+                ? 'category'
+                : ($item->material_source_type ?? 'product');
             if ($sourceType === 'category') {
-                array_push($rows, ...$this->resolveCategoryMaterialRows($item, $warehouseId, $productionDate, $strictStock));
+                array_push($rows, ...$this->resolveCategoryMaterialRows($item, $warehouseId, $productionDate, $strictStock, $allocatedCategoryStock));
                 continue;
             }
 
@@ -343,7 +413,7 @@ class ProductionOrderRepo extends ElequentRepository
         return $rows;
     }
 
-    protected function resolveCategoryMaterialRows(object $item, int $warehouseId, string $productionDate, bool $strictStock): array
+    protected function resolveCategoryMaterialRows(object $item, int $warehouseId, string $productionDate, bool $strictStock, array &$allocatedCategoryStock): array
     {
         $categoryId = $item->source_category_id ?? $item->category_id ?? null;
         if (empty($categoryId)) {
@@ -361,13 +431,30 @@ class ProductionOrderRepo extends ElequentRepository
         }
 
         $inventoryRepo = new InventoryRepo(new Inventory());
-        $products = Product::whereHas('categories', function ($query) use ($categoryId) {
+        $categoryProducts = Product::whereHas('categories', function ($query) use ($categoryId) {
             $query->where('als_category.id', $categoryId);
+        });
+        $products = (clone $categoryProducts)->where(function ($query) use ($item) {
+            // A category can contain products with different unit sets. Only use a
+            // product whose base unit or configured conversion matches the unit
+            // requested by the BOM; otherwise reposting would write an invalid
+            // inventory conversion.
+            $query->where('unit_id', $item->unit_id)
+                ->orWhereHas('productconvertion', function ($conversion) use ($item) {
+                    $conversion->where('unit_id', $item->unit_id)
+                        ->where('nilai_terkecil', '>', 0);
+                });
         })->orderBy('id')->get();
         $categoryName = Category::find($categoryId)?->category_name ?? ('ID ' . $categoryId);
 
-        if ($products->isEmpty()) {
+        if (!$categoryProducts->exists()) {
             throw new \RuntimeException('Tidak ada produk dalam kategori bahan "' . $categoryName . '".');
+        }
+        if ($products->isEmpty()) {
+            throw new \RuntimeException(
+                'Tidak ada produk dalam kategori bahan "' . $categoryName
+                . '" yang mendukung satuan yang dipilih.'
+            );
         }
 
         $remaining = $splitQty;
@@ -380,7 +467,9 @@ class ProductionOrderRepo extends ElequentRepository
                 break;
             }
 
-            $availableStock = $inventoryRepo->getStokByDate($product->id, $warehouseId, $item->unit_id, $productionDate);
+            $stockKey = $product->id . ':' . $item->unit_id;
+            $availableStock = max(0, (float) $inventoryRepo->getStokByDate($product->id, $warehouseId, $item->unit_id, $productionDate)
+                - ($allocatedCategoryStock[$stockKey] ?? 0));
             $totalAvailableStock += max(0, (float) $availableStock);
             if ($availableStock <= 0) {
                 $fallbackMinusProduct ??= $product;
@@ -406,6 +495,7 @@ class ProductionOrderRepo extends ElequentRepository
             ];
 
             $remaining -= $consumeQty;
+            $allocatedCategoryStock[$stockKey] = ($allocatedCategoryStock[$stockKey] ?? 0) + $consumeQty;
         }
 
         if ($remaining > 0.0001 && !$strictStock) {
@@ -426,6 +516,8 @@ class ProductionOrderRepo extends ElequentRepository
                 'note' => $item->note ?? null,
             ];
 
+            $fallbackStockKey = $fallbackMinusProduct->id . ':' . $item->unit_id;
+            $allocatedCategoryStock[$fallbackStockKey] = ($allocatedCategoryStock[$fallbackStockKey] ?? 0) + $remaining;
             $remaining = 0;
         }
 
@@ -464,6 +556,109 @@ class ProductionOrderRepo extends ElequentRepository
                 'note' => $request->note ?? null,
             ],
         ];
+    }
+
+    public function repostInventoryAndJournal($id, bool $reallocateCategoryMaterials = false): void
+    {
+        $production = ProductionOrder::with([
+            'materials' => fn ($q) => $q->orderBy('id'),
+            'results' => fn ($q) => $q->orderBy('id'),
+        ])->findOrFail($id);
+        if ($production->status_production !== 'finished') {
+            return;
+        }
+        foreach ([TransactionsCode::PRODUCTION_MATERIAL, TransactionsCode::PRODUCTION_RESULT] as $code) {
+            JurnalTransaksiRepo::deleteJurnalTransaksi($code, $id);
+            Inventory::where('transaction_code', $code)->where('transaction_id', $id)->delete();
+        }
+
+        $materialRows = $reallocateCategoryMaterials
+            ? $this->reallocateCategoryMaterialRows($production)
+            : $production->materials->all();
+        $this->postingInventoryAndJournal($id, $materialRows, $production->results->all());
+    }
+
+    /**
+     * Replace prior category allocations with rows split across the stock that is
+     * available when the production order is reposted. Rows already split from one
+     * category request share requested_qty_* and are therefore processed once.
+     */
+    protected function reallocateCategoryMaterialRows(ProductionOrder $production): array
+    {
+        $allRows = $production->materials->all();
+        $categoryRows = array_values(array_filter($allRows, fn ($row) =>
+            $row->material_source_type === 'category' || !empty($row->source_category_id)
+        ));
+        if (empty($categoryRows)) {
+            return $allRows;
+        }
+
+        $allocatedStock = [];
+        foreach ($allRows as $row) {
+            if ($row->material_source_type !== 'category' && empty($row->source_category_id)) {
+                $stockKey = $row->product_id . ':' . $row->unit_id;
+                $allocatedStock[$stockKey] = ($allocatedStock[$stockKey] ?? 0) + (float) $row->qty_actual;
+            }
+        }
+
+        $groups = [];
+        foreach ($categoryRows as $row) {
+            $groupKey = implode(':', [
+                $row->bom_item_id,
+                $row->source_category_id,
+                $row->unit_id,
+                $row->requested_qty_planned,
+                $row->requested_qty_actual,
+                $row->line_type,
+                md5((string) $row->note),
+            ]);
+            $groups[$groupKey] ??= $row;
+        }
+
+        ProductionOrderMaterial::whereIn('id', array_map(fn ($row) => $row->id, $categoryRows))->delete();
+
+        $reallocatedRows = [];
+        foreach ($groups as $row) {
+            $requestedPlannedQty = (float) ($row->requested_qty_planned ?? $row->qty_planned);
+            $requestedActualQty = (float) ($row->requested_qty_actual ?? $row->qty_actual);
+            $resolvedRows = $this->resolveCategoryMaterialRows((object) [
+                'bom_item_id' => $row->bom_item_id,
+                'source_category_id' => $row->source_category_id,
+                'unit_id' => $row->unit_id,
+                'qty_planned' => $requestedPlannedQty,
+                'qty_actual' => $requestedActualQty,
+                'line_type' => $row->line_type,
+                'note' => $row->note,
+            // Reposting must never create a replacement material row with a
+            // negative balance. If stock has become insufficient, keep the prior
+            // ledger intact by failing the transaction with the stock shortfall.
+            ], (int) $production->warehouse_id, $production->production_date, true, $allocatedStock);
+
+            foreach ($resolvedRows as $resolvedRow) {
+                $reallocatedRows[] = ProductionOrderMaterial::create([
+                    'production_order_id' => $production->id,
+                    'bom_item_id' => $resolvedRow->bom_item_id,
+                    'material_source_type' => $resolvedRow->material_source_type,
+                    'source_product_id' => $resolvedRow->source_product_id,
+                    'source_category_id' => $resolvedRow->source_category_id,
+                    'product_id' => $resolvedRow->product_id,
+                    'unit_id' => $resolvedRow->unit_id,
+                    'qty_planned' => $resolvedRow->qty_planned,
+                    'qty_actual' => $resolvedRow->qty_actual,
+                    'requested_qty_planned' => $resolvedRow->requested_qty_planned,
+                    'requested_qty_actual' => $resolvedRow->requested_qty_actual,
+                    'hpp' => 0,
+                    'subtotal' => 0,
+                    'line_type' => $resolvedRow->line_type,
+                    'note' => $resolvedRow->note,
+                ]);
+            }
+        }
+
+        return array_merge(
+            array_values(array_filter($allRows, fn ($row) => $row->material_source_type !== 'category' && empty($row->source_category_id))),
+            $reallocatedRows
+        );
     }
 
     protected function postingInventoryAndJournal(int $productionId, array $materialRows, array $resultRows): void

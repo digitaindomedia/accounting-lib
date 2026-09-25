@@ -218,6 +218,7 @@ Route::group([
             Route::get('get-all', [ProductionOrderController::class, 'getAllData']);
             Route::post('save-data', [ProductionOrderController::class, 'store']);
             Route::get('find-by-id', [ProductionOrderController::class, 'show']);
+            Route::post('repost-stock-hpp', [ProductionOrderController::class, 'repostStockAndHpp']);
             Route::delete('delete-by-id', [ProductionOrderController::class, 'destroy']);
             Route::delete('delete-all', [ProductionOrderController::class, 'deleteAll']);
         });

@@ -60,7 +60,15 @@ class InvoiceRepo extends ElequentRepository
     {
         $model = new $this->model;
         return $model->when(!empty($search), function ($query) use($search){
-            $query->where('invoice_no', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('invoice_no', 'like', '%' .$search. '%')
+                    ->orWhere(function ($query) use ($search) {
+                        $query->where('order_id', '!=', 0)
+                            ->whereHas('order', function ($query) use ($search) {
+                                $query->where('order_no', 'like', '%' .$search. '%');
+                            });
+                    });
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
@@ -80,7 +88,15 @@ class InvoiceRepo extends ElequentRepository
     {
         $model = new $this->model;
         return $model->when(!empty($search), function ($query) use($search){
-            $query->where('invoice_no', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('invoice_no', 'like', '%' .$search. '%')
+                    ->orWhere(function ($query) use ($search) {
+                        $query->where('order_id', '!=', 0)
+                            ->whereHas('order', function ($query) use ($search) {
+                                $query->where('order_no', 'like', '%' .$search. '%');
+                            });
+                    });
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){

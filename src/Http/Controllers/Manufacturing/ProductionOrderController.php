@@ -99,6 +99,34 @@ class ProductionOrderController extends Controller
         return response()->json($this->data, !empty($res) ? 200 : 404);
     }
 
+    public function repostStockAndHpp(Request $request): JsonResponse
+    {
+        $request->validate(['id' => ['required', 'integer', 'min:1']]);
+        $production = $this->productionOrderRepo->findOne($request->input('id'));
+
+        if (empty($production)) {
+            return response()->json(['status' => false, 'message' => 'Data produksi tidak ditemukan.', 'data' => []], 404);
+        }
+        if ($production->status_production !== 'finished') {
+            return response()->json(['status' => false, 'message' => 'Hanya produksi dengan status selesai yang dapat direposting.', 'data' => []], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $this->productionOrderRepo->repostInventoryAndJournal((int) $production->id, true);
+            DB::commit();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Stok dan HPP produksi berhasil dihitung ulang.',
+                'data' => ['id' => (int) $production->id],
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json(['status' => false, 'message' => $e->getMessage(), 'data' => []], 500);
+        }
+    }
+
     public function destroy(Request $request): JsonResponse
     {
         $id = $request->input('id');

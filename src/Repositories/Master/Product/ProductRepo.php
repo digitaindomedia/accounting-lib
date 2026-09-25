@@ -202,7 +202,7 @@ class ProductRepo extends ElequentRepository
         catch (\Exception $e) {
             Log::error($e->getMessage());
             DB::rollback();
-            return array('status' => false, 'message' => 'Data gagal disimpan');
+            return array('status' => false, 'message' => $e instanceof \Illuminate\Validation\ValidationException ? $e->getMessage() : 'Data gagal disimpan');
         }
     }
 

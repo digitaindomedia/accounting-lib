@@ -120,6 +120,13 @@ class CoaRepo extends ElequentRepository
             }
         }
         if($level == 4 && empty($coa_code)) {
+            Log::warning('[CoaRepo][store] Kode COA kosong untuk level 4', [
+                'user_id' => $userId,
+                'coa_name' => $request->coa_name,
+                'head_coa' => $headcoa,
+                'subhead_coa' => $subheadcoa,
+                'subhead_coa2' => $subheadcoa2,
+            ]);
             return false;
         } else
         {

@@ -8,6 +8,7 @@ use Icso\Accounting\Http\Requests\CreateCoaRequest;
 use Icso\Accounting\Models\Master\Coa;
 use Icso\Accounting\Repositories\Master\Coa\CoaRepo;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Routing\Controller;
 
@@ -154,6 +155,10 @@ class CoaController extends Controller
         if (empty($id) || empty($userId)) {
             $this->data['status'] = false;
             $this->data['message'] = empty($id) ? 'ID COA wajib diisi' : 'User ID wajib diisi';
+            Log::warning('[CoaController][destroy] Parameter hapus COA tidak lengkap', [
+                'id' => $request->id,
+                'user_id' => $request->user_id,
+            ]);
 
             return response()->json($this->data);
         }
@@ -171,19 +176,36 @@ class CoaController extends Controller
                     } else {
                         $this->data['status'] = false;
                         $this->data['message'] = 'Data gagal dihapus';
+                        Log::warning('[CoaController][destroy] Repository gagal menghapus COA', [
+                            'id' => $id,
+                            'user_id' => $userId,
+                        ]);
                     }
                 } else {
                     $this->data['status'] = false;
                     $this->data['message'] = 'Data tidak bisa dihapus ';
+                    Log::warning('[CoaController][destroy] COA tidak bisa dihapus karena masih terpakai', [
+                        'id' => $id,
+                        'user_id' => $userId,
+                    ]);
                 }
 
             }else{
                 $this->data['status'] = false;
                 $this->data['message'] = 'Data gagal dihapus';
+                Log::warning('[CoaController][destroy] COA tidak ditemukan', [
+                    'id' => $id,
+                    'user_id' => $userId,
+                ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->data['status'] = false;
             $this->data['message'] = $e->getMessage();
+            Log::error('[CoaController][destroy] ' . $e->getMessage(), [
+                'id' => $id,
+                'user_id' => $userId,
+                'trace' => $e->getTraceAsString(),
+            ]);
         }
         return response()->json($this->data);
     }

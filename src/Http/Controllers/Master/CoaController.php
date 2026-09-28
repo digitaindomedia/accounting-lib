@@ -148,14 +148,23 @@ class CoaController extends Controller
 
     public function destroy(Request $request)
     {
-        $id = $request->id;
+        $id = (int) $request->id;
+        $userId = (int) $request->user_id;
+
+        if (empty($id) || empty($userId)) {
+            $this->data['status'] = false;
+            $this->data['message'] = empty($id) ? 'ID COA wajib diisi' : 'User ID wajib diisi';
+
+            return response()->json($this->data);
+        }
+
         try
         {
             $data = Coa::find($id);
             if($data)
             {
                 if($data->canDelete()){
-                    $deleted = $this->coaRepo->destroy($id, $request->user_id);
+                    $deleted = $this->coaRepo->destroy($id, $userId);
                     if ($deleted) {
                         $this->data['status'] = true;
                         $this->data['message'] = 'Data berhasil dihapus ';

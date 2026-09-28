@@ -649,15 +649,12 @@ class InventoryRepo extends ElequentRepository
             'unit_id' => $unitId
         ])->first();
 
-        $factor = (float) ($conversion->nilai_terkecil ?? 0);
-        if (!is_finite($factor) || $factor <= 0) {
-            // Historical units may no longer exist in the current master.
-            if (self::$rebuildInProgress) {
-                return 1.0;
-            }
-            throw new \RuntimeException("Konversi satuan tidak valid: produk {$productId}, satuan {$unitId}.");
+        if (empty($conversion)) {
+            return 1;
         }
-        return $factor;
+
+        $factor = (float) ($conversion->nilai_terkecil ?: $conversion->nilai ?: 0);
+        return $factor > 0 ? $factor : 1;
     }
 
     public function movingAverageSmallestByDate($productId, $date): float

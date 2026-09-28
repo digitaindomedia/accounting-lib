@@ -537,8 +537,8 @@ class InventoryController extends Controller
                 $request->q,
                 $request->product_id,      // boleh kosong
                 $request->warehouse_id,
-                $request->from_date ?? date('Y-m-d'),
-                $request->until_date ?? Utility::lastDateMonth()
+                !empty($request->from_date) ? $request->from_date : date('Y-m-d'),
+                !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth()
             ),
             'kartu_stok_detail.xlsx'
         );
@@ -546,74 +546,73 @@ class InventoryController extends Controller
 
     public function exportKartuStokPdf(Request $request)
     {
-        // Note: This function still has N+1 issue. 
-        // Due to complexity of PDF generation and "safe fix" requirement, 
-        // we are adding logging to monitor performance.
+        // The report is paginated below, but a large tenant can still require
+        // more than the web request's default 30 seconds to write the PDF.
+        set_time_limit(120);
+
         $start = microtime(true);
-        
         $search = $request->q;
         $productId = $request->product_id;
         $warehouseId = $request->warehouse_id;
+        $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
+        $untilDate = !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth();
+        $productTable = Product::getTableName();
 
-        $fromDate = $request->from_date ?? date('Y-m-d');
-        $untilDate = $request->until_date ?? Utility::lastDateMonth();
+        // Build the same five summary fields shown on the frontend in one query.
+        // This avoids two inventory aggregate queries for every product.
+        $openingBalances = Inventory::query()
+            ->select('product_id')
+            ->selectRaw('COALESCE(SUM(qty_in), 0) - COALESCE(SUM(qty_out), 0) AS saldo_awal')
+            ->where('inventory_date', '<', $fromDate)
+            ->when($warehouseId, fn ($query) => $query->where('warehouse_id', $warehouseId))
+            ->groupBy('product_id');
 
-        // === Ambil data produk ===
-        $productRepo = new ProductRepo(new Product(), app(ActivityLogService::class));
+        $movements = Inventory::query()
+            ->select('product_id')
+            ->selectRaw('COALESCE(SUM(qty_in), 0) AS penambahan')
+            ->selectRaw('COALESCE(SUM(qty_out), 0) AS pengurangan')
+            ->whereBetween('inventory_date', [$fromDate, $untilDate])
+            ->when($warehouseId, fn ($query) => $query->where('warehouse_id', $warehouseId))
+            ->groupBy('product_id');
 
-        $where = ['product_type' => ProductType::ITEM];
-        if (!empty($productId)) {
-            $where[] = ['id', '=', $productId];
-        }
-
-        $products = $productRepo->getAllDataProduct($search, $where)->get();
-
-        $summary = [];
-
-        foreach ($products as $product) {
-
-            // Saldo awal
-            $saldoAwal = InventoryRepo::getStokBy(
-                $product->id,
-                $warehouseId,
-                $fromDate,
-                $untilDate,
-                "<"
-            )['total'];
-
-            // Nilai masuk & keluar selama periode
-            $current = InventoryRepo::getStokBy(
-                $product->id,
-                $warehouseId,
-                $fromDate,
-                $untilDate
-            );
-
-            $qtyIn = $current['qty_in'];
-            $qtyOut = $current['qty_out'];
-
-            // Saldo akhir
-            $saldoAkhir = $saldoAwal + ($qtyIn - $qtyOut);
-
-            $summary[] = [
-                'product_name' => $product->item_name,
-                'product_code' => $product->item_code,
-                'saldo_awal'   => $saldoAwal,
-                'qty_in'       => $qtyIn,
-                'qty_out'      => $qtyOut,
-                'saldo_akhir'  => $saldoAkhir,
-            ];
-        }
+        $summary = Product::query()
+            ->leftJoinSub($openingBalances, 'opening_balance', function ($join) use ($productTable) {
+                $join->on('opening_balance.product_id', '=', $productTable . '.id');
+            })
+            ->leftJoinSub($movements, 'period_movement', function ($join) use ($productTable) {
+                $join->on('period_movement.product_id', '=', $productTable . '.id');
+            })
+            ->select([
+                $productTable . '.item_name as product_name',
+                $productTable . '.item_code as product_code',
+            ])
+            ->selectRaw('COALESCE(opening_balance.saldo_awal, 0) AS saldo_awal')
+            ->selectRaw('COALESCE(period_movement.penambahan, 0) AS qty_in')
+            ->selectRaw('COALESCE(period_movement.pengurangan, 0) AS qty_out')
+            ->selectRaw('COALESCE(opening_balance.saldo_awal, 0) + COALESCE(period_movement.penambahan, 0) - COALESCE(period_movement.pengurangan, 0) AS saldo_akhir')
+            ->where($productTable . '.product_type', ProductType::ITEM)
+            ->when($productId, fn ($query) => $query->where($productTable . '.id', $productId))
+            ->when($search, function ($query) use ($productTable, $search) {
+                $query->where(function ($query) use ($productTable, $search) {
+                    $query->where($productTable . '.item_name', 'like', '%' . $search . '%')
+                        ->orWhere($productTable . '.item_code', 'like', '%' . $search . '%')
+                        ->orWhere($productTable . '.descriptions', 'like', '%' . $search . '%');
+                });
+            })
+            ->orderBy($productTable . '.item_name')
+            ->get();
 
         $pdf = Pdf::loadView('accounting::stock.kartu_stok_summary_pdf', [
-            'summary' => $summary,
+            // Dompdf's table layout becomes disproportionately expensive for one
+            // very long table. Each chunk is rendered as an independent page.
+            'summaryPages' => $summary->chunk(35),
             'fromDate' => $fromDate,
             'untilDate' => $untilDate,
         ])->setPaper('A4', 'landscape');
         
         $duration = microtime(true) - $start;
         if ($duration > 5.0) {
-            Log::warning("Slow exportKartuStokPdf: {$duration}s for " . count($products) . " products.");
+            Log::warning("Slow exportKartuStokPdf: {$duration}s for " . count($summary) . " products.");
         }
 
         return $pdf->download('kartu_stok_ringkasan.pdf');

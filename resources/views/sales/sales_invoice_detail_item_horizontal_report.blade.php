@@ -71,10 +71,13 @@
     @forelse ($data as $post)
         @php
             $customer = optional($post->vendor)->vendor_company_name ?? optional($post->vendor)->vendor_name ?? '-';
-            $items = empty($post->order) ? $post->orderproduct : collect();
+            $items = !empty($post->orderproduct) && $post->orderproduct->isNotEmpty()
+                ? $post->orderproduct
+                : (!empty($post->orderproductservice) && $post->orderproductservice->isNotEmpty()
+                    ? $post->orderproductservice
+                    : collect());
 
-            if (!empty($post->order)) {
-                $items = collect();
+            if ($items->isEmpty()) {
                 foreach ($post->invoicedelivery ?? [] as $invoiceDelivery) {
                     $deliveryProducts = !empty($invoiceDelivery->delivery)
                         ? $invoiceDelivery->delivery->deliveryproduct

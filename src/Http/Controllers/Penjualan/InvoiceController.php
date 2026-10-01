@@ -183,7 +183,7 @@ class InvoiceController extends Controller
         $inventoryRepo = new InventoryRepo(new Inventory());
         $totalHpp = 0;
 
-        if (!empty($invoice->orderproduct)) {
+        if (!empty($invoice->orderproduct) && $invoice->orderproduct->isNotEmpty()) {
             foreach ($invoice->orderproduct as $item) {
                 $hpp = $this->getInvoiceProductHpp($invoice, $item, $inventoryRepo);
                 $item->hpp_price = $hpp['price'];
@@ -191,9 +191,7 @@ class InvoiceController extends Controller
                 $item->subtotal_hpp = $hpp['total'];
                 $totalHpp += $hpp['total'];
             }
-        }
-
-        if (!empty($invoice->invoicedelivery)) {
+        } elseif (!empty($invoice->invoicedelivery)) {
             foreach ($invoice->invoicedelivery as $invoiceDelivery) {
                 if (empty($invoiceDelivery->delivery) || empty($invoiceDelivery->delivery->deliveryproduct)) {
                     continue;

@@ -109,73 +109,59 @@
             <td class="text-right">Subtotal</td>
         </tr>
 
-        @php $arrTax = []; @endphp
+        @php
+            $arrTax = [];
+            $invoiceItems = !empty($post->orderproduct) && $post->orderproduct->isNotEmpty()
+                ? $post->orderproduct
+                : (!empty($post->orderproductservice) && $post->orderproductservice->isNotEmpty()
+                    ? $post->orderproductservice
+                    : collect());
 
-        @if(empty($post->order))
-            @foreach ($post->orderproduct as $item)
-                @php
-                    $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, $item->tax_group);
-                    $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($item->subtotal, $item->tax_id, $item->tax_type, $item->tax_percentage);
-                @endphp
-                <tr>
-                    <td colspan="2">
-                        {{ !empty($item->product) ? $item->product->item_name.' ('.$item->product->item_code.')' : $item->service_name }}
-                    </td>
-                    <td class="text-center">
-                        {{ $item->qty }}
-                        {{ optional($item->unit)->unit_code }}
-                    </td>
-                    <td class="text-right">{{ number_format((float) ($item->price ?? 0), $separator) }}</td>
-                    <td class="text-right">{{ number_format((float) ($item->hpp_total ?? $item->subtotal_hpp ?? 0), $separator) }}</td>
-                    <td class="text-right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
-                    <td class="text-right">{{ number_format((float) ($item->subtotal ?? 0), $separator) }}</td>
-                </tr>
-                @php
-                    if (!empty($item->tax_id)) {
-                        $arrTax[] = [
-                            'id' => $item->tax_id,
-                            'name' => $taxname,
-                            'total' => $taxCalc[TypeEnum::PPN] ?? 0,
-                        ];
-                    }
-                @endphp
-            @endforeach
-        @else
-            @foreach ($post->invoicedelivery as $invoiceDelivery)
-                @php
+            if ($invoiceItems->isEmpty()) {
+                $deliveryItems = collect();
+                foreach ($post->invoicedelivery ?? [] as $invoiceDelivery) {
                     $deliveryProducts = !empty($invoiceDelivery->delivery)
                         ? $invoiceDelivery->delivery->deliveryproduct
                         : collect();
-                @endphp
-                @foreach($deliveryProducts as $item)
-                    @php
-                        $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, $item->tax_group);
-                        $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($item->subtotal, $item->tax_id, $item->tax_type, $item->tax_percentage);
-                    @endphp
-                    <tr>
-                        <td colspan="2">
-                            {{ !empty($item->product) ? $item->product->item_name.' ('.$item->product->item_code.')' : '-' }}
-                        </td>
-                        <td class="text-center">
-                            {{ $item->qty }}
-                            {{ optional($item->unit)->unit_code }}
-                        </td>
-                        <td class="text-right">{{ number_format((float) ($item->sell_price ?? 0), $separator) }}</td>
-                        <td class="text-right">{{ number_format((float) ($item->hpp_total ?? $item->subtotal_hpp ?? 0), $separator) }}</td>
-                        <td class="text-right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
-                        <td class="text-right">{{ number_format((float) ($item->subtotal ?? 0), $separator) }}</td>
-                    </tr>
-                    @php
-                        if (!empty($item->tax_id)) {
-                            $arrTax[] = [
-                                'id' => $item->tax_id,
-                                'name' => $taxname,
-                                'total' => $taxCalc[TypeEnum::PPN] ?? 0,
-                            ];
-                        }
-                    @endphp
-                @endforeach
-            @endforeach
+                    $deliveryItems = $deliveryItems->merge($deliveryProducts);
+                }
+                $invoiceItems = $deliveryItems;
+            }
+        @endphp
+
+        @foreach ($invoiceItems as $item)
+            @php
+                $taxname = \Icso\Accounting\Utils\Helpers::getTaxName($item->tax_id, $item->tax_percentage, $item->tax_group);
+                $taxCalc = \Icso\Accounting\Utils\Helpers::hitungTaxDpp($item->subtotal, $item->tax_id, $item->tax_type, $item->tax_percentage);
+            @endphp
+            <tr>
+                <td colspan="2">
+                    {{ !empty($item->product) ? $item->product->item_name.' ('.$item->product->item_code.')' : ($item->service_name ?? '-') }}
+                </td>
+                <td class="text-center">
+                    {{ $item->qty }}
+                    {{ optional($item->unit)->unit_code }}
+                </td>
+                <td class="text-right">{{ number_format((float) ($item->price ?? $item->sell_price ?? 0), $separator) }}</td>
+                <td class="text-right">{{ number_format((float) ($item->hpp_total ?? $item->subtotal_hpp ?? 0), $separator) }}</td>
+                <td class="text-right">{{ \Icso\Accounting\Utils\Helpers::getDiscountString($item->discount, $item->discount_type) }}</td>
+                <td class="text-right">{{ number_format((float) ($item->subtotal ?? 0), $separator) }}</td>
+            </tr>
+            @php
+                if (!empty($item->tax_id)) {
+                    $arrTax[] = [
+                        'id' => $item->tax_id,
+                        'name' => $taxname,
+                        'total' => $taxCalc[TypeEnum::PPN] ?? 0,
+                    ];
+                }
+            @endphp
+        @endforeach
+
+        @if($invoiceItems->isEmpty())
+            <tr>
+                <td colspan="7" class="text-center">Item tidak ditemukan</td>
+            </tr>
         @endif
 
         @php $resultTax = \Icso\Accounting\Utils\Helpers::sumTotalsByTaxId($arrTax); @endphp

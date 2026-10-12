@@ -23,8 +23,11 @@ use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\FromGenerator;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithStyles;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumnWidths, WithStyles
@@ -34,6 +37,8 @@ class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumn
     private array $productTitleRows = [];
     private array $tableHeaderRows = [];
     private array $openingBalanceRows = [];
+    private array $spacerRows = [];
+    private array $tableRanges = [];
 
     public function __construct(
         private readonly ?string $search,
@@ -51,6 +56,8 @@ class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumn
         $this->productTitleRows = [];
         $this->tableHeaderRows = [];
         $this->openingBalanceRows = [];
+        $this->spacerRows = [];
+        $this->tableRanges = [];
 
         yield $this->nextRow(['KARTU STOK']);
         yield $this->nextRow([$this->periodLabel()]);
@@ -73,10 +80,12 @@ class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumn
                 $saldoQty = (float) ($opening->saldo_qty ?? 0);
                 $saldoNilai = (float) ($opening->saldo_nilai ?? 0);
 
-                yield $this->nextRow([]);
+                $this->spacerRows[] = $this->currentRow + 1;
+                yield $this->nextRow([' ']);
                 $this->productTitleRows[] = $this->currentRow + 1;
                 yield $this->nextRow(['Nama Produk: ' . $product->item_name . ' - ' . $product->item_code]);
                 $this->tableHeaderRows[] = $this->currentRow + 1;
+                $tableStartRow = $this->currentRow + 1;
                 yield $this->nextRow(['Tanggal', 'Nomor', 'Transaksi', 'Qty Masuk', 'Nilai Masuk', 'Qty Keluar', 'Nilai Keluar', 'Saldo Qty', 'Saldo Nilai']);
                 $this->openingBalanceRows[] = $this->currentRow + 1;
                 yield $this->nextRow(['Saldo Awal', '', '', '', '', '', '', $saldoQty, $saldoNilai]);
@@ -85,18 +94,23 @@ class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumn
                     $saldoQty += (float) $movement->qty_in - (float) $movement->qty_out;
                     $saldoNilai += (float) $movement->total_in - (float) $movement->total_out;
                     yield $this->nextRow([
-                        $movement->inventory_date, $movement->transaction_no, $movement->transaction_name,
+                        $this->excelDate($movement->inventory_date), $movement->transaction_no, $movement->transaction_name,
                         (float) $movement->qty_in, (float) $movement->total_in,
                         (float) $movement->qty_out, (float) $movement->total_out, $saldoQty, $saldoNilai,
                     ]);
                 }
+
+                $this->tableRanges[] = [$tableStartRow, $this->currentRow];
             }
         }
     }
 
     public function columnFormats(): array
     {
-        return ['D:I' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1];
+        return [
+            'A' => NumberFormat::FORMAT_DATE_DDMMYYYY,
+            'D:I' => '#,##0.00;-#,##0.00;0.00',
+        ];
     }
 
     public function columnWidths(): array
@@ -118,14 +132,26 @@ class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumn
     {
         $sheet->mergeCells('A1:I1');
         $sheet->mergeCells('A2:I2');
-        $sheet->getStyle('A1:I2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->getPageSetup()->setFitToWidth(1)->setFitToHeight(0);
         $sheet->getPageSetup()->setOrientation('landscape');
+        $sheet->getPageMargins()->setTop(0.5)->setRight(0.25)->setBottom(0.5)->setLeft(0.25);
+        $lastRow = $sheet->getHighestRow();
+        $sheet->getStyle('A1:I' . $lastRow)->getAlignment()
+            ->setVertical(Alignment::VERTICAL_CENTER);
 
         $styles = [
+            'A1:I' . $lastRow => [
+                'font' => [
+                    'bold' => false,
+                    'color' => ['rgb' => '000000'],
+                ],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => 'FFFFFF'],
+                ],
+            ],
             'A1:I1' => [
-                'font' => ['bold' => true, 'size' => 16, 'color' => ['rgb' => 'FFFFFF']],
-                'fill' => ['fillType' => 'solid', 'color' => ['rgb' => '1F4E78']],
+                'font' => ['bold' => true, 'size' => 16, 'color' => ['rgb' => '000000']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
             ],
             'A2:I2' => [
@@ -134,24 +160,42 @@ class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumn
             ],
         ];
 
+        foreach ($this->spacerRows as $row) {
+            $sheet->getRowDimension($row)->setRowHeight(10);
+        }
         foreach ($this->productTitleRows as $row) {
             $sheet->mergeCells('A' . $row . ':I' . $row);
+            $sheet->getRowDimension($row)->setRowHeight(22);
             $styles['A' . $row . ':I' . $row] = [
-                'font' => ['bold' => true, 'color' => ['rgb' => '1F1F1F']],
-                'fill' => ['fillType' => 'solid', 'color' => ['rgb' => 'D9EAF7']],
+                'font' => ['bold' => true, 'size' => 12, 'color' => ['rgb' => '000000']],
             ];
         }
         foreach ($this->tableHeaderRows as $row) {
-            $styles[$row] = [
-                'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-                'fill' => ['fillType' => 'solid', 'color' => ['rgb' => '4472C4']],
-                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            $sheet->getRowDimension($row)->setRowHeight(24);
+            $styles['A' . $row . ':I' . $row] = [
+                'font' => ['bold' => true, 'color' => ['rgb' => '000000']],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
             ];
         }
         foreach ($this->openingBalanceRows as $row) {
             $styles['A' . $row . ':I' . $row] = [
                 'font' => ['bold' => true],
-                'fill' => ['fillType' => 'solid', 'color' => ['rgb' => 'E2F0D9']],
+            ];
+        }
+        foreach ($this->tableRanges as [$startRow, $endRow]) {
+            $styles['A' . $startRow . ':I' . $endRow] = [
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => 'BFBFBF'],
+                    ],
+                ],
+            ];
+            $styles['D' . ($startRow + 1) . ':I' . $endRow] = [
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
             ];
         }
 
@@ -173,6 +217,13 @@ class KartuStokExport implements FromGenerator, WithColumnFormatting, WithColumn
         return $this->fromDate === $this->untilDate
             ? 'Tanggal: ' . $fromDate
             : 'Periode: ' . $fromDate . ' s.d. ' . $untilDate;
+    }
+
+    private function excelDate(mixed $date): float|string
+    {
+        $timestamp = strtotime((string) $date);
+
+        return $timestamp === false ? (string) $date : ExcelDate::PHPToExcel($timestamp);
     }
 
     private function productQuery()

@@ -52,8 +52,9 @@ class OrderController extends Controller
         $vendorId = $request->vendor_id;
         $from = $request->from;
         $orderType = $request->order_type;
-        $where = $this->buildWhereClause($vendorId, $orderType, $from, $fromDate, $untilDate);
-        return compact('search', 'page', 'perpage', 'where', 'orderType','from','fromDate','untilDate');
+        $status = $request->status;
+        $where = $this->buildWhereClause($vendorId, $orderType, $from, $fromDate, $untilDate, $status);
+        return compact('search', 'page', 'perpage', 'where', 'orderType','from','fromDate','untilDate','status');
     }
 
     public function getAllData(Request $request)
@@ -80,7 +81,7 @@ class OrderController extends Controller
         return response()->json($this->data);
     }
 
-    protected function buildWhereClause($vendorId, $orderType, $from, $fromDate, $untilDate)
+    protected function buildWhereClause($vendorId, $orderType, $from, $fromDate, $untilDate, $status = null)
     {
         $where = array();
         if (!empty($vendorId)) {
@@ -88,6 +89,9 @@ class OrderController extends Controller
         }
         if (!empty($orderType)) {
             $where[] = ['method' => 'where', 'value' => [['order_type', '=', $orderType]]];
+        }
+        if (!empty($status)) {
+            $where[] = ['method' => 'where', 'value' => [['order_status', '=', $status]]];
         }
         if (!empty($from)) {
             if ($from == TransactionsCode::DELIVERY_ORDER) {
@@ -242,8 +246,13 @@ class OrderController extends Controller
         if (SalesSpk::where('order_id', $orderId)->exists()) {
             $dependencies[] = 'SPK';
         }
-        if (SalesInvoicing::where('order_id', $orderId)->exists()) {
-            $dependencies[] = 'invoice';
+        $invoiceNumbers = SalesInvoicing::where('order_id', $orderId)
+            ->pluck('invoice_no')
+            ->filter()
+            ->values()
+            ->all();
+        if (!empty($invoiceNumbers)) {
+            $dependencies[] = 'invoice (' . implode(', ', $invoiceNumbers) . ')';
         }
 
         return $dependencies;

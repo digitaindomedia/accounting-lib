@@ -178,6 +178,12 @@ class InvoiceRepo extends ElequentRepository
             // 4. File Upload
             $this->handleFileUploads($request, $invoiceId);
 
+            // Direct invoices do not pass through the delivery status workflow.
+            // Keep every explicitly linked order in sync with its invoice.
+            if (!empty($arrData['order_id'])) {
+                SalesOrderRepo::changeStatusOrderById((int) $arrData['order_id']);
+            }
+
             DB::commit();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
             return true;
@@ -545,6 +551,19 @@ class InvoiceRepo extends ElequentRepository
 
             $this->deleteAdditional($id);
             parent::delete($id);
+
+            if (!empty($invoice->order_id)) {
+                $orderId = (int) $invoice->order_id;
+
+                if (SalesInvoicing::where('order_id', $orderId)->exists()) {
+                    SalesOrderRepo::changeStatusOrderById($orderId);
+                } elseif (SalesDelivery::where('order_id', $orderId)->exists()) {
+                    SalesOrderRepo::changeStatusByDelivery($orderId);
+                } else {
+                    SalesOrderRepo::changeStatusOrderById($orderId, StatusEnum::OPEN);
+                }
+            }
+
             DB::commit();
 
             return true;

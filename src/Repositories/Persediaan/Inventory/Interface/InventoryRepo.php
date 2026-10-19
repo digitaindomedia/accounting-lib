@@ -118,11 +118,43 @@ class InventoryRepo extends ElequentRepository
                 $shortage = $qtyOut - $available;
                 $lastHpp = $this->lastPositiveBalanceHpp($productId, $inventoryDate);
                 if ($lastHpp === null) {
-                    throw new \RuntimeException("Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}. HPP terakhir belum tersedia; rebuild dibatalkan.");
+                    if (self::$rebuildInspection) {
+                        if (in_array($transactionCode, [
+                            TransactionsCode::INVOICE_PENJUALAN,
+                            TransactionsCode::PRODUCTION_MATERIAL,
+                        ], true)) {
+                            $referenceNo = $invoiceNo ?? '';
+                            $documentType = 'Invoice Penjualan';
+                            if ($transactionCode === TransactionsCode::PRODUCTION_MATERIAL) {
+                                $referenceNo = \Icso\Accounting\Models\Manufacturing\ProductionOrder::whereKey($transactionId)->value('ref_no');
+                                $documentType = 'Production Order';
+                            }
+
+                            self::$rebuildMissingHpp[] = [
+                                'document_type' => $documentType,
+                                'reference_no' => trim((string) $referenceNo) ?: '(belum diisi)',
+                                'transaction_date' => (string) $inventoryDate,
+                                'created_at' => (string) self::$rebuildCreatedAt,
+                                'detail_id' => (int) $transactionSubId,
+                                'product_id' => (int) $productId,
+                                'available' => $available,
+                                'qty_out' => $qtyOut,
+                            ];
+                        }
+
+                        // Keep replaying only for inspection. The surrounding
+                        // transaction is rolled back, so this zero-cost row is
+                        // never persisted.
+                        $price = 0.0;
+                    } else {
+                        throw new \RuntimeException("Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}. HPP terakhir belum tersedia; rebuild dibatalkan.");
+                    }
                 }
-                $warning = "Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}, kekurangan {$shortage} (satuan terkecil). HPP terakhir sebelum minus {$lastHpp}; HPP transaksi {$price} per satuan terkecil.";
-                self::$rebuildWarnings[] = $warning;
-                $note = trim($note . ' ' . $warning);
+                if ($lastHpp !== null) {
+                    $warning = "Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}, kekurangan {$shortage} (satuan terkecil). HPP terakhir sebelum minus {$lastHpp}; HPP transaksi {$price} per satuan terkecil.";
+                    self::$rebuildWarnings[] = $warning;
+                    $note = trim($note . ' ' . $warning);
+                }
             }
         }
 

@@ -32,6 +32,32 @@ trait RebuildsInventory
     private static ?string $rebuildCreatedAt = null;
     private static bool $rebuildInProgress = false;
     private static array $rebuildWarnings = [];
+    private static bool $rebuildInspection = false;
+    private static array $rebuildMissingHpp = [];
+
+    /**
+     * Run the same replay as recalculateStock without persisting its changes.
+     *
+     * Missing-HPP sales are collected so administrators can correct all of them
+     * before the actual rebuild is run.
+     */
+    public function inspectRebuildMissingHpp(?string $actorId = null): array
+    {
+        $connection = DB::connection();
+        self::$rebuildInspection = true;
+        self::$rebuildMissingHpp = [];
+        $connection->beginTransaction();
+
+        try {
+            $this->recalculateStock($actorId);
+
+            return self::$rebuildMissingHpp;
+        } finally {
+            $connection->rollBack();
+            self::$rebuildInspection = false;
+            self::$rebuildMissingHpp = [];
+        }
+    }
 
     /** Replay source documents in effective-date / original-input order, atomically. */
     public function recalculateStock(?string $actorId = null): array

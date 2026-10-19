@@ -621,7 +621,8 @@ class ReceiveRepo extends ElequentRepository
                             VarType::TRANSACTION_DATE => $invoice->invoice_date,
                             VarType::TRANSACTION_TYPE => TransactionType::PURCHASE_INVOICE,
                             VarType::TRANSACTION_NO => $invoice->invoice_no,
-                            VarType::TRANSACTION_ID => $invoice->id
+                            VarType::TRANSACTION_ID => $invoice->id,
+                            'transaction_order_id' => $invoice->order_id
                         );
                         if(!empty($invoice->payment)){
                             foreach ($invoice->payment as $val){

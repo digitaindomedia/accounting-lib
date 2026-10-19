@@ -149,6 +149,9 @@ class OrderRepo extends ElequentRepository
         $orderType = $request->order_type ?: '';
 
         $arrData = $this->prepareDataArray($orderNo,$orderDate,$note,$dateSend,$requestId,$coaId,$vendorId,$subtotal,$discount,$discountType,$totalDiscount,$totalTax,$taxType,$totalDpp,$grandtotal,$orderType,$userId);
+        $arrData['sales_order_id'] = $request->sales_order_id ?: null;
+        $arrData['sales_order_no'] = $request->sales_order_no ?: null;
+        $arrData['sales_order_customer'] = $request->sales_order_customer ?: null;
 
         DB::beginTransaction();
         try {
@@ -486,7 +489,8 @@ class OrderRepo extends ElequentRepository
                         VarType::TRANSACTION_DATE => $val->invoice_date,
                         VarType::TRANSACTION_TYPE => TransactionType::PURCHASE_INVOICE,
                         VarType::TRANSACTION_NO => $val->invoice_no,
-                        VarType::TRANSACTION_ID => $val->id
+                        VarType::TRANSACTION_ID => $val->id,
+                        'transaction_order_id' => $val->order_id
                     );
                 }
             }

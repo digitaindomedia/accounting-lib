@@ -434,8 +434,8 @@ class InvoiceController extends Controller
         $perpage = $request->perpage;
         $fromDate = !empty($request->from_date) ? $request->from_date : date('Y-m-d');
         $untilDate = !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth();
-        $resultInvoice = PurchaseInvoicing::select('invoice_date as tanggal', 'invoice_no as nomor', 'note as note', DB::raw("'0' as debet"), 'grandtotal as kredit')->where([['vendor_id', '=', $vendorId]])->whereBetween('invoice_date',[$fromDate,$untilDate])->orderBy('invoice_date','asc');
-        $resultPayment = PurchasePaymentInvoice::select('payment_date as tanggal', 'payment_no as nomor', DB::raw("'Pelunasan' as note"), DB::raw('(total_payment + total_discount) - total_overpayment as debet'), DB::raw("'0' as kredit"))->where([['vendor_id', '=', $vendorId]])->whereBetween('payment_date',[$fromDate,$untilDate])->orderBy('payment_date','asc');
+        $resultInvoice = PurchaseInvoicing::select('invoice_date as tanggal', 'invoice_no as nomor', 'note as note', DB::raw("'0' as debet"), 'grandtotal as kredit', 'id as transaction_id', 'order_id as transaction_order_id', DB::raw("'Invoice Pembelian' as transaction_type"))->where([['vendor_id', '=', $vendorId]])->whereBetween('invoice_date',[$fromDate,$untilDate])->orderBy('invoice_date','asc');
+        $resultPayment = PurchasePaymentInvoice::select('payment_date as tanggal', 'payment_no as nomor', DB::raw("'Pelunasan' as note"), DB::raw('(total_payment + total_discount) - total_overpayment as debet'), DB::raw("'0' as kredit"), 'payment_id as transaction_id', DB::raw("'0' as transaction_order_id"), DB::raw("'Pelunasan Pembelian' as transaction_type"))->where([['vendor_id', '=', $vendorId]])->whereBetween('payment_date',[$fromDate,$untilDate])->orderBy('payment_date','asc');
         $combinedResults = $resultInvoice->union($resultPayment);
         $paginator = $combinedResults->orderBy('tanggal', 'asc')->paginate($perpage, ['*'], 'page', $page);
         $totalCount = $paginator->total();

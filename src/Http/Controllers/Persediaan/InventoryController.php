@@ -257,10 +257,12 @@ class InventoryController extends Controller
             $reference = $transactionReferences[$referenceKey] ?? [
                 'transaction_name' => '',
                 'transaction_no' => '',
+                'transaction_order_id' => '',
             ];
 
             $inventory->transaction_name = $reference['transaction_name'];
             $inventory->transaction_no = $reference['transaction_no'];
+            $inventory->transaction_order_id = $reference['transaction_order_id'];
         }
     }
 
@@ -281,9 +283,15 @@ class InventoryController extends Controller
             }
 
             $transactionNumbers = [];
+            $transactionOrderIds = [];
             if (!empty($config['number_column'])) {
                 $transactionNumbers = $config['model']::whereIn('id', $ids)
                     ->pluck($config['number_column'], 'id')
+                    ->toArray();
+            }
+            if (!empty($config['order_id_column'])) {
+                $transactionOrderIds = $config['model']::whereIn('id', $ids)
+                    ->pluck($config['order_id_column'], 'id')
                     ->toArray();
             }
 
@@ -291,6 +299,7 @@ class InventoryController extends Controller
                 $references[$this->makeTransactionReferenceKey($transactionCode, $id)] = [
                     'transaction_name' => $config['name'],
                     'transaction_no' => $transactionNumbers[$id] ?? '',
+                    'transaction_order_id' => $transactionOrderIds[$id] ?? '',
                 ];
             }
         });
@@ -319,6 +328,7 @@ class InventoryController extends Controller
             TransactionsCode::INVOICE_PEMBELIAN => [
                 'model' => PurchaseInvoicing::class,
                 'number_column' => 'invoice_no',
+                'order_id_column' => 'order_id',
                 'name' => 'INVOICE PEMBELIAN',
             ],
             TransactionsCode::RETUR_PEMBELIAN => [
@@ -334,6 +344,7 @@ class InventoryController extends Controller
             TransactionsCode::INVOICE_PENJUALAN => [
                 'model' => SalesInvoicing::class,
                 'number_column' => 'invoice_no',
+                'order_id_column' => 'order_id',
                 'name' => 'INVOICE PENJUALAN',
             ],
             TransactionsCode::RETUR_PENJUALAN => [
@@ -505,6 +516,7 @@ class InventoryController extends Controller
                 $findTransaction = TransactionsCode::getNumberAndNameTransaction($inventory->transaction_code, $inventory->transaction_id);
                 $inventory->transaction_name = $findTransaction['transaction_name'];
                 $inventory->transaction_no = $findTransaction['transaction_no'];
+                $inventory->transaction_order_id = $findTransaction['transaction_order_id'] ?? '';
                 $runningSaldo += ((float) $inventory->qty_in - (float) $inventory->qty_out);
                 $runningSaldoNilai += ((float) $inventory->total_in - (float) $inventory->total_out);
                 $inventory->saldo = $runningSaldo;

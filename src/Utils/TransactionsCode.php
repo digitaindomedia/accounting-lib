@@ -53,6 +53,7 @@ class TransactionsCode
     {
         $transactionName = '';
         $transactionNo = '';
+        $transactionOrderId = '';
         if($transactionCode == self::JURNAL){
             $findJurnal = Jurnal::where(array('id' => $transactionId))->first();
             if(!empty($findJurnal)){
@@ -85,6 +86,7 @@ class TransactionsCode
             $findInvoice = PurchaseInvoicing::where(array('id' => $transactionId))->first();
             if(!empty($findInvoice)){
                 $transactionNo = $findInvoice->invoice_no;
+                $transactionOrderId = $findInvoice->order_id;
             }
             $transactionName = "INVOICE PEMBELIAN";
         }
@@ -113,6 +115,7 @@ class TransactionsCode
             $findInvoice = SalesInvoicing::where(array('id' => $transactionId))->first();
             if(!empty($findInvoice)){
                 $transactionNo = $findInvoice->invoice_no;
+                $transactionOrderId = $findInvoice->order_id;
             }
             $transactionName = "INVOICE PENJUALAN";
         }
@@ -161,6 +164,7 @@ class TransactionsCode
         return array(
             'transaction_name' => $transactionName,
             'transaction_no' => $transactionNo,
+            'transaction_order_id' => $transactionOrderId,
         );
     }
 }

@@ -341,7 +341,8 @@ class RequestRepo extends ElequentRepository
                             VarType::TRANSACTION_DATE => $val->invoice_date,
                             VarType::TRANSACTION_TYPE => TransactionType::PURCHASE_INVOICE,
                             VarType::TRANSACTION_NO => $val->invoice_no,
-                            VarType::TRANSACTION_ID => $val->id
+                            VarType::TRANSACTION_ID => $val->id,
+                            'transaction_order_id' => $val->order_id
                         );
                     }
                 }

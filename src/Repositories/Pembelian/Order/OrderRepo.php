@@ -149,9 +149,6 @@ class OrderRepo extends ElequentRepository
         $orderType = $request->order_type ?: '';
 
         $arrData = $this->prepareDataArray($orderNo,$orderDate,$note,$dateSend,$requestId,$coaId,$vendorId,$subtotal,$discount,$discountType,$totalDiscount,$totalTax,$taxType,$totalDpp,$grandtotal,$orderType,$userId);
-        $arrData['sales_order_id'] = $request->sales_order_id ?: null;
-        $arrData['sales_order_no'] = $request->sales_order_no ?: null;
-        $arrData['sales_order_customer'] = $request->sales_order_customer ?: null;
 
         DB::beginTransaction();
         try {

@@ -157,9 +157,13 @@ trait RebuildsInventory
 
     private static function sortInventoryEvents(array $events): array
     {
-        usort($events, static fn (array $a, array $b) =>
-            [$a['date'], $a['created_at'], $a['priority'], $a['id']]
-            <=> [$b['date'], $b['created_at'], $b['priority'], $b['id']]);
+        usort($events, static function (array $a, array $b) {
+            $aOpeningOrder = $a['kind'] === 'saldo_awal' ? 0 : 1;
+            $bOpeningOrder = $b['kind'] === 'saldo_awal' ? 0 : 1;
+
+            return [$a['date'], $aOpeningOrder, $a['created_at'], $a['priority'], $a['id']]
+                <=> [$b['date'], $bOpeningOrder, $b['created_at'], $b['priority'], $b['id']];
+        });
         return $events;
     }
 

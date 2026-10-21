@@ -699,7 +699,11 @@ class InventoryRepo extends ElequentRepository
         if ($qty <= 0.00000001) {
             return $this->lastPositiveBalanceHpp($productId, $date) ?? 0.0;
         }
-        return max(0, (float) $balance->value / $qty);
+        $hpp = max(0, (float) $balance->value / $qty);
+        if ($hpp <= 0.00000001) {
+            return $this->lastPositiveBalanceHpp($productId, $date) ?? 0.0;
+        }
+        return $hpp;
     }
 
     /** Keep the last average with positive stock; receipts while still in deficit must not change it. */
@@ -716,7 +720,10 @@ class InventoryRepo extends ElequentRepository
             $qty += (float) $row->qty_in - (float) $row->qty_out;
             $value += (float) $row->total_in - (float) $row->total_out;
             if ($qty > 0.00000001) {
-                $lastHpp = max(0, $value / $qty);
+                $hpp = max(0, $value / $qty);
+                if ($hpp > 0.00000001) {
+                    $lastHpp = $hpp;
+                }
             }
         }
         return $lastHpp;

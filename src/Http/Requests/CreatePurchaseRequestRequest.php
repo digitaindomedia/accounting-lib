@@ -64,7 +64,7 @@ class CreatePurchaseRequestRequest extends FormRequest
             ];
         }
 
-        $rules['requestproduct.*.product_id'] = 'required|string';
+        $rules['requestproduct.*.product_id'] = 'required';
         return $rules;
     }
 

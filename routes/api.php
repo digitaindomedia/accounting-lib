@@ -190,6 +190,7 @@ Route::group([
         Route::get('kartu-stok', [InventoryController::class, 'kartuStok']);
         Route::get('kartu-stok-detail', [InventoryController::class, 'showKartuStockDetail']);
         Route::get('export-kartu-stok-excel', [InventoryController::class, 'exportKartuStokExcel']);
+        Route::get('export-kartu-stok-rekap-excel', [InventoryController::class, 'exportKartuStokRekapExcel']);
         Route::get('export-kartu-stok-pdf', [InventoryController::class, 'exportKartuStokPdf']);
         Route::get('dashboard-kpi', [InventoryController::class, 'inventoryKpis']);
         Route::get('dashboard-low', [InventoryController::class, 'lowStockList']);

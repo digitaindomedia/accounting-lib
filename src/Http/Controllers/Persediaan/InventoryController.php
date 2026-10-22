@@ -6,6 +6,7 @@ namespace Icso\Accounting\Http\Controllers\Persediaan;
 
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\KartuStokExport;
+use Icso\Accounting\Exports\KartuStokRekapExport;
 use Icso\Accounting\Exports\SampleStockAwalExport;
 use Icso\Accounting\Exports\StockAwalExport;
 use Icso\Accounting\Imports\StockAwalImport;
@@ -553,6 +554,20 @@ class InventoryController extends Controller
                 !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth()
             ),
             'kartu_stok_detail.xlsx'
+        );
+    }
+
+    public function exportKartuStokRekapExcel(Request $request)
+    {
+        return Excel::download(
+            new KartuStokRekapExport(
+                $request->q,
+                $request->product_id,
+                $request->warehouse_id,
+                !empty($request->from_date) ? $request->from_date : date('Y-m-d'),
+                !empty($request->until_date) ? $request->until_date : Utility::lastDateMonth()
+            ),
+            'kartu_stok_rekap.xlsx'
         );
     }
 

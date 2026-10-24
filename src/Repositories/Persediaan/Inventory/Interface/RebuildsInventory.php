@@ -33,6 +33,7 @@ trait RebuildsInventory
     private static bool $rebuildInProgress = false;
     private static array $rebuildWarnings = [];
     private static bool $rebuildInspection = false;
+    private static bool $rebuildAllowZeroHpp = false;
     private static array $rebuildMissingHpp = [];
 
     /**
@@ -56,6 +57,21 @@ trait RebuildsInventory
             $connection->rollBack();
             self::$rebuildInspection = false;
             self::$rebuildMissingHpp = [];
+        }
+    }
+
+    /**
+     * Rebuild while explicitly allowing negative stock that has no historical
+     * HPP. Those outgoing rows are posted at zero cost and reported as warnings.
+     */
+    public function recalculateStockAllowingZeroHpp(?string $actorId = null): array
+    {
+        self::$rebuildAllowZeroHpp = true;
+
+        try {
+            return $this->recalculateStock($actorId);
+        } finally {
+            self::$rebuildAllowZeroHpp = false;
         }
     }
 

@@ -110,41 +110,48 @@ class InventoryRepo extends ElequentRepository
                 ->selectRaw('COALESCE(SUM(qty_in - qty_out), 0) AS qty')->value('qty');
             if ($qtyOut > $available + 0.00000001) {
                 $document = "{$transactionCode} (ID transaksi {$transactionId}, ID detail {$transactionSubId})";
+                $documentType = $transactionCode;
+                $referenceNo = "ID transaksi {$transactionId}";
                 if ($transactionCode === TransactionsCode::INVOICE_PENJUALAN) {
                     $invoiceNo = SalesInvoicing::whereKey($transactionId)->value('invoice_no');
                     $invoiceNo = trim((string) $invoiceNo) !== '' ? $invoiceNo : '(belum diisi)';
                     $document = "{$transactionCode}, no invoice {$invoiceNo} (ID invoice {$transactionId}, ID detail {$transactionSubId})";
+                    $documentType = 'Invoice Penjualan';
+                    $referenceNo = $invoiceNo;
+                } elseif ($transactionCode === TransactionsCode::DELIVERY_ORDER) {
+                    $deliveryNo = SalesDelivery::whereKey($transactionId)->value('delivery_no');
+                    $deliveryNo = trim((string) $deliveryNo) !== '' ? $deliveryNo : '(belum diisi)';
+                    $document = "{$transactionCode}, no pengiriman {$deliveryNo} (ID pengiriman {$transactionId}, ID detail {$transactionSubId})";
+                    $documentType = 'Pengiriman Penjualan';
+                    $referenceNo = $deliveryNo;
+                } elseif ($transactionCode === TransactionsCode::PRODUCTION_MATERIAL) {
+                    $productionNo = \Icso\Accounting\Models\Manufacturing\ProductionOrder::whereKey($transactionId)->value('ref_no');
+                    $documentType = 'Production Order';
+                    $referenceNo = trim((string) $productionNo) ?: '(belum diisi)';
                 }
                 $shortage = $qtyOut - $available;
                 $lastHpp = $this->lastPositiveBalanceHpp($productId, $inventoryDate);
                 if ($lastHpp === null) {
                     if (self::$rebuildInspection) {
-                        if (in_array($transactionCode, [
-                            TransactionsCode::INVOICE_PENJUALAN,
-                            TransactionsCode::PRODUCTION_MATERIAL,
-                        ], true)) {
-                            $referenceNo = $invoiceNo ?? '';
-                            $documentType = 'Invoice Penjualan';
-                            if ($transactionCode === TransactionsCode::PRODUCTION_MATERIAL) {
-                                $referenceNo = \Icso\Accounting\Models\Manufacturing\ProductionOrder::whereKey($transactionId)->value('ref_no');
-                                $documentType = 'Production Order';
-                            }
-
-                            self::$rebuildMissingHpp[] = [
-                                'document_type' => $documentType,
-                                'reference_no' => trim((string) $referenceNo) ?: '(belum diisi)',
-                                'transaction_date' => (string) $inventoryDate,
-                                'created_at' => (string) self::$rebuildCreatedAt,
-                                'detail_id' => (int) $transactionSubId,
-                                'product_id' => (int) $productId,
-                                'available' => $available,
-                                'qty_out' => $qtyOut,
-                            ];
-                        }
+                        self::$rebuildMissingHpp[] = [
+                            'document_type' => $documentType,
+                            'reference_no' => $referenceNo,
+                            'transaction_date' => (string) $inventoryDate,
+                            'created_at' => (string) self::$rebuildCreatedAt,
+                            'detail_id' => (int) $transactionSubId,
+                            'product_id' => (int) $productId,
+                            'available' => $available,
+                            'qty_out' => $qtyOut,
+                        ];
 
                         // Keep replaying only for inspection. The surrounding
                         // transaction is rolled back, so this zero-cost row is
                         // never persisted.
+                        $price = 0.0;
+                    } elseif (self::$rebuildAllowZeroHpp) {
+                        $warning = "Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}, kekurangan {$shortage} (satuan terkecil). HPP terakhir belum tersedia; HPP transaksi diisi 0 karena opsi --allow-zero-hpp.";
+                        self::$rebuildWarnings[] = $warning;
+                        $note = trim($note . ' ' . $warning);
                         $price = 0.0;
                     } else {
                         throw new \RuntimeException("Stok global negatif saat rebuild {$document}, ID barang {$productId}: tersedia {$available}, keluar {$qtyOut}. HPP terakhir belum tersedia; rebuild dibatalkan.");

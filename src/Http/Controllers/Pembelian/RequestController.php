@@ -100,6 +100,13 @@ class RequestController extends Controller
     }
 
     public function delete(Request $request){
+        if ($this->requestRepo->isUsedInOrder((int) $request->id)) {
+            $this->data['status'] = false;
+            $this->data['message'] = 'Data gagal dihapus, permintaan sudah digunakan pada order pembelian';
+
+            return response()->json($this->data);
+        }
+
         $res = $this->requestRepo->destroy($request->id, (int) $request->user_id);
         if($res){
             $this->data['status'] = true;
@@ -133,6 +140,16 @@ class RequestController extends Controller
                     ]);
                     continue;
                 }
+
+                if ($this->requestRepo->isUsedInOrder((int) $requestId)) {
+                    $failedDelete = $failedDelete + 1;
+                    Log::warning('[RequestController][deleteAll] Permintaan pembelian masih digunakan pada order', [
+                        'request_id' => (int) $requestId,
+                        'user_id' => $userId,
+                    ]);
+                    continue;
+                }
+
                 try {
                     $res = $this->requestRepo->destroy((int) $requestId, $userId);
                     if($res){

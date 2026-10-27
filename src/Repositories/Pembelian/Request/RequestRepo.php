@@ -268,7 +268,7 @@ class RequestRepo extends ElequentRepository
     public function destroy(int $id, int $userId): bool
     {
         $purchaseRequest = PurchaseRequest::find($id);
-        if (!$purchaseRequest) {
+        if (!$purchaseRequest || $this->isUsedInOrder($id)) {
             return false;
         }
 
@@ -407,6 +407,11 @@ class RequestRepo extends ElequentRepository
             }
         }
         return array('request_product' => $arrDataProduk, 'status_request_completed' => $statusCompleted);
+    }
+
+    public function isUsedInOrder(int $id): bool
+    {
+        return PurchaseOrder::where('request_id', $id)->exists();
     }
 
     public static function changeStatusRequest($id)

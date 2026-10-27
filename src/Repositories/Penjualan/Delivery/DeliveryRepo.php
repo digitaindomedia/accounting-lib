@@ -193,7 +193,10 @@ class DeliveryRepo extends ElequentRepository
                     }
 
                     $qty = 0;
-                    $usedIdentity = [];
+                    // Satu nilai identity (mis. "Batch A") dapat berasal dari
+                    // beberapa baris penerimaan. Yang harus unik pada delivery
+                    // adalah baris stok sumbernya, bukan nilai batch-nya.
+                    $usedIdentityItemIds = [];
 
                     if ($isIdentity) {
                         foreach ($identityItems as $row) {
@@ -209,11 +212,12 @@ class DeliveryRepo extends ElequentRepository
                                 throw new Exception("Qty {$product->identity_label} harus > 0");
                             }
 
-                            if (in_array($identityValue, $usedIdentity)) {
-                                throw new Exception("{$product->identity_label} duplikat: {$identityValue}");
+                            $identityItemId = (int) ($row['identity_item_id'] ?? 0);
+                            if (in_array($identityItemId, $usedIdentityItemIds, true)) {
+                                throw new Exception("Baris stok {$product->identity_label} dipilih lebih dari sekali");
                             }
 
-                            $usedIdentity[] = $identityValue;
+                            $usedIdentityItemIds[] = $identityItemId;
                             $qty += $rowQty;
                         }
                     } else {

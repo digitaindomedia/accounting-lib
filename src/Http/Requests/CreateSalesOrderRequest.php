@@ -64,7 +64,7 @@ class CreateSalesOrderRequest extends FormRequest
 
         // Tambahkan validasi service_name jika order_type SERVICE
 
-        $rules['orderproduct.*.product_id'] = 'required|string';
+        $rules['orderproduct.*.product_id'] = 'required';
         $rules['orderproduct.*.qty'] = ['required'];
         return $rules;
     }

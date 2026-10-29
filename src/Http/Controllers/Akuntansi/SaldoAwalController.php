@@ -104,7 +104,10 @@ class SaldoAwalController extends Controller
         $debet = $kredit = 0;
         $canEdit = $this->setCanEditAndValues($item, $debet, $kredit);
 
-        if (!empty($findSaldoAwalAkun)) {
+        // Akun yang terhubung ke data transaksi menghitung saldonya dari sumber
+        // tersebut. Nilai 0 adalah hasil hitung yang valid, bukan nilai kosong
+        // yang boleh digantikan oleh saldo manual lama.
+        if (!empty($findSaldoAwalAkun) && $item->connect_db == 0) {
             $debet = empty($debet) ? $findSaldoAwalAkun->debet : $debet;
             $kredit = empty($kredit) ? $findSaldoAwalAkun->kredit : $kredit;
         }

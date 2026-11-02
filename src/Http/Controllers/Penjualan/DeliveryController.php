@@ -106,6 +106,7 @@ class DeliveryController extends Controller
         $res = $this->deliveryRepo->findOne($request->id,array(),[
             'order',
             'order.ordermeta',
+            'order.orderproduct',
             'vendor',
             'vendor.vendor_meta',
             'warehouse',
@@ -125,6 +126,18 @@ class DeliveryController extends Controller
         if($res){
             if(!empty($res->deliveryproduct)){
                 foreach ($res->deliveryproduct as $item){
+                    if (empty($item->orderproduct) && !empty($res->order)) {
+                        $replacementOrderProduct = $res->order->orderproduct->first(function ($orderProduct) use ($item) {
+                            return (int) $orderProduct->product_id === (int) $item->product_id
+                                && (int) $orderProduct->unit_id === (int) $item->unit_id;
+                        });
+
+                        if ($replacementOrderProduct) {
+                            $item->order_product_id = $replacementOrderProduct->id;
+                            $item->setRelation('orderproduct', $replacementOrderProduct);
+                        }
+                    }
+
                     $countDelivered = $this->deliveryRepo->getDeliveredProduct($item->delivery_id,$item->product_id, $item->unit_id);
                     $item->qty_delivered = $countDelivered;
                 }

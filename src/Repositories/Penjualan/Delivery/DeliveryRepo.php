@@ -8,6 +8,7 @@ use Icso\Accounting\Enums\SettingEnum;
 use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Enums\TypeEnum;
 use Icso\Accounting\Models\Akuntansi\JurnalTransaksi;
+use Icso\Accounting\Models\Penjualan\Invoicing\SalesInvoicingDelivery;
 use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDeliveryMeta;
@@ -136,6 +137,25 @@ class DeliveryRepo extends ElequentRepository
 
         DB::beginTransaction();
         try {
+            if (!empty($id)) {
+                $existingDelivery = SalesDelivery::lockForUpdate()->find($id);
+                if (!$existingDelivery) {
+                    throw new Exception('Data pengiriman tidak ditemukan.');
+                }
+                if ((int) $existingDelivery->order_id !== (int) $request->order_id) {
+                    throw new Exception('Sales Order pada pengiriman yang sudah tersimpan tidak dapat diubah.');
+                }
+                if (SalesInvoicingDelivery::where('delivery_id', $id)->exists()) {
+                    throw new Exception('Pengiriman tidak dapat diedit karena sudah digunakan pada invoice.');
+                }
+                if (SalesReturProduct::whereIn(
+                    'delivery_product_id',
+                    SalesDeliveryProduct::where('delivery_id', $id)->pluck('id')
+                )->exists()) {
+                    throw new Exception('Pengiriman tidak dapat diedit karena sudah memiliki retur.');
+                }
+            }
+
             // 1. Create/Update Header
             if (empty($id)) {
                 $data['created_at'] = date('Y-m-d H:i:s');
@@ -169,14 +189,31 @@ class DeliveryRepo extends ElequentRepository
             if (!empty($products)) {
                 foreach ($products as $itemRaw) {
 
-                    $orderProductId = $itemRaw['order_product_id'];
-                    $findProductOrder = SalesOrderProduct::with('product')->find($orderProductId);
+                    $orderProductId = (int) ($itemRaw['order_product_id'] ?? 0);
+                    $findProductOrder = SalesOrderProduct::with('product')
+                        ->lockForUpdate()
+                        ->find($orderProductId);
 
                     if (!$findProductOrder) {
-                        continue;
+                        throw new Exception(
+                            "Baris order produk untuk pengiriman ini sudah tidak ditemukan. " .
+                            "Data pengiriman tidak diubah."
+                        );
+                    }
+
+                    if ((int) $findProductOrder->order_id !== (int) $request->order_id) {
+                        throw new Exception('Produk pengiriman tidak berasal dari Sales Order yang dipilih.');
+                    }
+
+                    if ((int) ($itemRaw['product_id'] ?? 0) !== (int) $findProductOrder->product_id
+                        || (int) ($itemRaw['unit_id'] ?? 0) !== (int) $findProductOrder->unit_id) {
+                        throw new Exception('Produk atau satuan pengiriman tidak sesuai dengan Sales Order.');
                     }
 
                     $product     = $findProductOrder->product;
+                    if (!$product) {
+                        throw new Exception('Produk Sales Order tidak ditemukan.');
+                    }
                     $sellPrice   = $findProductOrder->price;
                     $isIdentity  = $product && $product->usesIdentityTracking();
 
@@ -228,6 +265,16 @@ class DeliveryRepo extends ElequentRepository
                         throw new Exception("Qty {$product->item_name} tidak valid");
                     }
 
+                    $deliveredQty = (float) SalesDeliveryProduct::where('order_product_id', $orderProductId)
+                        ->lockForUpdate()
+                        ->sum('qty');
+                    $remainingQty = max((float) $findProductOrder->qty - $deliveredQty, 0);
+                    if (($qty - $remainingQty) > 0.000001) {
+                        throw new Exception(
+                            "Qty {$product->item_name} melebihi sisa Sales Order ({$remainingQty})."
+                        );
+                    }
+
                     $subtotal = Helpers::hitungSubtotal(
                         $qty,
                         $sellPrice,
@@ -239,8 +286,8 @@ class DeliveryRepo extends ElequentRepository
                         'delivery_id'       => $deliveryId,
                         'qty'               => $qty,
                         'qty_left'          => $qty,
-                        'product_id'        => $itemRaw['product_id'],
-                        'unit_id'           => $itemRaw['unit_id'],
+                        'product_id'        => $findProductOrder->product_id,
+                        'unit_id'           => $findProductOrder->unit_id,
                         'order_product_id'  => $orderProductId,
                         'multi_unit'        => 0,
                         'hpp_price'         => 0,
@@ -460,8 +507,21 @@ class DeliveryRepo extends ElequentRepository
 
     public function destroy(int $id, int $userId): bool
     {
+        $this->lastError = '';
         $delivery = $this->findOne($id, [], ['order','order.ordermeta', 'vendor', 'warehouse','deliveryproduct','deliveryproduct.items','deliveryproduct.unit','deliveryproduct.product','deliveryproduct.orderproduct']);
         if (!$delivery) {
+            $this->lastError = 'Data pengiriman tidak ditemukan.';
+            return false;
+        }
+
+        if (SalesInvoicingDelivery::where('delivery_id', $id)->exists()) {
+            $this->lastError = 'Pengiriman tidak dapat dihapus karena sudah digunakan pada invoice.';
+            return false;
+        }
+
+        $deliveryProductIds = $delivery->deliveryproduct->pluck('id');
+        if (SalesReturProduct::whereIn('delivery_product_id', $deliveryProductIds)->exists()) {
+            $this->lastError = 'Pengiriman tidak dapat dihapus karena sudah memiliki retur.';
             return false;
         }
 
@@ -491,6 +551,7 @@ class DeliveryRepo extends ElequentRepository
             return true;
         } catch (\Throwable $e) {
             DB::rollBack();
+            $this->lastError = $e->getMessage();
             Log::error('[DeliveryRepo][destroy] ' . $e->getMessage());
             return false;
         }

@@ -134,6 +134,8 @@ class InvoiceRepo extends ElequentRepository
     {
         $id = $request->id;
         $userId = $request->user_id;
+        $previousDeliveryIds = [];
+        $previousOrderId = 0;
 
         // Prepare Data
         $arrData = $this->gatherInputData($request);
@@ -149,6 +151,18 @@ class InvoiceRepo extends ElequentRepository
                 $res = $this->create($arrData);
                 $invoiceId = $res->id;
             } else {
+                $existingInvoice = SalesInvoicing::with('invoicedelivery.delivery')
+                    ->lockForUpdate()
+                    ->find($id);
+                if (!$existingInvoice) {
+                    throw new Exception('Invoice penjualan tidak ditemukan.');
+                }
+                $previousOrderId = (int) $existingInvoice->order_id;
+                $previousDeliveryIds = $existingInvoice->invoicedelivery
+                    ->pluck('delivery_id')
+                    ->map(fn ($deliveryId) => (int) $deliveryId)
+                    ->all();
+
                 $this->update($arrData, $id);
                 $invoiceId = $id;
                 $this->deleteAdditional($invoiceId);
@@ -157,7 +171,7 @@ class InvoiceRepo extends ElequentRepository
             // 2. Process Linked Data (Products, DP, Delivery)
             $this->processOrderProducts($request, $invoiceId);
             $this->processDp($request, $invoiceId);
-            $this->processDelivery($request, $invoiceId);
+            $this->processDelivery($request, $invoiceId, $previousDeliveryIds);
 
             $this->handleAutoConsumeForDirectInvoice($invoiceId);
 
@@ -178,17 +192,25 @@ class InvoiceRepo extends ElequentRepository
             // 4. File Upload
             $this->handleFileUploads($request, $invoiceId);
 
-            // Direct invoices do not pass through the delivery status workflow.
-            // Keep every explicitly linked order in sync with its invoice.
-            if (!empty($arrData['order_id'])) {
-                SalesOrderRepo::changeStatusOrderById((int) $arrData['order_id']);
+            $currentDeliveryIds = SalesInvoicingDelivery::where('invoice_id', $invoiceId)
+                ->pluck('delivery_id')
+                ->map(fn ($deliveryId) => (int) $deliveryId)
+                ->all();
+            $removedDeliveryIds = array_diff($previousDeliveryIds, $currentDeliveryIds);
+            foreach ($removedDeliveryIds as $deliveryId) {
+                DeliveryRepo::changeStatusDelivery((int) $deliveryId, StatusEnum::OPEN);
             }
+
+            $this->syncSalesOrderStatuses([
+                $previousOrderId,
+                (int) ($arrData['order_id'] ?? 0),
+            ]);
 
             DB::commit();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
-            return true;
+            return $invoiceId;
 
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
             Log::error("Sales Invoice Store Error: " . $e->getMessage() . ' ini payload nya ' . json_encode($request->all()));
@@ -252,6 +274,14 @@ class InvoiceRepo extends ElequentRepository
         $orderId = $request->order_id ?? $request->input('order.id');
         $requestTaxType = $request->tax_type ?? $request->input('order.tax_type', '');
 
+        // Item invoices linked to a Sales Order use delivery relations as their
+        // source of truth. The nested order.orderproduct payload belongs to the
+        // Sales Order and must never be claimed by, or deleted with, an invoice.
+        // Direct item invoices (without order_id) still use their own products.
+        if ($request->invoice_type == ProductType::ITEM && !empty($orderId)) {
+            return;
+        }
+
         // If invoice is created from Sales Order (Service type), don't create new products
         // Just update the invoice_id on existing order products
         if (!empty($orderId) && $request->invoice_type == ProductType::SERVICE) {
@@ -285,35 +315,6 @@ class InvoiceRepo extends ElequentRepository
             $taxType = $requestTaxType ?: ($item->tax_type ?? '');
             $taxId = $item->tax_id ?? ($item->tax->id ?? 0);
             $taxPercentage = $item->tax_percentage ?? ($item->tax->tax_percentage ?? 0);
-
-            // If item has original ID (from order), check if it already exists
-            if (!empty($item->id)) {
-                $existingProduct = SalesOrderProduct::find($item->id);
-                if ($existingProduct) {
-                    // Update existing product with invoice_id
-                    $existingProduct->update(['invoice_id' => $idInvoice]);
-                    Log::info("Updated existing orderproduct {$item->id} with invoice_id={$idInvoice}");
-                    continue;
-                }
-
-                // If not found, preserve original tax configuration only for linked orders.
-                if (!empty($orderId)) {
-                    $originalProduct = SalesOrderProduct::where('order_id', $orderId)
-                        ->where('product_id', $item->product_id ?? 0)
-                        ->first();
-                    if ($originalProduct) {
-                        if (empty($taxType)) {
-                            $taxType = $originalProduct->tax_type;
-                        }
-                        if (empty($taxId)) {
-                            $taxId = $originalProduct->tax_id;
-                        }
-                        if (empty($taxPercentage)) {
-                            $taxPercentage = $originalProduct->tax_percentage;
-                        }
-                    }
-                }
-            }
 
             // Fallback to request/order level tax_type if still empty
             if (empty($taxType)) {
@@ -428,7 +429,7 @@ class InvoiceRepo extends ElequentRepository
         DpRepo::changeStatusUangMuka($dpId, $status);
     }
 
-    private function processDelivery(Request $request, $idInvoice)
+    private function processDelivery(Request $request, $idInvoice, array $previousDeliveryIds = [])
     {
         $deliveries = $request->delivery;
         if (empty($deliveries)) {
@@ -437,13 +438,53 @@ class InvoiceRepo extends ElequentRepository
 
         if (!empty($deliveries)) {
             $deliveries = is_array($deliveries) ? json_decode(json_encode($deliveries)) : $deliveries;
+            $usedDeliveryIds = [];
             foreach ($deliveries as $item) {
                 $item = (object)$item;
+                $deliveryId = (int) ($item->id ?? 0);
+                if ($deliveryId <= 0 || in_array($deliveryId, $usedDeliveryIds, true)) {
+                    throw new Exception('Delivery Order tidak valid atau dipilih lebih dari sekali.');
+                }
+
+                $delivery = SalesDelivery::lockForUpdate()->find($deliveryId);
+                if (!$delivery) {
+                    throw new Exception("Delivery Order #{$deliveryId} tidak ditemukan.");
+                }
+                if (!empty($request->order_id) && (int) $delivery->order_id !== (int) $request->order_id) {
+                    throw new Exception('Delivery Order tidak berasal dari Sales Order yang dipilih.');
+                }
+                if (!empty($request->vendor_id) && (int) $delivery->vendor_id !== (int) $request->vendor_id) {
+                    throw new Exception('Customer Delivery Order tidak sesuai dengan invoice.');
+                }
+                if (SalesInvoicingDelivery::where('delivery_id', $deliveryId)
+                    ->where('invoice_id', '!=', $idInvoice)
+                    ->exists()) {
+                    throw new Exception("Delivery Order {$delivery->delivery_no} sudah digunakan pada invoice lain.");
+                }
+                if ($delivery->delivery_status !== StatusEnum::OPEN
+                    && !in_array($deliveryId, $previousDeliveryIds, true)) {
+                    throw new Exception("Delivery Order {$delivery->delivery_no} tidak berstatus open.");
+                }
+
+                $usedDeliveryIds[] = $deliveryId;
                 SalesInvoicingDelivery::create([
                     'invoice_id' => $idInvoice,
-                    'delivery_id' => $item->id
+                    'delivery_id' => $deliveryId
                 ]);
-                SalesOrderRepo::closeStatusOrderById($item->order_id);
+            }
+        }
+    }
+
+    private function syncSalesOrderStatuses(array $orderIds): void
+    {
+        foreach (array_unique(array_filter(array_map('intval', $orderIds))) as $orderId) {
+            if (SalesDelivery::where('order_id', $orderId)->exists()) {
+                SalesOrderRepo::changeStatusByDelivery($orderId);
+                SalesOrderRepo::closeStatusOrderById($orderId);
+            } elseif (SalesInvoicing::where('order_id', $orderId)->exists()) {
+                SalesOrderRepo::changeStatusOrderById($orderId, StatusEnum::INVOICE);
+            } else {
+                SalesOrderRepo::changeStatusOrderById($orderId, StatusEnum::OPEN);
             }
         }
     }
@@ -512,9 +553,28 @@ class InvoiceRepo extends ElequentRepository
             $this->syncDownpaymentStatus((int) $dpId);
         }
         SalesInvoicingDelivery::where('invoice_id', $id)->delete();
-        SalesOrderProduct::where('invoice_id', $id)->delete();
+        $this->cleanupInvoiceOrderProducts((int) $id);
         SalesInvoicingMeta::where('invoice_id', $id)->delete();
         Inventory::where('transaction_code', TransactionsCode::INVOICE_PENJUALAN)->where('transaction_id', $id)->delete();
+    }
+
+    /**
+     * Release products owned by a Sales Order and delete only products created
+     * for a direct invoice. This prevents invoice cleanup from orphaning
+     * delivery_product.order_product_id references.
+     */
+    protected function cleanupInvoiceOrderProducts(int $invoiceId): void
+    {
+        SalesOrderProduct::where('invoice_id', $invoiceId)
+            ->where('order_id', '>', 0)
+            ->update(['invoice_id' => 0]);
+
+        SalesOrderProduct::where('invoice_id', $invoiceId)
+            ->where(function ($query) {
+                $query->whereNull('order_id')
+                    ->orWhere('order_id', 0);
+            })
+            ->delete();
     }
 
     private function deleteInvoiceJournal($id, ?string $invoiceNo = null): void
@@ -552,17 +612,7 @@ class InvoiceRepo extends ElequentRepository
             $this->deleteAdditional($id);
             parent::delete($id);
 
-            if (!empty($invoice->order_id)) {
-                $orderId = (int) $invoice->order_id;
-
-                if (SalesInvoicing::where('order_id', $orderId)->exists()) {
-                    SalesOrderRepo::changeStatusOrderById($orderId);
-                } elseif (SalesDelivery::where('order_id', $orderId)->exists()) {
-                    SalesOrderRepo::changeStatusByDelivery($orderId);
-                } else {
-                    SalesOrderRepo::changeStatusOrderById($orderId, StatusEnum::OPEN);
-                }
-            }
+            $this->syncSalesOrderStatuses([(int) $invoice->order_id]);
 
             DB::commit();
 

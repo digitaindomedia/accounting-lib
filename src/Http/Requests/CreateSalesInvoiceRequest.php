@@ -76,6 +76,11 @@ class CreateSalesInvoiceRequest extends FormRequest
             $rules['orderproduct.*.product_id'] = 'required';
         }
 
+        if ($invoiceType === InvoiceTypeEnum::ITEM->toString() && !empty($orderId)) {
+            $rules['delivery'] = ['required', 'array', 'min:1'];
+            $rules['delivery.*.id'] = ['required', 'distinct'];
+        }
+
         return $rules;
     }
 
@@ -86,6 +91,8 @@ class CreateSalesInvoiceRequest extends FormRequest
             'orderproduct.required' => 'Daftar transaksi Invoice Pembelian masih kosong.',
             'warehouse_id.required' => 'Gudang masih belum dipilih',
             'orderproduct.*.product_id.required' => 'Nama barang pada salah satu item masih kosong.',
+            'delivery.required' => 'Pilih minimal satu Delivery Order untuk invoice ini.',
+            'delivery.*.id.distinct' => 'Delivery Order tidak boleh dipilih lebih dari sekali.',
             'invoice_no.unique'   => 'No Invoice sudah ada yang dipakai.',
             'vendor_id.required' => 'Customer masih belum dipilih'];
     }

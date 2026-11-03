@@ -129,6 +129,17 @@ class OrderController extends Controller
     }
 
     public function store(CreateSalesOrderRequest $request){
+        $dependencies = !empty($request->id)
+            ? $this->getDeleteDependencies((int) $request->id)
+            : [];
+        if (!empty($dependencies)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Sales Order tidak dapat diedit karena sudah digunakan pada ' . implode(', ', $dependencies) . '.',
+                'data' => '',
+            ]);
+        }
+
         $res = $this->salesOrderRepo->store($request);
         if($res){
             $this->data['status'] = true;

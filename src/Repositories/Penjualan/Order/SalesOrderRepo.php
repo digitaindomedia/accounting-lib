@@ -123,9 +123,16 @@ class SalesOrderRepo extends ElequentRepository
             $existingOrder = null;
 
             if (!$isNewOrder) {
-                $existingOrder = SalesOrder::with('orderproduct')->find($id);
+                $existingOrder = SalesOrder::with('orderproduct')->lockForUpdate()->find($id);
                 if (empty($existingOrder)) {
                     throw new \Exception('Sales order tidak ditemukan');
+                }
+
+                if (SalesDownpayment::where('order_id', $id)->exists()
+                    || SalesDelivery::where('order_id', $id)->exists()
+                    || SalesSpk::where('order_id', $id)->exists()
+                    || SalesInvoicing::where('order_id', $id)->exists()) {
+                    throw new \Exception('Sales Order tidak dapat diedit karena sudah memiliki transaksi turunan.');
                 }
 
                 if (!empty($existingOrder->quotation_id)) {

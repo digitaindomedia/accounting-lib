@@ -7,6 +7,7 @@ use Icso\Accounting\Enums\StatusEnum;
 use Icso\Accounting\Exports\SalesDeliveryExport;
 use Icso\Accounting\Exports\SalesDeliveryReportDetail;
 use Icso\Accounting\Http\Requests\CreateSalesDeliveryRequest;
+use Icso\Accounting\Models\Penjualan\Order\SalesOrderProduct;
 use Icso\Accounting\Models\Penjualan\Pengiriman\SalesDelivery;
 use Icso\Accounting\Repositories\Penjualan\Delivery\DeliveryRepo;
 use Icso\Accounting\Utils\Helpers;
@@ -135,6 +136,27 @@ class DeliveryController extends Controller
                         if ($replacementOrderProduct) {
                             $item->order_product_id = $replacementOrderProduct->id;
                             $item->setRelation('orderproduct', $replacementOrderProduct);
+                        } else {
+                            // Data legacy dapat menunjuk baris order-product yang sudah
+                            // tidak ada. Sediakan snapshot read-only agar client lama
+                            // tetap dapat membaca orderproduct.qty pada halaman edit.
+                            $fallbackOrderProduct = new SalesOrderProduct([
+                                'id' => $item->order_product_id,
+                                'order_id' => $res->order_id,
+                                'product_id' => $item->product_id,
+                                'unit_id' => $item->unit_id,
+                                'qty' => $item->qty,
+                                'qty_left' => $item->qty,
+                                'price' => $item->sell_price,
+                                'tax_id' => $item->tax_id,
+                                'tax_percentage' => $item->tax_percentage,
+                                'discount' => $item->discount,
+                                'subtotal' => $item->subtotal,
+                                'tax_type' => $item->tax_type,
+                                'discount_type' => $item->discount_type,
+                            ]);
+                            $fallbackOrderProduct->setRelation('product', $item->product);
+                            $item->setRelation('orderproduct', $fallbackOrderProduct);
                         }
                     }
 
@@ -165,7 +187,7 @@ class DeliveryController extends Controller
                 $this->data['data'] = array();
             } else {
                 $this->data['status'] = false;
-                $this->data['message'] = 'Data gagal dihapus';
+                $this->data['message'] = $this->deliveryRepo->getLastError() ?: 'Data gagal dihapus';
                 $this->data['data'] = array();
             }
         }

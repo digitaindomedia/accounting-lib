@@ -65,7 +65,7 @@ class ReturRepo extends ElequentRepository
                         ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
                 });
                 $queryTopLevel->orWhereHas('delivery', function ($queryReceive) use($search) {
-                    $queryReceive->where('retur_no', 'like', '%' .$search. '%');
+                    $queryReceive->where('delivery_no', 'like', '%' .$search. '%');
                 });
                 $queryTopLevel->orWhereHas('invoice', function ($queryReceive) use($search) {
                     $queryReceive->where('invoice_no', 'like', '%' .$search. '%');
@@ -96,6 +96,12 @@ class ReturRepo extends ElequentRepository
                 $queryTopLevel->orWhereHas('vendor', function ($queryVendor) use($search) {
                     $queryVendor->where('vendor_name', 'like', '%' .$search. '%')
                         ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                });
+                $queryTopLevel->orWhereHas('delivery', function ($queryDelivery) use($search) {
+                    $queryDelivery->where('delivery_no', 'like', '%' .$search. '%');
+                });
+                $queryTopLevel->orWhereHas('invoice', function ($queryInvoice) use($search) {
+                    $queryInvoice->where('invoice_no', 'like', '%' .$search. '%');
                 });
             });
         })->count();

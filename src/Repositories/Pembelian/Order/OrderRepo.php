@@ -76,15 +76,18 @@ class OrderRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('order_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhereHas('vendor', function ($query) use($search) {
-                $query->where('vendor_name', 'like', '%' .$search. '%');
-                $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-            });
-            $query->orWhereHas('purchaserequest', function ($query) use($search) {
-                $query->where('request_no', 'like', '%' .$search. '%');
-                $query->orWhere('request_from', 'like', '%' .$search. '%');
+            // Search alternatives must stay within the active supplier/type filters.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('order_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('purchaserequest', function ($requestQuery) use($search) {
+                        $requestQuery->where('request_no', 'like', '%' .$search. '%')
+                            ->orWhere('request_from', 'like', '%' .$search. '%');
+                    });
             });
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
             $query->whereBetween('order_date', $whereBetween);
@@ -104,15 +107,18 @@ class OrderRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('order_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhereHas('vendor', function ($query) use($search) {
-                $query->where('vendor_name', 'like', '%' .$search. '%');
-                $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-            });
-            $query->orWhereHas('purchaserequest', function ($query) use($search) {
-                $query->where('request_no', 'like', '%' .$search. '%');
-                $query->orWhere('request_from', 'like', '%' .$search. '%');
+            // Must match the list search condition for correct pagination totals.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('order_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('purchaserequest', function ($requestQuery) use($search) {
+                        $requestQuery->where('request_no', 'like', '%' .$search. '%')
+                            ->orWhere('request_from', 'like', '%' .$search. '%');
+                    });
             });
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
             $query->whereBetween('order_date', $whereBetween);

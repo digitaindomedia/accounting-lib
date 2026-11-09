@@ -71,11 +71,17 @@ class ReceiveRepo extends ElequentRepository
     {
         $model = new $this->model;
         return $model->when(!empty($search), function ($query) use($search){
-            $query->where('receive_no', 'like', '%' .$search. '%')
-                ->orWhere('note', 'like', '%' .$search. '%')
-                ->orWhereHas('order', function ($query) use ($search) {
-                    $query->where('order_no', 'like', '%' .$search. '%');
-                });
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('receive_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('order', function ($orderQuery) use ($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
@@ -87,7 +93,18 @@ class ReceiveRepo extends ElequentRepository
     {
         $model = new $this->model;
         return $model->when(!empty($search), function ($query) use($search){
-            $query->where('receive_no', 'like', '%' .$search. '%');
+            // Keep the count condition identical to the list condition.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('receive_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('order', function ($orderQuery) use ($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->when(!empty($whereBetween), function ($query) use($whereBetween){

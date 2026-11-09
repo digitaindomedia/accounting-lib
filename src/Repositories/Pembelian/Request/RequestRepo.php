@@ -39,9 +39,11 @@ class RequestRepo extends ElequentRepository
         // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('request_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhere('request_from', 'like', '%' .$search. '%');
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('request_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhere('request_from', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->orderBy('request_date','desc')->offset($page)->limit($perpage)->get();
@@ -53,9 +55,11 @@ class RequestRepo extends ElequentRepository
         // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('request_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhere('request_from', 'like', '%' .$search. '%');
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('request_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhere('request_from', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where($where);
         })->orderBy('request_date','desc')->count();
@@ -67,9 +71,11 @@ class RequestRepo extends ElequentRepository
         // TODO: Implement getAllDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('request_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhere('request_from', 'like', '%' .$search. '%');
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('request_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhere('request_from', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
@@ -93,9 +99,12 @@ class RequestRepo extends ElequentRepository
         // TODO: Implement getAllTotalDataBy() method.
         $model = new $this->model;
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('request_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhere('request_from', 'like', '%' .$search. '%');
+            // Keep this count condition identical to the list condition.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('request_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhere('request_from', 'like', '%' .$search. '%');
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){

@@ -43,8 +43,19 @@ class DpRepo extends ElequentRepository
     {
         $model = new $this->model;
         $data = $model->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%')
-                ->orWhere('note', 'like', '%' .$search. '%');
+            // Group all search alternatives so they remain subject to the
+            // customer, date, type, and status filters below.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('ref_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('order', function ($orderQuery) use ($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%')
+                            ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                                $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                                    ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                            });
+                    });
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){
@@ -66,8 +77,18 @@ class DpRepo extends ElequentRepository
     {
         $model = new $this->model;
         return $model->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%')
-                ->orWhere('note', 'like', '%' .$search. '%');
+            // Keep this condition identical to getAllDataBy for pagination.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('ref_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('order', function ($orderQuery) use ($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%')
+                            ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                                $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                                    ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                            });
+                    });
+            });
         })->when(!empty($where), function ($query) use($where){
             $query->where(function ($que) use($where){
                 foreach ($where as $item){

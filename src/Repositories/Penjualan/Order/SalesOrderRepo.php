@@ -53,12 +53,15 @@ class SalesOrderRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('order_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhereHas('vendor', function ($query) use($search) {
-                $query->where('vendor_name', 'like', '%' .$search. '%');
-                $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-        });
+            // Group the OR clauses so they cannot bypass order filters.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('order_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    });
+            });
         })->orderBy('order_date','desc')->with(['vendor','vendor.vendor_meta','orderproduct','ordermeta','orderproduct.product','orderproduct.tax','orderproduct.tax.taxgroup','orderproduct.tax.taxgroup.tax','orderproduct.unit'])->offset($page)->limit($perpage)->get();
         return $dataSet;
     }
@@ -79,11 +82,14 @@ class SalesOrderRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('order_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
-            $query->orWhereHas('vendor', function ($query) use($search) {
-                $query->where('vendor_name', 'like', '%' .$search. '%');
-                $query->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+            // Keep the count query identical to the list query for pagination.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('order_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    });
             });
         })->orderBy('order_date','desc')->count();
         return $dataSet;

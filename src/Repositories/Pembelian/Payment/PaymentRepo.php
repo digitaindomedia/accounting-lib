@@ -53,7 +53,20 @@ class PaymentRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('payment_no', 'like', '%' .$search. '%');
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('payment_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('payment_method', function ($paymentMethodQuery) use ($search) {
+                        $paymentMethodQuery->where('payment_name', 'like', '%' .$search. '%')
+                            ->orWhere('descriptions', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('invoice.purchaseinvoice', function ($invoiceQuery) use ($search) {
+                        $invoiceQuery->where('invoice_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->orderBy('payment_date','desc')->with(['vendor','payment_method','invoice','invoice.purchaseinvoice','invoiceretur','invoiceretur.retur'])->offset($page)->limit($perpage)->get();
     }
 
@@ -72,7 +85,21 @@ class PaymentRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('payment_no', 'like', '%' .$search. '%');
+            // Use the same search fields as the list query for reliable totals.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('payment_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('payment_method', function ($paymentMethodQuery) use ($search) {
+                        $paymentMethodQuery->where('payment_name', 'like', '%' .$search. '%')
+                            ->orWhere('descriptions', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('invoice.purchaseinvoice', function ($invoiceQuery) use ($search) {
+                        $invoiceQuery->where('invoice_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->orderBy('payment_date','desc')->count();
     }
 

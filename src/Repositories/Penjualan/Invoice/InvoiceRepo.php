@@ -69,14 +69,18 @@ class InvoiceRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('invoice_no', 'like', '%' .$search. '%')
-                ->orWhereHas('vendor', function ($query) use($search) {
-                    $query->where('vendor_name', 'like', '%' .$search. '%')
-                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-                })
-                ->orWhereHas('order', function ($query) use($search) {
-                    $query->where('order_no', 'like', '%' .$search. '%');
-                });
+            // Keep every search alternative inside one group so the OR clauses
+            // cannot bypass filters such as invoice_type, vendor_id, and input_type.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('invoice_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('order', function ($orderQuery) use($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->orderBy('invoice_date','desc')
             ->with([
                 'vendor',
@@ -119,11 +123,18 @@ class InvoiceRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('invoice_no', 'like', '%' .$search. '%')
-                ->orWhereHas('vendor', function ($query) use($search) {
-                    $query->where('vendor_name', 'like', '%' .$search. '%')
-                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-                });
+            // Must match getAllDataBy exactly, including the sales-order number,
+            // so pagination totals and result rows remain consistent.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('invoice_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('order', function ($orderQuery) use($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->count();
     }
 

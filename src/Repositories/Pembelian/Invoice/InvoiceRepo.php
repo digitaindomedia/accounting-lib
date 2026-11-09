@@ -62,6 +62,10 @@ class InvoiceRepo extends ElequentRepository
         return $model->when(!empty($search), function ($query) use($search){
             $query->where(function ($query) use ($search) {
                 $query->where('invoice_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($query) use ($search) {
+                        $query->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
                     ->orWhere(function ($query) use ($search) {
                         $query->where('order_id', '!=', 0)
                             ->whereHas('order', function ($query) use ($search) {
@@ -90,6 +94,10 @@ class InvoiceRepo extends ElequentRepository
         return $model->when(!empty($search), function ($query) use($search){
             $query->where(function ($query) use ($search) {
                 $query->where('invoice_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($query) use ($search) {
+                        $query->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
                     ->orWhere(function ($query) use ($search) {
                         $query->where('order_id', '!=', 0)
                             ->whereHas('order', function ($query) use ($search) {

@@ -100,6 +100,8 @@ class InvoiceController extends Controller
             $this->data['status'] = false;
             $this->data['message'] = 'Data tidak ditemukan';
             $this->data['data'] = [];
+            $this->data['has_more'] = false;
+            $this->data['total'] = 0;
             $this->data['key'] =!empty($status) ? $status : "all";
         }
         return response()->json($this->data);

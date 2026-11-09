@@ -69,6 +69,9 @@ class ReturRepo extends ElequentRepository
                 $queryTopLevel->orWhereHas('receive', function ($queryReceive) use($search) {
                     $queryReceive->where('receive_no', 'like', '%' .$search. '%');
                 });
+                $queryTopLevel->orWhereHas('invoice', function ($queryInvoice) use($search) {
+                    $queryInvoice->where('invoice_no', 'like', '%' .$search. '%');
+                });
             });
         })->orderBy('retur_date','desc')
             ->with(['vendor','receive','invoice','returproduct.product', 'returproduct.tax.taxgroup.tax','returproduct.unit'])
@@ -98,6 +101,9 @@ class ReturRepo extends ElequentRepository
                 });
                 $queryTopLevel->orWhereHas('receive', function ($queryReceive) use($search) {
                     $queryReceive->where('receive_no', 'like', '%' .$search. '%');
+                });
+                $queryTopLevel->orWhereHas('invoice', function ($queryInvoice) use($search) {
+                    $queryInvoice->where('invoice_no', 'like', '%' .$search. '%');
                 });
             });
         })->orderBy('retur_date','desc')->count();

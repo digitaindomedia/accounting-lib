@@ -71,17 +71,20 @@ class DpRepo extends ElequentRepository
     {
         $model = new $this->model;
         $data = $model->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%')
-                ->orWhere('note', 'like', '%' .$search. '%')
-                ->orWhere('no_faktur', 'like', '%' .$search. '%')
-                ->orWhereHas('order', function ($query) use ($search) {
-                    $query->where('order_no', 'like', '%' .$search. '%');
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('ref_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhere('no_faktur', 'like', '%' .$search. '%')
+                    ->orWhereHas('order', function ($orderQuery) use ($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%')
+                            ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                                $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                                    ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                            });
+                    });
                 });
         })->when(!empty($where), function ($query) use($where){
-            $query->where($where);
-            $query->orWhereHas('order', function ($query) use ($where) {
-                $query->where($where);
-            });
+            $this->applyFilters($query, $where);
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
             $query->whereBetween('downpayment_date', $whereBetween);
         })->orderBy('downpayment_date','desc')->with(['order','order.vendor','coa'])->offset($page)->limit($perpage)->get();
@@ -94,20 +97,37 @@ class DpRepo extends ElequentRepository
     {
         $model = new $this->model;
         return $model->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%')
-                ->orWhere('note', 'like', '%' .$search. '%')
-                ->orWhere('no_faktur', 'like', '%' .$search. '%')
-                ->orWhereHas('order', function ($query) use ($search) {
-                    $query->where('order_no', 'like', '%' .$search. '%');
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('ref_no', 'like', '%' .$search. '%')
+                    ->orWhere('note', 'like', '%' .$search. '%')
+                    ->orWhere('no_faktur', 'like', '%' .$search. '%')
+                    ->orWhereHas('order', function ($orderQuery) use ($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%')
+                            ->orWhereHas('vendor', function ($vendorQuery) use ($search) {
+                                $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                                    ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                            });
+                    });
                 });
         })->when(!empty($where), function ($query) use($where){
-            $query->where($where);
-            $query->orWhereHas('order', function ($query) use ($where) {
-                $query->where($where);
-            });
+            $this->applyFilters($query, $where);
         })->when(!empty($whereBetween), function ($query) use($whereBetween){
             $query->whereBetween('downpayment_date', $whereBetween);
         })->orderBy('downpayment_date','desc')->with(['order','order.vendor','coa'])->count();
+    }
+
+    private function applyFilters($query, array $where): void
+    {
+        foreach ($where as $condition) {
+            if (($condition[0] ?? null) === 'vendor_id') {
+                $query->whereHas('order', function ($orderQuery) use ($condition) {
+                    $orderQuery->where($condition[0], $condition[1], $condition[2]);
+                });
+                continue;
+            }
+
+            $query->where($condition[0], $condition[1], $condition[2]);
+        }
     }
 
     /**

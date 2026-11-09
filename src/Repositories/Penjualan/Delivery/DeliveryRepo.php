@@ -68,14 +68,17 @@ class DeliveryRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('delivery_no', 'like', '%' .$search. '%')
-                ->orWhereHas('vendor', function ($query) use($search) {
-                    $query->where('vendor_name', 'like', '%' .$search. '%')
-                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-                })
-                ->orWhereHas('order', function ($query) use($search) {
-                    $query->where('order_no', 'like', '%' .$search. '%');
-                });
+            // Keep every search alternative under the active delivery filters.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('delivery_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('order', function ($orderQuery) use($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->orderBy('delivery_date','desc')
             ->with([
                 'vendor',
@@ -108,14 +111,17 @@ class DeliveryRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('delivery_no', 'like', '%' .$search. '%')
-                ->orWhereHas('vendor', function ($query) use($search) {
-                    $query->where('vendor_name', 'like', '%' .$search. '%')
-                        ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
-                })
-                ->orWhereHas('order', function ($query) use($search) {
-                    $query->where('order_no', 'like', '%' .$search. '%');
-                });
+            // Use the same grouped conditions as the list query for pagination.
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('delivery_no', 'like', '%' .$search. '%')
+                    ->orWhereHas('vendor', function ($vendorQuery) use($search) {
+                        $vendorQuery->where('vendor_name', 'like', '%' .$search. '%')
+                            ->orWhere('vendor_company_name', 'like', '%' .$search. '%');
+                    })
+                    ->orWhereHas('order', function ($orderQuery) use($search) {
+                        $orderQuery->where('order_no', 'like', '%' .$search. '%');
+                    });
+            });
         })->orderBy('delivery_date','desc')->count();
     }
 

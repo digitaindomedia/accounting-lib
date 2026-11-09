@@ -80,6 +80,8 @@ class OrderController extends Controller
                 'status' => false,
                 'message' => 'Data tidak ditemukan',
                 'data' => [],
+                'has_more' => false,
+                'total' => 0,
             ];
         }
 

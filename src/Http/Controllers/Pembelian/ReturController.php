@@ -66,6 +66,8 @@ class ReturController extends Controller
             $this->data['status'] = false;
             $this->data['message'] = 'Data tidak ditemukan';
             $this->data['data'] = [];
+            $this->data['has_more'] = false;
+            $this->data['total'] = 0;
         }
         return response()->json($this->data);
     }

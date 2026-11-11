@@ -51,7 +51,8 @@ class OrderController extends Controller
         $vendorId = $request->vendor_id;
         $from = $request->from;
         $orderType = $request->order_type;
-        return compact('search', 'page', 'perpage', 'orderType','from','fromDate','untilDate','vendorId');
+        $status = $request->status;
+        return compact('search', 'page', 'perpage', 'orderType','from','fromDate','untilDate','vendorId', 'status');
     }
 
     public function getAllData(Request $request)
@@ -59,7 +60,7 @@ class OrderController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params);
         $whereBetween = $this->buildWhereBetweenClause($fromDate, $untilDate);
-        $where = $this->buildWhereClause($vendorId, $orderType, $from);
+        $where = $this->buildWhereClause($vendorId, $orderType, $from, $status);
 
         $data = $this->purchaseOrderRepo->getAllDataBetweenBy($search, $page, $perpage, $where, $whereBetween);
         $total = $this->purchaseOrderRepo->getAllTotalDataBetweenBy($search, $where, $whereBetween);
@@ -93,7 +94,7 @@ class OrderController extends Controller
         return (!empty($fromDate) && !empty($untilDate)) ? [$fromDate, $untilDate] : [];
     }
 
-    protected function buildWhereClause($vendorId, $orderType, $from)
+    protected function buildWhereClause($vendorId, $orderType, $from, $status = null)
     {
         $where = [];
 
@@ -103,6 +104,10 @@ class OrderController extends Controller
 
         if (!empty($orderType)) {
             $where[] = ['method' => 'where', 'value' => [['order_type', '=', $orderType]]];
+        }
+
+        if (!empty($status)) {
+            $where[] = ['method' => 'where', 'value' => [['order_status', '=', $status]]];
         }
 
         if (!empty($from)) {
@@ -533,7 +538,7 @@ class OrderController extends Controller
         extract($params);
 
         $whereBetween = $this->buildWhereBetweenClause($fromDate, $untilDate);
-        $where = $this->buildWhereClause($vendorId, $orderType, $from);
+        $where = $this->buildWhereClause($vendorId, $orderType, $from, $status);
         $total = $this->purchaseOrderRepo->getAllTotalDataBetweenBy($search, $where, $whereBetween);
         $data = $this->purchaseOrderRepo->getAllDataBetweenBy($search, $page, $total, $where, $whereBetween);
         return Excel::download(new PurchaseOrderExport($data), $filename);
@@ -545,7 +550,7 @@ class OrderController extends Controller
         extract($params);
 
         $whereBetween = $this->buildWhereBetweenClause($fromDate, $untilDate);
-        $where = $this->buildWhereClause($vendorId, $orderType, $from);
+        $where = $this->buildWhereClause($vendorId, $orderType, $from, $status);
         $total = $this->purchaseOrderRepo->getAllTotalDataBetweenBy($search, $where, $whereBetween);
         $data = $this->purchaseOrderRepo->getAllDataBetweenBy($search, $page, $total, $where, $whereBetween);
         $export = new PurchaseOrderExport($data);
@@ -559,7 +564,7 @@ class OrderController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params);
         $whereBetween = $this->buildWhereBetweenClause($fromDate, $untilDate);
-        $where = $this->buildWhereClause($vendorId, $orderType, $from);
+        $where = $this->buildWhereClause($vendorId, $orderType, $from, $status);
         $total = $this->purchaseOrderRepo->getAllTotalDataBetweenBy($search, $where, $whereBetween);
         $data = $this->purchaseOrderRepo->getAllDataBetweenBy($search, $page, $total, $where, $whereBetween);
         return Excel::download(new PurchaseOrderReportDetailExport($data,$params), 'excel-purchase-order.xlsx');
@@ -570,7 +575,7 @@ class OrderController extends Controller
         $params = $this->setQueryParameters($request);
         extract($params);
         $whereBetween = $this->buildWhereBetweenClause($fromDate, $untilDate);
-        $where = $this->buildWhereClause($vendorId, $orderType, $from);
+        $where = $this->buildWhereClause($vendorId, $orderType, $from, $status);
         $total = $this->purchaseOrderRepo->getAllTotalDataBetweenBy($search, $where, $whereBetween);
         $data = $this->purchaseOrderRepo->getAllDataBetweenBy($search, $page, $total, $where, $whereBetween);
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('accounting::purchase.purchase_order_detail_report', [

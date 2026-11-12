@@ -51,8 +51,17 @@ class PemakaianRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('ref_no', 'like', '%' . $search . '%')
+                    ->orWhere('note', 'like', '%' . $search . '%')
+                    ->orWhereHas('warehouse', function ($query) use ($search) {
+                        $query->where('warehouse_name', 'like', '%' . $search . '%');
+                    })
+                    ->orWhereHas('coa_stock', function ($query) use ($search) {
+                        $query->where('coa_name', 'like', '%' . $search . '%')
+                            ->orWhere('coa_code', 'like', '%' . $search . '%');
+                    });
+            });
         })->orderBy('usage_date','desc')->with(['warehouse','coa_stock','stockusageproduct','stockusageproduct.product','stockusageproduct.coa','stockusageproduct.unit'])->offset($page)->limit($perpage)->get();
         return $dataSet;
     }
@@ -73,8 +82,17 @@ class PemakaianRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('ref_no', 'like', '%' . $search . '%')
+                    ->orWhere('note', 'like', '%' . $search . '%')
+                    ->orWhereHas('warehouse', function ($query) use ($search) {
+                        $query->where('warehouse_name', 'like', '%' . $search . '%');
+                    })
+                    ->orWhereHas('coa_stock', function ($query) use ($search) {
+                        $query->where('coa_name', 'like', '%' . $search . '%')
+                            ->orWhere('coa_code', 'like', '%' . $search . '%');
+                    });
+            });
         })->orderBy('usage_date','desc')->count();
         return $dataSet;
     }

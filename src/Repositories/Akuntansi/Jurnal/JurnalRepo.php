@@ -60,7 +60,11 @@ class JurnalRepo extends ElequentRepository
         // TODO: Implement getAllDataBy() method.
         $model = new Jurnal();
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('jurnal_no', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('jurnal_no', 'like', '%' . $search . '%')
+                    ->orWhere('note', 'like', '%' . $search . '%')
+                    ->orWhere('person', 'like', '%' . $search . '%');
+            });
         })->when(!empty($where), function ($query) use ($where) {
             foreach ($where as $key => $value) {
                 if ($key == 'coa_id') {
@@ -84,7 +88,11 @@ class JurnalRepo extends ElequentRepository
         // TODO: Implement getAllTotalDataBy() method.
         $model = new Jurnal();
         $dataSet = $model->when(!empty($search), function ($query) use($search){
-            $query->where('jurnal_no', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('jurnal_no', 'like', '%' . $search . '%')
+                    ->orWhere('note', 'like', '%' . $search . '%')
+                    ->orWhere('person', 'like', '%' . $search . '%');
+            });
         })->when(!empty($where), function ($query) use ($where) {
             foreach ($where as $key => $value) {
                 if ($key == 'coa_id') {

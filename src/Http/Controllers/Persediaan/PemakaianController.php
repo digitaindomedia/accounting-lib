@@ -78,6 +78,8 @@ class PemakaianController extends Controller
             $this->data['status'] = false;
             $this->data['message'] = 'Data tidak ditemukan';
             $this->data['data'] = [];
+            $this->data['total'] = $total;
+            $this->data['has_more'] = false;
         }
         return response()->json($this->data);
     }

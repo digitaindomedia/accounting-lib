@@ -52,8 +52,17 @@ class AdjustmentRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('ref_no', 'like', '%' . $search . '%')
+                    ->orWhere('note', 'like', '%' . $search . '%')
+                    ->orWhereHas('warehouse', function ($query) use ($search) {
+                        $query->where('warehouse_name', 'like', '%' . $search . '%');
+                    })
+                    ->orWhereHas('coa_adjustment', function ($query) use ($search) {
+                        $query->where('coa_name', 'like', '%' . $search . '%')
+                            ->orWhere('coa_code', 'like', '%' . $search . '%');
+                    });
+            });
         })->orderBy('adjustment_date','desc')->with(['warehouse','coa_adjustment','adjustmentproduct','adjustmentproduct.product','adjustmentproduct.coa','adjustmentproduct.unit'])->offset($page)->limit($perpage)->get();
         return $dataSet;
     }
@@ -74,8 +83,17 @@ class AdjustmentRepo extends ElequentRepository
                 }
             });
         })->when(!empty($search), function ($query) use($search){
-            $query->where('ref_no', 'like', '%' .$search. '%');
-            $query->orWhere('note', 'like', '%' .$search. '%');
+            $query->where(function ($query) use ($search) {
+                $query->where('ref_no', 'like', '%' . $search . '%')
+                    ->orWhere('note', 'like', '%' . $search . '%')
+                    ->orWhereHas('warehouse', function ($query) use ($search) {
+                        $query->where('warehouse_name', 'like', '%' . $search . '%');
+                    })
+                    ->orWhereHas('coa_adjustment', function ($query) use ($search) {
+                        $query->where('coa_name', 'like', '%' . $search . '%')
+                            ->orWhere('coa_code', 'like', '%' . $search . '%');
+                    });
+            });
         })->orderBy('adjustment_date','desc')->count();
         return $dataSet;
     }
